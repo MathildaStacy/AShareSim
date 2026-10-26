@@ -10,12 +10,25 @@
 
 ## 当前状态
 
-产品设计阶段（2026-10-26），还没有 App 代码。
+- M0 设计：完成（产品设计、规则规格、AI 设计、可交互原型）。
+- M1 引擎：完成。规则、费用、撮合、清算引擎和 65 项测试（`src/engine/`，说明见 [docs/ENGINE.md](docs/ENGINE.md)），用官方算例和真实行情数据验收。
+- App 界面从 M2 开始，目前 `App.tsx` 还是模板页。
+
+## 开发
+
+```bash
+nvm use            # Node 24
+npm install
+npm run check      # eslint + tsc + jest
+npm test -- __tests__/engine   # 只跑引擎测试
+npm run android    # 需要 Android SDK；iOS 后补
+```
 
 | 文档 | 内容 |
 | --- | --- |
 | [docs/PRODUCT_DESIGN.md](docs/PRODUCT_DESIGN.md) | 产品目标、范围、信息架构、功能清单、AI 接入、技术栈、里程碑 |
 | [docs/TRADING_RULES.md](docs/TRADING_RULES.md) | 交易规则与费用的规格说明（撮合引擎和费用引擎按它实现） |
+| [docs/ENGINE.md](docs/ENGINE.md) | 交易引擎：模块、单位、撮合和清算的实现说明，以及和规格的差别 |
 | [docs/AI_ASSISTANT.md](docs/AI_ASSISTANT.md) | AI 助手：页面上下文、最近操作、对话摘要和长期记忆，以及两种协议的请求结构 |
 | [docs/design/prototype.html](docs/design/prototype.html) | 可交互原型，用浏览器直接打开（源文件在 [docs/design/prototype/](docs/design/prototype/)） |
 | [docs/research/quant-roadmap.html](docs/research/quant-roadmap.html) | 量化学习路线（产品目标的出处） |
