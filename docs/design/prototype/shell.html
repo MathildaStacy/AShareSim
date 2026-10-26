@@ -242,6 +242,29 @@ canvas.chart{display:block;width:100%;background:#fff}
 .composer input{flex:1;height:38px;border:1px solid #DDE0E4;border-radius:19px;padding:0 14px;outline:0}
 .ctx{display:flex;align-items:center;gap:6px;padding:6px 12px;font-size:12px;color:var(--ink2);background:#FAFAFB;border-bottom:1px solid var(--line)}
 .ctx .c{background:var(--learn-bg);color:var(--learn);border-radius:10px;padding:1px 8px}
+.ctx{cursor:pointer;white-space:nowrap;overflow:hidden;position:sticky;top:0;z-index:3}
+.ctx .c{overflow:hidden;text-overflow:ellipsis;min-width:0}
+.ctx .c.off{background:var(--bg);color:var(--ink3)}
+.ctx .c2{flex:none;background:var(--bg);color:var(--ink2);border-radius:10px;padding:1px 8px}
+.uctx{align-self:flex-end;max-width:88%;margin-top:-6px;font-size:11px;color:var(--ink3);cursor:pointer;text-align:right}
+.ctxdiv{align-self:stretch;text-align:center;font-size:11px;color:var(--ink3);position:relative;margin:2px 0}
+.ctxdiv::before{content:"";position:absolute;left:0;right:0;top:50%;border-top:1px dashed #D5D9DE}
+.ctxdiv span{position:relative;background:var(--bg);padding:0 8px}
+.sumbox{background:#fff;border:1px dashed #D5D9DE;border-radius:8px;padding:8px 10px;font-size:12px;color:var(--ink2);line-height:1.6;white-space:pre-wrap}
+.sumbox b{display:block;color:var(--ink);font-weight:600;margin-bottom:2px}
+.msg .mlinks{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;white-space:normal}
+.msg .mlinks button{border:1px solid var(--learn);color:var(--learn);border-radius:14px;padding:3px 10px;font-size:12px;background:#fff}
+.msg .memnote{display:flex;align-items:center;gap:8px;margin-top:8px;padding:5px 8px;border-radius:6px;font-size:12px;line-height:1.5;color:var(--learn);background:var(--learn-bg);white-space:normal}
+.msg .memnote button{flex:none;font-size:12px;color:var(--ink2)}
+.msg .memnote button:first-of-type{margin-left:auto}
+.msg .memnote.off{color:var(--ink3);background:var(--bg)}
+.msg .usage{display:block;margin-top:4px;font-size:10.5px;color:var(--ink3);font-family:var(--num);font-variant-numeric:tabular-nums}
+.mseg{display:flex;flex:none;border:1px solid var(--line);border-radius:6px;overflow:hidden}
+.mseg button{padding:4px 10px;font-size:12px;color:var(--ink2);background:#fff}
+.mseg button+button{border-left:1px solid var(--line)}
+.mseg button.on{background:var(--learn);color:#fff}
+.cblk{padding:0 14px 12px;font-size:12px;line-height:1.65;color:var(--ink2);white-space:pre-wrap;word-break:break-all}
+.cblk b{color:var(--ink);font-weight:600}
 .fab{position:absolute;right:14px;bottom:72px;width:46px;height:46px;border-radius:23px;background:#1F2329;color:#fff;font-weight:700;font-size:14px;box-shadow:0 4px 14px rgba(0,0,0,.25);z-index:5}
 
 /* ---------- 浮层 ---------- */

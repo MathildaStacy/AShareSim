@@ -259,15 +259,17 @@ function newState() {
     watch: ['sh600519', 'sz300750', 'sh600036', 'sz000858', 'sh510300', 'sh688981', 'sz000001', 'sz002594', 'sh601899', 'sz159915', 'sz002024', 'sz300033'],
     equityHist: [], checks: {}, lessonDone: {}, quiz: {},
     ai: { services: [
-      { id: 1, name: 'Claude', protocol: 'messages', base: 'https://api.anthropic.com', model: 'claude-sonnet-4-5', key: 'sk-ant-•••• 7Qd2' },
-      { id: 2, name: 'DeepSeek', protocol: 'responses', base: 'https://api.deepseek.com', model: 'deepseek-chat', key: 'sk-•••• 91aF' }
-    ], active: 1, chat: [] },
+      // price：美元 / 百万 tokens（输入、输出、缓存读、缓存写），用来估算费用；不填就只显示 token 数
+      { id: 1, name: 'Claude', protocol: 'messages', base: 'https://api.anthropic.com', model: 'claude-sonnet-5-5', key: 'sk-ant-•••• 7Qd2', cache: 'auto', price: { in: 2, out: 10, cr: 0.2, cw: 2.5 } },
+      { id: 2, name: 'OpenAI', protocol: 'responses', base: 'https://api.openai.com', model: 'gpt-5.6', key: 'sk-•••• 91aF', cache: 'auto', price: null }
+    ], active: 1, warm: null, threads: [], cur: 0, mem: [], cfg: { page: true, acts: 10, memory: 'auto', compactAfter: 20 } },
     plan: [
       { code: 'sh510300', name: '沪深300ETF', target: 30000, note: '底仓' },
       { code: 'sh600036', name: '招商银行', target: 3000, note: '不变' },
       { code: 'sz000858', name: '五粮液', target: 0, note: '掉出前 N+10，卖出' },
       { code: 'sz000333', name: '美的集团', target: 400, note: '新进' }
     ],
+    acts: [], seeding: false,
     weeks: [], rules: { add: '连续 3 个月跑赢基准，且执行偏差 < 0.05%，再加 10% 资金。', pause: '超额回撤超过 8 个点，或连续 3 个月跑输基准，暂停一个月复盘。', lev: '不加杠杆，不融资融券。' },
     toastQ: []
   };
@@ -309,11 +311,26 @@ function addFlow(kind, amount, note, code) {
 function deposit(amount, date, t) {
   S.cash = r2(S.cash + amount); S.withdrawable = r2(S.withdrawable + amount); S.depositTotal = r2(S.depositTotal + amount);
   S.flows.unshift({ date: date || today(), t: t == null ? S.t : t, kind: '银行转证券', amount, balance: S.cash, note: '模拟入金' });
+  logAct('transfer', '银行转证券（模拟入金）' + money(amount) + ' 元');
 }
 function withdraw(amount) {
   S.cash = r2(S.cash - amount); S.withdrawable = r2(S.withdrawable - amount); S.depositTotal = r2(S.depositTotal - amount);
   addFlow('证券转银行', -amount, '模拟出金');
+  logAct('transfer', '证券转银行（模拟出金）' + money(amount) + ' 元');
 }
+
+// ---------- 操作记录（AI 的「最近操作」上下文） ----------
+// 本机环形缓冲，最多 500 条；kind: view 浏览 / order 委托 / reject 被拦截 / cancel 撤单 / fill 成交 / transfer 转账 / setting 设置 / learn 学习 / export 导出 / system 系统
+const ACT_KIND = { view: '浏览', order: '委托', reject: '拦截', cancel: '撤单', fill: '成交', transfer: '转账', setting: '设置', learn: '学习', export: '导出', system: '系统' };
+function mkAct(kind, text, ref) { return { id: ++seq, di: S.di, t: S.t, kind, text, ref: ref || null }; }
+function logAct(kind, text, ref) {
+  if (!S || S.seeding) return;
+  const a = S.acts, last = a[a.length - 1];
+  if (kind === 'view' && last && last.kind === 'view' && last.text === text) return;
+  a.push(mkAct(kind, text, ref));
+  if (a.length > 500) a.splice(0, a.length - 500);
+}
+const ordText = o => (o.side === 'B' ? '买入' : '卖出') + ' ' + SEC[o.code].name + ' ' + intf(o.qty) + (SEC[o.code].board === 'etf' ? '份' : '股') + (o.price != null ? ' @' + fx(o.price, SEC[o.code].dec) : '（' + KIND_NAME[o.kind] + '）');
 
 // ---------- 下单校验 ----------
 function cageRange(code, side, sn) {
@@ -396,6 +413,12 @@ function validateOrder(o) {
 
 // ---------- 委托 / 撮合 ----------
 function placeOrder(o, forceCage) {
+  const n0 = S.acts.length, r = placeOrderRaw(o, forceCage);
+  // 委托记录插在它引起的成交记录前面
+  if (r.ok && !S.seeding) { const d = r.order; S.acts.splice(n0, 0, mkAct(d.status === '废单' ? 'reject' : 'order', '委托' + ordText(d) + ' → ' + d.status + (d.reason ? '：' + d.reason : d.note ? '（' + d.note + '）' : ''), { order: d.id })); }
+  return r;
+}
+function placeOrderRaw(o, forceCage) {
   const v = validateOrder(o);
   if (!v.ok && (v.level === 'block' || !forceCage)) return v;
   const s = SEC[o.code], ph = phaseAt(S.t);
@@ -423,6 +446,7 @@ function cancelOrder(ord) {
   if (ord.status !== '未报' && !PHASES[ph].canCancel) return { ok: false, msg: '现在是「' + PHASES[ph].name + '」（' + PHASES[ph].desc.split('：')[0] + '），交易所不接受撤单。', lesson: 'time' };
   ord.status = ord.filled > 0 ? '部撤' : '已撤'; ord.reason = '用户撤单';
   releaseFrozen(ord);
+  logAct('cancel', '撤单 ' + ordText(ord) + ' → ' + ord.status + (ord.filled ? '（已成交 ' + intf(ord.filled) + '）' : ''), { order: ord.id });
   return { ok: true };
 }
 function releaseFrozen(ord) {
@@ -476,6 +500,7 @@ function doFill(ord, price, qty, basis) {
   addFlow(ord.side === 'B' ? '证券买入' : '证券卖出', net, s.name + ' ' + qty + (s.board === 'etf' ? '份' : '股') + ' @' + fx(price, s.dec), ord.code);
   if (ord.status === '已成') releaseFrozen(ord);
   maybeAutoCheck(ord, fill);
+  logAct('fill', '成交 ' + (ord.side === 'B' ? '买入' : '卖出') + ' ' + s.name + ' ' + intf(qty) + ' @' + fx(price, s.dec) + '，费用 ' + money(f.total) + ' 元（' + basis.split('：')[0].replace(/^\d\d:\d\d:\d\d /, '') + '）', { fill: fill.id });
   toast((ord.side === 'B' ? '买入' : '卖出') + '成交：' + s.name + ' ' + qty + ' @ ' + fx(price, s.dec), 'fill', fill.id);
 }
 function walkBook(ord, levels, limitPx) {
@@ -593,6 +618,7 @@ function settle() {
   S.withdrawable = r2(S.cash - S.frozen);
   recordEquity();
   S.settled = S.di;
+  logAct('system', '日终清算' + (n ? '，系统撤销 ' + n + ' 笔未成交委托' : ''));
   toast('日终清算完成：T+1 股份明天可卖，卖出资金明天可取' + (n ? '，系统撤销 ' + n + ' 笔未成交委托' : ''), 'info');
 }
 function recordEquity() {
@@ -615,6 +641,7 @@ function rollDay() {
     S.ledger.unshift({ id: ++seq, date: today(), t: T(8, 0), code: p.code, name: SEC[p.code].name, biz: '股息红利税补', price: 0, qty: 0, amount: 0, commission: 0, stamp: 0, transfer: 0, handling: 0, reg: 0, total: 0, divTax: p.amount, net: -p.amount, balance: S.cash, no: '', note: p.notes.join('；') });
     addFlow('股息红利税补', -p.amount, SEC[p.code].name + '（卖出时按持股期限计算）', p.code);
   }
+  if (S.pendingDivTax.length) logAct('system', '扣收股息红利税 ' + money(S.pendingDivTax.reduce((a, p) => a + p.amount, 0)) + ' 元');
   if (S.pendingDivTax.length) toast('已扣收股息红利税 ' + money(S.pendingDivTax.reduce((a, p) => a + p.amount, 0)) + ' 元，见交割单', 'info');
   S.pendingDivTax = [];
 }
@@ -674,6 +701,7 @@ function maybeAutoCheck(ord, fill) {
 // ---------- 初始化：示例账户（2026-06-01 起） ----------
 function seed() {
   S = newState();
+  S.seeding = true;
   buildDay(S.di, null);
   const save = { di: S.di, t: S.t };
   const at = (date, t) => { S.di = dayIdx(date); S.t = t; };
@@ -697,21 +725,26 @@ function seed() {
   fakeFill('sz000858', 'B', '2026-10-23', T(14, 20), roundTo(k('sz000858', '2026-10-23')[2], 0.01), 500, '历史示例成交');
   // 历史净值
   buildEquityHistory();
-  // 今天：宁德时代集合竞价买入（T+1 演示）
-  S.di = save.di;
+  // 今天：宁德时代集合竞价买入（T+1 演示）。从这里开始记录操作
+  S.di = save.di; S.seeding = false;
   at(TODAY_REAL, T(9, 21, 40));
   const o1 = { id: ++seq, no: String(100000 + seq), code: 'sz300750', side: 'B', kind: 'limit', price: 236.00, qty: 200, filled: 0, amt: 0, fee: { commission: 0, stamp: 0, transfer: 0, handling: 0, reg: 0, total: 0 }, status: '已报', di: S.di, t: S.t, fills: [], queue: 0, frozen: 0, inAuction: true };
   o1.frozen = freezeAmount('sz300750', 'B', 'limit', 236, 200); S.frozen = r2(S.frozen + o1.frozen);
   S.orders.unshift(o1);
+  logAct('order', '委托' + ordText(o1) + ' → 已报（开盘集合竞价）', { order: o1.id });
   S.t = T(9, 25); crossAuction('open');
+  S.t = T(10, 3, 40); logAct('view', '个股 · 平安银行');
   // 平安银行挂单排队（演示撤单）
   S.t = T(10, 5, 12);
   placeOrder({ code: 'sz000001', side: 'B', kind: 'limit', price: 11.12, qty: 1000 });
   // 招商银行卖出超价格笼子 → 废单（演示）
+  S.t = T(10, 11, 55); logAct('view', '卖出 · 招商银行');
   S.t = T(10, 12, 30);
   const sn = snap('sh600036', S.t);
   placeOrder({ code: 'sh600036', side: 'S', kind: 'limit', price: roundTo(sn.bids[0][0] * 0.96, 0.01), qty: 1000 }, true);
+  S.t = T(10, 14, 5); logAct('view', '查询 · 当日委托');
   S.t = save.t;
+  if (typeof seedAI === 'function') seedAI();
   S.toastQ = [];
 }
 function buildEquityHistory() {

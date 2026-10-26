@@ -97,6 +97,7 @@ SCREENS.order = {
           '<span>印花税（' + (s.board === 'etf' ? 'ETF 免征' : isB ? '买入不收' : '0.05%') + '）</span><span>' + money(f.stamp) + '</span>' +
           '<span>过户费（' + (s.board === 'etf' ? 'ETF 免收' : '0.001%') + '）</span><span>' + money(f.transfer) + '</span>' +
           (S.fee.regsSeparate ? '<span>经手费</span><span>' + money(f.handling) + '</span><span>证管费</span><span>' + money(f.reg) + '</span>' : '<span class="muted">经手费、证管费</span><span class="muted">含在佣金里</span>') + '</div>';
+        if (!feeCalibrated()) t += '<div class="muted" style="font-size:11px;margin-top:4px">费率还没用真实交割单校准，佣金按占位默认值估算。<a style="color:var(--learn)" onclick="go(\'calibrate\')">去校准</a></div>';
         if (!isB) { const lots = S.lots.filter(l => l.code === code && l.div > 0); if (lots.length) { const tr = divTaxRate(lots[0].date, today()); t += '<div class="note warn" style="margin-top:4px">这只股票持有期间分过红，卖出后下一交易日补扣股息红利税（' + tr.label + '）。</div>'; } }
       }
       fb.innerHTML = t;
@@ -139,7 +140,7 @@ function submitOrder(force) {
   const ip = $('#ip'); if (ip) OF.price = parseFloat(ip.value);
   const o = { code: p.code, side: p.side, kind: OF.kind, price: OF.kind === 'limit' ? roundTo(OF.price, 0.0001) : null, qty: parseInt(OF.qty) || 0 };
   const v = validateOrder(o);
-  if (!v.ok && v.level === 'block') return ruleError(v);
+  if (!v.ok && v.level === 'block') { logAct('reject', '下单被拦截：' + ordText(o) + ' → ' + v.rule, { rule: v.rule, msg: v.msg, lesson: v.lesson }); return ruleError(v); }
   const ph = phaseAt(S.t);
   const amt = OF.kind === 'limit' ? o.price * o.qty : (OF.kind === 'after' ? (MK[p.code].close || lastPx(p.code)) : lastPx(p.code)) * o.qty;
   const f = calcFee(p.code, p.side, r2(amt));
@@ -214,7 +215,7 @@ function exportLedger() {
   const lines = [head.join(',')].concat(S.ledger.slice().reverse().map(l => [l.date, hms(l.t), l.biz, SEC[l.code].sym, l.name, l.price || '', l.qty || '', l.amount || '', l.commission, l.stamp, l.transfer, l.handling || 0, l.reg || 0, l.divTax || 0, l.net, l.balance, l.no].join(',')));
   download('交割单_' + today() + '.csv', '﻿' + lines.join('\n'));
 }
-function download(name, text) { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([text], { type: 'text/csv;charset=utf-8' })); a.download = name; document.body.appendChild(a); a.click(); a.remove(); showToast('已导出 ' + name); }
+function download(name, text) { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([text], { type: 'text/csv;charset=utf-8' })); a.download = name; document.body.appendChild(a); a.click(); a.remove(); showToast('已导出 ' + name); logAct('export', '导出 ' + name); }
 SCREENS.orderDetail = {
   title: '委托详情', liveRefresh: true,
   render(p) {

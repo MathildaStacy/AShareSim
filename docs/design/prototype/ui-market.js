@@ -71,7 +71,7 @@ SCREENS.search = {
     }).join('') || '<div class="empty">没有找到。原型只包含 30 只股票和 8 个指数。</div>';
   }
 };
-function toggleWatch(c) { const i = S.watch.indexOf(c); if (i >= 0) S.watch.splice(i, 1); else S.watch.push(c); }
+function toggleWatch(c) { const i = S.watch.indexOf(c); if (i >= 0) S.watch.splice(i, 1); else S.watch.push(c); logAct('setting', (i >= 0 ? '移出自选 ' : '加入自选 ') + SEC[c].name); }
 function pickStock(c) { R.stack.pop(); const top = cur(); top.p.code = c; OF.price = null; OF.qty = ''; render(true); }
 
 // ---------- 个股详情 ----------

@@ -16,6 +16,7 @@
 | --- | --- |
 | [docs/PRODUCT_DESIGN.md](docs/PRODUCT_DESIGN.md) | 产品目标、范围、信息架构、功能清单、AI 接入、技术栈、里程碑 |
 | [docs/TRADING_RULES.md](docs/TRADING_RULES.md) | 交易规则与费用的规格说明（撮合引擎和费用引擎按它实现） |
+| [docs/AI_ASSISTANT.md](docs/AI_ASSISTANT.md) | AI 助手：页面上下文、最近操作、对话摘要和长期记忆，以及两种协议的请求结构 |
 | [docs/design/prototype.html](docs/design/prototype.html) | 可交互原型，用浏览器直接打开（源文件在 [docs/design/prototype/](docs/design/prototype/)） |
 | [docs/research/quant-roadmap.html](docs/research/quant-roadmap.html) | 量化学习路线（产品目标的出处） |
 

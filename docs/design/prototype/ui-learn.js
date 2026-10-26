@@ -110,6 +110,7 @@ SCREENS.lesson = {
 function answer(id, qi, oi) {
   S.quiz[id + qi] = oi;
   const l = LESSONS.find(x => x.id === id);
+  logAct('learn', '小测「' + l.title + '」第 ' + (qi + 1) + ' 题' + (oi === l.quiz[qi].a ? '答对' : '答错'), { lesson: id, qi });
   if (l.quiz.every((q, i) => S.quiz[id + i] === q.a)) { S.lessonDone[id] = true; if (l.pass) autoCheck(l.pass, '能说清一笔股票买卖要交哪些费用'); }
   refresh();
 }
