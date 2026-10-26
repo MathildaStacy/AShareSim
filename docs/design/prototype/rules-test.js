@@ -1,0 +1,30 @@
+// 规则 / 费用引擎自检：node rules-test.js snapshot-2026-10-26.json core.js
+const fs=require('fs');
+global.DATA=JSON.parse(fs.readFileSync(process.argv[2]));
+eval(fs.readFileSync(process.argv[3],'utf8')+`
+S = newState();
+let fail=0; const eq=(n,a,b)=>{const ok=Math.abs(a-b)<1e-9; if(!ok)fail++; console.log((ok?'PASS ':'FAIL ')+n+' got '+a+' want '+b);};
+eq('买入1万 合计', calcFee('sh600036','B',10000).total, 5.10);
+eq('卖出1万 合计', calcFee('sh600036','S',10000).total, 10.10);
+const f=calcFee('sh600036','S',41800); eq('卖出41800 佣金',f.commission,10.45); eq('印花税',f.stamp,20.90); eq('过户费',f.transfer,0.42);
+eq('ETF 买入 90460 佣金', calcFee('sh510300','B',90460).commission, 5);
+eq('ETF 卖出 印花税', calcFee('sh510300','S',90460).stamp, 0);
+S.fee.mian5=true; eq('免五 2000 元佣金', calcFee('sh600036','B',2000).commission, 0.5); S.fee.mian5=false;
+eq('红利税 6/2→10/27', divTaxRate('2026-06-02','2026-10-27').rate, 0.1);
+eq('红利税 10/1→10/27', divTaxRate('2026-10-01','2026-10-27').rate, 0.2);
+eq('红利税 9/26→10/27 恰好一个月', divTaxRate('2026-09-26','2026-10-27').rate, 0.2);
+eq('红利税 9/26→10/28', divTaxRate('2026-09-26','2026-10-28').rate, 0.1);
+eq('红利税 >1年', divTaxRate('2025-06-01','2026-10-27').rate, 0);
+const sn=(a,b)=>({asks:[[a,1]],bids:[[b,1]],last:a,prev:a});
+eq('笼子 主板 卖一10', cageRange('sh600036','B',sn(10,9.99)).max, 10.20);
+eq('笼子 主板 卖一3', cageRange('sz000725','B',sn(3,2.99)).max, 3.10);
+eq('笼子 科创 卖一3', cageRange('sh688981','B',sn(3,2.99)).max, 3.06);
+eq('笼子 主板 卖出 买一3', cageRange('sz000725','S',sn(3.01,3)).min, 2.90);
+eq('ST 涨停 1.10', limitPrices('sz002024',1.10).up, 1.21);
+eq('ST 跌停 1.10', limitPrices('sz002024',1.10).down, 0.99);
+eq('平安 涨停 11.20', limitPrices('sz000001',11.20).up, 12.32);
+eq('ETF 涨停 4.178', limitPrices('sh510300',4.178).up, 4.596);
+eq('创业板 跌停 237.60', limitPrices('sz300750',237.60).down, 190.08);
+let bad=[]; for (const c of STOCKS){const q=DATA.quotes[c]; if(!(q.up>0))continue; const l=limitPrices(c,q.prev); if(l.up!==q.up||l.down!==q.down) bad.push(c+' '+l.up+'/'+l.down+' vs '+q.up+'/'+q.down);} console.log('接口涨跌停对照不一致:', bad.length, bad);
+console.log(fail? fail+' FAILED':'ALL PASS');
+`);
