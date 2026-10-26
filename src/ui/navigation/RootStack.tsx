@@ -13,7 +13,11 @@ import {
 } from 'lucide-react-native';
 import { AiScreen } from '../screens/AiScreen';
 import { DebugScreen } from '../screens/DebugScreen';
+import { FillDetailScreen, OrderDetailScreen } from '../screens/DetailScreens';
 import { MarketScreen } from '../screens/MarketScreen';
+import { OrderScreen } from '../screens/OrderScreen';
+import { OrdersScreen } from '../screens/OrdersScreen';
+import { PositionScreen, PositionsScreen } from '../screens/PositionsScreen';
 import { SearchScreen } from '../screens/SearchScreen';
 import { StockScreen } from '../screens/StockScreen';
 import { LearnScreen, MeScreen, TradeScreen } from '../screens/TabScreens';
@@ -105,6 +109,12 @@ export function RootStack() {
       />
       <Stack.Screen name="WatchEdit" component={WatchEditScreen} />
       <Stack.Screen name="Debug" component={DebugScreen} />
+      <Stack.Screen name="Order" component={OrderScreen} />
+      <Stack.Screen name="Positions" component={PositionsScreen} />
+      <Stack.Screen name="Position" component={PositionScreen} />
+      <Stack.Screen name="Orders" component={OrdersScreen} />
+      <Stack.Screen name="OrderDetail" component={OrderDetailScreen} />
+      <Stack.Screen name="FillDetail" component={FillDetailScreen} />
       <Stack.Screen
         name="Ai"
         component={AiScreen}

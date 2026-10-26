@@ -354,7 +354,7 @@ describe('市价委托', () => {
       ],
     });
 
-  test('最优五档即时成交剩余撤销：成交 500，剩余撤销，按涨停价冻结后全部释放', () => {
+  test('最优五档即时成交剩余撤销：成交 500，剩余撤销，冻结全部释放', () => {
     const e = funded('2026-10-26');
     e.onSnapshot(s('sh600036'));
     const r = e.placeOrder(at('2026-10-26', T(10, 0, 1)), {
@@ -362,6 +362,7 @@ describe('市价委托', () => {
       side: 'B',
       kind: 'b5_ioc',
       price: null,
+      protect: li(10.2),
       qty: 1000,
     });
     if (!r.ok) throw new Error(r.msg);
@@ -380,6 +381,85 @@ describe('市价委托', () => {
     });
     if (!r.ok) throw new Error(r.msg);
     expect(r.order).toMatchObject({ status: '已撤', filled: 0 });
+  });
+  test('沪市保护限价：只吃到保护限价以内的档位', () => {
+    const e = funded('2026-10-26');
+    e.onSnapshot(s('sh600036'));
+    const r = e.placeOrder(at('2026-10-26', T(10, 0, 1)), {
+      code: 'sh600036',
+      side: 'B',
+      kind: 'b5_ioc',
+      price: null,
+      protect: li(10),
+      qty: 1000,
+    });
+    if (!r.ok) throw new Error(r.msg);
+    // 卖二 10.01 超过保护限价 10.00，只成交卖一的 300
+    expect(r.order).toMatchObject({ status: '部撤', filled: 300 });
+  });
+  test('沪市最优五档转限价：剩余部分的限价不超过保护限价', () => {
+    const e = funded('2026-10-26');
+    e.onSnapshot(s('sh600036'));
+    const r = e.placeOrder(at('2026-10-26', T(10, 0, 1)), {
+      code: 'sh600036',
+      side: 'B',
+      kind: 'b5_limit',
+      price: null,
+      protect: li(10),
+      qty: 1000,
+    });
+    if (!r.ok) throw new Error(r.msg);
+    expect(r.order).toMatchObject({
+      status: '部成',
+      filled: 300,
+      price: li(10),
+    });
+  });
+  test('沪市本方最优：按买一价挂单排队', () => {
+    const e = funded('2026-10-26');
+    e.onSnapshot(s('sh600036'));
+    const r = e.placeOrder(at('2026-10-26', T(10, 0, 1)), {
+      code: 'sh600036',
+      side: 'B',
+      kind: 'obest',
+      price: null,
+      protect: li(10.2),
+      qty: 1000,
+    });
+    if (!r.ok) throw new Error(r.msg);
+    expect(r.order).toMatchObject({
+      status: '已报',
+      filled: 0,
+      price: li(9.99),
+      queueAhead: 400,
+    });
+  });
+  test('预检 check 和下单同一套校验，不改状态', () => {
+    const e = funded('2026-10-26');
+    e.onSnapshot(s('sh600036'));
+    const before = JSON.stringify(e.state);
+    const c = e.check(at('2026-10-26', T(10, 0, 1)), {
+      code: 'sh600036',
+      side: 'S',
+      kind: 'limit',
+      price: li(10),
+      qty: 100,
+    });
+    expect(c).toMatchObject({
+      ok: false,
+      rule: '可卖数量',
+      route: 'continuous',
+    });
+    expect(
+      e.check(at('2026-10-26', T(10, 0, 1)), {
+        code: 'sh600036',
+        side: 'B',
+        kind: 'limit',
+        price: li(10.5),
+        qty: 100,
+      }),
+    ).toMatchObject({ ok: false, level: 'reject', rule: '价格笼子' });
+    expect(JSON.stringify(e.state)).toBe(before);
   });
   test('对手方最优：按卖一价成交，剩余按卖一价挂单', () => {
     const e = funded('2026-10-26');

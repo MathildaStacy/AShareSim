@@ -149,12 +149,22 @@ describe('下单校验（TRADING_RULES.md §3）', () => {
     ).toMatchObject({ ok: false, rule: '可用资金' });
   });
   test('市价单只能在连续竞价，且按交易所区分类型', () => {
-    expect(
-      validateOrder(buy('sh600036', null, 100, 'b5_ioc'), ctx('sh600036')).ok,
-    ).toBe(true);
-    expect(
-      validateOrder(buy('sh600036', null, 100, 'cbest'), ctx('sh600036')),
-    ).toMatchObject({ ok: false, rule: '委托类型' });
+    const shBuy = (kind: OrderRequest['kind']) => ({
+      ...buy('sh600036', null, 100, kind),
+      protect: li(10.2),
+    });
+    // 沪市 2023 年起 4 种：最优五档剩撤、最优五档转限价、对手方最优、本方最优
+    for (const k of ['b5_ioc', 'b5_limit', 'cbest', 'obest'] as const) {
+      expect(validateOrder(shBuy(k), ctx('sh600036')).ok).toBe(true);
+    }
+    expect(validateOrder(shBuy('fok'), ctx('sh600036'))).toMatchObject({
+      ok: false,
+      rule: '委托类型',
+    });
+    expect(validateOrder(shBuy('ioc'), ctx('sh600036'))).toMatchObject({
+      ok: false,
+      rule: '委托类型',
+    });
     expect(
       validateOrder(buy('sz000001', null, 100, 'cbest'), ctx('sz000001')).ok,
     ).toBe(true);
@@ -167,6 +177,55 @@ describe('下单校验（TRADING_RULES.md §3）', () => {
       ok: false,
       rule: '委托类型',
     });
+  });
+  test('沪市市价单必须带保护限价，深市不用', () => {
+    expect(
+      validateOrder(buy('sh600036', null, 100, 'b5_ioc'), ctx('sh600036')),
+    ).toMatchObject({ ok: false, level: 'block', rule: '保护限价' });
+    expect(
+      validateOrder(
+        { ...buy('sh600036', null, 100, 'b5_ioc'), protect: li(10.205) },
+        ctx('sh600036'),
+      ),
+    ).toMatchObject({ ok: false, rule: '最小价位' });
+    expect(
+      validateOrder(buy('sz000001', null, 100, 'b5_ioc'), ctx('sz000001')).ok,
+    ).toBe(true);
+  });
+  test('沪市市价买入按保护限价冻结资金，深市按涨停价', () => {
+    // 沪市：10.20 × 1000 = 10,200 元 + 佣金 5 元 + 过户费 0.10 元；深市：涨停 11.00 × 1000 + 5 元 + 0.11 元
+    const sh = {
+      ...buy('sh600036', null, 1000, 'b5_ioc'),
+      protect: li(10.2),
+    };
+    expect(
+      validateOrder(sh, ctx('sh600036', { available: 1_020_510 })).ok,
+    ).toBe(true);
+    expect(
+      validateOrder(sh, ctx('sh600036', { available: 1_020_509 })),
+    ).toMatchObject({ ok: false, rule: '可用资金' });
+    const sz = buy('sz000001', null, 1000, 'b5_ioc');
+    const szCtx = (available: number) =>
+      ctx('sz000001', {
+        available,
+        snap: snap({
+          code: 'sz000001',
+          t: T(10, 0),
+          prev: 10,
+          last: 10,
+          bids: [[9.99, 1000]],
+          asks: [[10.0, 1000]],
+          up: 11,
+          down: 9,
+        }),
+      });
+    expect(validateOrder(sz, szCtx(1_100_511)).ok).toBe(true);
+    expect(validateOrder(sz, szCtx(1_100_510)).ok).toBe(false);
+  });
+  test('ST 股票不能用市价委托', () => {
+    expect(
+      validateOrder(buy('sz002024', null, 100, 'cbest'), ctx('sz002024')),
+    ).toMatchObject({ ok: false, rule: '委托类型' });
   });
   test('盘后固定价格交易的申报时间：沪市 9:30 起、深市 9:15 起', () => {
     const at = (code: string, t: number) =>

@@ -37,5 +37,15 @@
           android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
           android:value="交易时段内有未成交的模拟委托时，持续刷新行情并按真实规则模拟撮合" />
       </service>
+      <!-- 导出文件（交割单 CSV）：写到缓存目录，通过系统分享面板保存或发送 -->
+      <provider
+        android:name="androidx.core.content.FileProvider"
+        android:authorities="${applicationId}.documents"
+        android:exported="false"
+        android:grantUriPermissions="true">
+        <meta-data
+          android:name="android.support.FILE_PROVIDER_PATHS"
+          android:resource="@xml/document_paths" />
+      </provider>
     </application>
 </manifest>

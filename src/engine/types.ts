@@ -85,6 +85,8 @@ export interface Order {
   kind: OrderKind;
   /** 委托价；市价单为 null（转限价后填入）。 */
   price: Li | null;
+  /** 沪市市价单的保护限价（旧数据没有这个字段）。 */
+  protect?: Li | null;
   qty: number;
   filled: number;
   /** 累计成交金额和费用（合并计佣用）。 */

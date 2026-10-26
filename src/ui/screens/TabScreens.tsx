@@ -1,5 +1,5 @@
 /**
- * 交易、学习、我的：M2 第 2 步只放账户概览和入口，交易界面在第 3 步，资金和设置在第 4 步，学习在 M3。
+ * 交易、学习、我的。交易 Tab：账户概览、功能格、持仓（M2 第 3 步）；资金和设置在第 4 步，学习在 M3。
  */
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -8,10 +8,26 @@ import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useApp } from '../../app/boot';
 import * as repo from '../../data/repos';
-import { summary } from '../../engine/account';
-import { formatFen } from '../../engine/units';
+import { isLive, summary } from '../../engine/account';
+import { formatFen, formatPrice } from '../../engine/units';
+import {
+  AccountCard as TradeAccountCard,
+  costOf,
+  PositionList,
+  useAccount,
+} from '../components/tradeRows';
 import { AiFab, NavBar, Note, SectionTitle } from '../components/ui';
-import { useAiContext, useCore, useLive, useViewLog } from '../hooks';
+import { fmtQty, fmtSignedFen } from '../format';
+import {
+  useAiContext,
+  useCore,
+  useLive,
+  useQuoteCodes,
+  useViewLog,
+} from '../hooks';
+import { COST_BASIS_NAME, usePrefs } from '../prefs';
+import { toast } from '../toast';
+import { PhaseBar } from './WatchScreen';
 import type { RootStackParamList } from '../navigation/types';
 import { color, num, PAD } from '../theme';
 
@@ -80,37 +96,179 @@ function Entry({
   );
 }
 
+type GridItem = {
+  label: string;
+  icon: string;
+  bg: string;
+  go?: () => void;
+  later?: string;
+};
+
 export function TradeScreen() {
   const core = useCore();
-  const { sum } = useSummary();
+  const nav = useNavigation<Nav>();
+  const { sum, pos, floating, today, state } = useAccount();
+  const basis = usePrefs(st => st.costBasis);
+  const live = state.orders.filter(isLive);
+  useQuoteCodes(pos.map(p => p.code));
   useViewLog('trade', '查看 交易');
   useAiContext('Trade', () => ({
     name: '交易',
     lines: [
       '总资产 ' +
         formatFen(sum.total) +
-        ' 元，可用 ' +
-        formatFen(sum.available) +
         ' 元，持仓市值 ' +
         formatFen(sum.marketValue) +
+        ' 元，可用 ' +
+        formatFen(sum.available) +
+        ' 元，可取 ' +
+        formatFen(sum.withdrawable) +
+        ' 元，冻结 ' +
+        formatFen(sum.frozen) +
         ' 元',
-      '持仓 ' +
-        core.sim.heldCodes().length +
-        ' 只，未完成委托 ' +
-        core.sim.liveOrderCodes().length +
-        ' 只证券',
-      '下单、持仓、委托、成交、交割单界面在 M2 第 3 步上线',
+      '浮动盈亏 ' +
+        fmtSignedFen(floating) +
+        ' 元，当日参考盈亏 ' +
+        fmtSignedFen(today) +
+        ' 元',
+      ...pos.map(p => {
+        const c = costOf(p, basis);
+        return (
+          '持仓 ' +
+          (core.sim.security(p.code)?.name ?? p.code) +
+          ' ' +
+          fmtQty(p.qty) +
+          '（可卖 ' +
+          fmtQty(p.sellable) +
+          '），' +
+          COST_BASIS_NAME[basis] +
+          ' ' +
+          formatPrice(c.price, 3) +
+          '，盈亏 ' +
+          fmtSignedFen(c.pnl) +
+          ' 元'
+        );
+      }),
+      '未完成委托 ' + live.length + ' 笔',
     ],
+    tip: '浮动盈亏按持仓列表的成本口径（默认摊薄成本）算；当日参考盈亏是今天的价格变化和成交带来的盈亏。',
   }));
+  const later = (what: string) => () =>
+    toast.show(
+      what + '在 M2 第 4 步上线。现在可以在「我的 → 调试页」转入模拟资金。',
+    );
+  const grid: GridItem[] = [
+    {
+      label: '买入',
+      icon: '买',
+      bg: color.up,
+      go: () => nav.navigate('Order', { side: 'B' }),
+    },
+    {
+      label: '卖出',
+      icon: '卖',
+      bg: color.sell,
+      go: () => nav.navigate('Order', { side: 'S' }),
+    },
+    {
+      label: '撤单',
+      icon: '撤',
+      bg: color.warn,
+      go: () => nav.navigate('Order', { side: 'C' }),
+    },
+    {
+      label: '持仓',
+      icon: '持',
+      bg: '#5B6CF0',
+      go: () => nav.navigate('Positions'),
+    },
+    {
+      label: '查询',
+      icon: '查',
+      bg: color.learn,
+      go: () => nav.navigate('Orders', { tab: 'today' }),
+    },
+    {
+      label: '交割单',
+      icon: '交',
+      bg: color.kcb,
+      go: () => nav.navigate('Orders', { tab: 'ledger' }),
+    },
+    {
+      label: '银证转账',
+      icon: '转',
+      bg: color.cyb,
+      go: later('银证转账'),
+      later: '第 4 步',
+    },
+    {
+      label: '资金流水',
+      icon: '流',
+      bg: color.etf,
+      go: later('资金流水'),
+      later: '第 4 步',
+    },
+    {
+      label: '盘后交易',
+      icon: '盘',
+      bg: color.ink2,
+      go: () => nav.navigate('Order', { side: 'B', kind: 'after' }),
+    },
+    {
+      label: '费率设置',
+      icon: '费',
+      bg: color.ink3,
+      go: later('费率设置'),
+      later: '第 4 步',
+    },
+  ];
   return (
     <View style={s.page}>
-      <NavBar title="交易" />
+      <NavBar
+        title="交易"
+        right={<Text style={s.navRight}>模拟 · 本地</Text>}
+      />
       <ScrollView contentContainerStyle={s.pad}>
-        <AccountCard />
+        <PhaseBar />
+        <TradeAccountCard />
+        <View style={s.grid}>
+          {grid.map(g => (
+            <Pressable
+              key={g.label}
+              onPress={g.go}
+              style={({ pressed }) => [s.gBtn, pressed && s.pressed]}
+              accessibilityRole="button"
+              accessibilityLabel={g.label}
+            >
+              <View
+                style={[
+                  s.gIcon,
+                  { backgroundColor: g.bg },
+                  g.later ? s.gLater : null,
+                ]}
+              >
+                <Text style={s.gIconText}>{g.icon}</Text>
+              </View>
+              <Text style={[s.gText, g.later ? { color: color.ink3 } : null]}>
+                {g.label}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
+        <SectionTitle
+          title="持仓"
+          right={'点一行看详情 · ' + COST_BASIS_NAME[basis]}
+        />
+        <PositionList empty="还没有持仓。去买入第一笔吧（先在「我的 → 调试页」转入模拟资金）。" />
+        {live.length ? (
+          <Pressable onPress={() => nav.navigate('Orders', { tab: 'today' })}>
+            <Note style={s.note}>
+              有 {live.length} 笔未完成委托，点这里查看当日委托。
+            </Note>
+          </Pressable>
+        ) : null}
         <Note style={s.note}>
-          买入、卖出、撤单、持仓、当日委托、成交和交割单在 M2 第 3
-          步上线；银证转账（模拟入金）在第 4 步。现在可以在「我的 →
-          调试页」转入资金、试下单。
+          除了入金是模拟的，下单规则、成交和费用都按真实规则计算。成交偏保守：涨停排队、同价排队都按估计的队列位置处理。
         </Note>
       </ScrollView>
       <AiFab />
@@ -283,6 +441,25 @@ const s = StyleSheet.create({
     paddingVertical: 2,
   },
   lineLast: { paddingBottom: 12 },
+  navRight: { fontSize: 12, color: color.ink3, paddingRight: 10 },
+  grid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    backgroundColor: color.card,
+    marginTop: 8,
+    paddingVertical: 6,
+  },
+  gBtn: { width: '20%', alignItems: 'center', paddingVertical: 8 },
+  gIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  gLater: { opacity: 0.45 },
+  gIconText: { color: '#FFFFFF', fontSize: 15, fontWeight: '600' },
+  gText: { fontSize: 12, color: color.ink, marginTop: 4 },
   about: {
     fontSize: 12,
     lineHeight: 19,

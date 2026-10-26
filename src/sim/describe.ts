@@ -15,7 +15,7 @@ export interface Described {
 
 type SecOf = (code: string) => Security | null;
 
-function orderHead(o: Order, sec: SecOf): string {
+export function orderHead(o: Order, sec: SecOf): string {
   const s = sec(o.code);
   const name = s?.name ?? o.code;
   const unit = s?.board === 'etf' ? '份' : '股';
@@ -130,5 +130,57 @@ export function describeEvent(e: EngineEvent, sec: SecOf): Described | null {
       };
     case 'warning':
       return { kind: 'system', text: e.message, ref: null };
+  }
+}
+
+/** 弹出提示用的短句和色调。委托、成交、废单、撤单、清算撤单、红利、补撮合说明都提示。 */
+export function toastOf(
+  e: EngineEvent,
+  sec: SecOf,
+): { text: string; tone: 'info' | 'up' | 'sell' | 'warn' | 'bad' } | null {
+  switch (e.type) {
+    case 'order':
+      return {
+        text:
+          '委托已提交（合同号 ' +
+          e.order.no +
+          '）：' +
+          orderHead(e.order, sec) +
+          (e.order.note ? '，' + e.order.note : ''),
+        tone: 'info',
+      };
+    case 'reject':
+      return {
+        text: '废单：' + orderHead(e.order, sec) + '。' + e.order.reason,
+        tone: 'bad',
+      };
+    case 'cancel':
+      return {
+        text:
+          (e.bySystem ? '系统撤单：' : '撤单成功：') +
+          orderHead(e.order, sec) +
+          (e.order.filled > 0
+            ? '（已成交 ' + e.order.filled.toLocaleString('zh-CN') + '）'
+            : '') +
+          (e.bySystem && e.order.reason ? '。' + e.order.reason : ''),
+        tone: e.bySystem ? 'warn' : 'info',
+      };
+    case 'fill': {
+      const d = describeEvent(e, sec)!;
+      return { text: d.text, tone: e.fill.side === 'B' ? 'up' : 'sell' };
+    }
+    case 'settle':
+      return e.canceled
+        ? {
+            text: e.date + ' 日终清算：撤销未成交委托 ' + e.canceled + ' 笔',
+            tone: 'warn',
+          }
+        : null;
+    case 'warning':
+      return { text: e.message, tone: 'warn' };
+    default: {
+      const d = describeEvent(e, sec);
+      return d ? { text: d.text, tone: 'info' } : null;
+    }
   }
 }

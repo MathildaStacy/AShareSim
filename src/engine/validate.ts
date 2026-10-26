@@ -11,6 +11,11 @@ export interface OrderRequest {
   /** 限价单必填；市价单为 null。 */
   price: Li | null;
   qty: number;
+  /**
+   * 保护限价：沪市市价单必填（上交所交易规则 2023 年修订第 3.3.5 条），买入是能接受的最高价、卖出是最低价。
+   * 成交价和转为限价后的价格都不会超过它。深市市价单没有这一项。
+   */
+  protect?: Li | null;
 }
 
 /**
@@ -41,11 +46,32 @@ const fail = (
   lesson,
 });
 
+/**
+ * 各交易所的市价委托类型。沪市（主板和科创板）自 2023-04-10 起是 4 种（上交所交易规则 2023 年修订第 3.3.4 条，
+ * 2026-10-26 核对），并且必须带保护限价；深市 5 种，没有保护限价。
+ */
 export const MARKET_KINDS: Record<'SH' | 'SZ', OrderKind[]> = {
-  // ⚠️ 2023 年后沪市主板是否也支持对手方最优、本方最优待核实
-  SH: ['b5_ioc', 'b5_limit'],
+  SH: ['b5_ioc', 'b5_limit', 'cbest', 'obest'],
   SZ: ['cbest', 'obest', 'ioc', 'b5_ioc', 'fok'],
 };
+
+/** 沪市市价单要带保护限价。 */
+export const needsProtect = (sec: Pick<Security, 'exchange'>): boolean =>
+  sec.exchange === 'SH';
+
+/** 买入冻结用的价格：限价单用委托价；沪市市价单用保护限价；深市市价单和盘后单用涨停价（没有时用最新价）。 */
+export function freezePriceOf(
+  req: Pick<OrderRequest, 'kind' | 'price' | 'protect'>,
+  snap: Snapshot | null,
+): Li {
+  if ((req.kind === 'limit' || req.kind === 'after') && req.price != null) {
+    return req.price;
+  }
+  if (req.kind !== 'limit' && req.kind !== 'after' && req.protect != null) {
+    return req.protect;
+  }
+  return snap?.up ?? snap?.last ?? snap?.prevClose ?? 0;
+}
 
 /** 价格笼子（TRADING_RULES.md §3.3）。返回有效范围，不适用时返回 null。 */
 export function cageRange(
@@ -195,6 +221,33 @@ export function validateOrder(
         'kinds',
       );
     }
+    // 风险警示股票只能限价委托（沪市风险警示板规则；深市 ⚠️ 待核实，按同样处理，宁可保守）
+    if (sec.st) {
+      return fail(
+        'block',
+        '委托类型',
+        '风险警示（ST）股票只能用限价委托，不能用市价委托。',
+        'kinds',
+      );
+    }
+    if (needsProtect(sec)) {
+      if (req.protect == null || !(req.protect > 0)) {
+        return fail(
+          'block',
+          '保护限价',
+          '沪市市价委托必须填保护限价：买入是你能接受的最高价，卖出是最低价。',
+          'kinds',
+        );
+      }
+      if (req.protect % rule.tickLi !== 0) {
+        return fail(
+          'block',
+          '最小价位',
+          '保护限价必须是 ' + (rule.tickLi / 1000).toFixed(d) + ' 元的整数倍。',
+          'unit',
+        );
+      }
+    }
   }
 
   // 2. 价格
@@ -304,11 +357,7 @@ export function validateOrder(
 
   // 5. 资金
   if (req.side === 'B') {
-    const freezePrice =
-      req.kind === 'limit'
-        ? req.price!
-        : snap?.up ?? snap?.last ?? snap?.prevClose ?? 0;
-    const need = buyFreeze(sec, freezePrice, q, ctx.fee);
+    const need = buyFreeze(sec, freezePriceOf(req, snap), q, ctx.fee);
     if (need > ctx.available) {
       return fail(
         'block',

@@ -260,12 +260,16 @@ export function Empty({ text }: { text: string }) {
 }
 
 /** 右下角「AI」按钮。M2 打开的是占位页，显示这次会发给 AI 的页面上下文和最近操作。 */
-export function AiFab() {
+export function AiFab({ lift = 0 }: { lift?: number }) {
   const nav = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   return (
     <Pressable
       onPress={() => nav.navigate('Ai')}
-      style={({ pressed }) => [s.fab, pressed && { opacity: 0.85 }]}
+      style={({ pressed }) => [
+        s.fab,
+        lift ? { bottom: 16 + lift } : null,
+        pressed && { opacity: 0.85 },
+      ]}
       accessibilityLabel="问 AI"
       accessibilityRole="button"
     >

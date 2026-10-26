@@ -15,6 +15,7 @@ import { DEFAULT_FEE_PROFILE } from '../engine/fees';
 import {
   Engine,
   type Now,
+  type OrderCheck,
   type PlaceResult,
   type SimpleResult,
 } from '../engine/engine';
@@ -236,6 +237,16 @@ export class Simulator {
   }
 
   // ---------- 交易和资金 ----------
+
+  /** 下单前预检（下单页实时显示校验结果）：和 placeOrder 同一套校验，不改状态。 */
+  checkOrder(req: OrderRequest): OrderCheck {
+    return this.engine.check(this.clock(), req);
+  }
+
+  /** 引擎时钟（北京时间）。界面判断时段也用它，测试里可以注入。 */
+  now(): Now {
+    return this.clock();
+  }
 
   async placeOrder(req: OrderRequest): Promise<PlaceResult> {
     const r = this.engine.placeOrder(this.clock(), req);

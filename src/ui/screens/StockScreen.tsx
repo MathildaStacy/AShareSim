@@ -1,10 +1,13 @@
 /**
  * 个股详情：报价、分时 / 日 K / 周 K、五档盘口 / 成交明细、本股规则卡、F10 简况。指数只有报价和图。
- * 下单入口（买入 / 卖出）在 M2 第 3 步加。
+ * 底部「买入 / 卖出」进下单页；点五档里的价格直接带进下单页。
  */
+import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Star } from 'lucide-react-native';
 import { useState } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useApp } from '../../app/boot';
 import { holdingOf } from '../../engine/account';
 import { classify, isSTName, type Security } from '../../engine/securities';
@@ -41,7 +44,7 @@ import {
   useQuoteCodes,
   useViewLog,
 } from '../hooks';
-import type { RootScreenProps } from '../navigation/types';
+import type { RootScreenProps, RootStackParamList } from '../navigation/types';
 import { quoteView, type QuoteView } from '../quoteView';
 import { color, num, PAD, trendColor } from '../theme';
 import { useWatch, watch } from '../watchStore';
@@ -76,6 +79,8 @@ function securityOf(v: QuoteView, known: Security | null): Security | null {
 export function StockScreen({ route }: RootScreenProps<'Stock'>) {
   const { code } = route.params;
   const core = useCore();
+  const nav = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const insets = useSafeAreaInsets();
   useLive();
   const session = useApp(s => s.status?.window === 'session');
   const inWatch = useWatch(s => s.codes.includes(code));
@@ -346,7 +351,22 @@ export function StockScreen({ route }: RootScreenProps<'Stock'>) {
               style={s.gap}
             />
             {book === 'book' ? (
-              <OrderBook snap={snap} d={d} color3={color3} />
+              <OrderBook
+                snap={snap}
+                d={d}
+                color3={color3}
+                onPick={
+                  sec
+                    ? (side, price) =>
+                        nav.navigate('Order', {
+                          side,
+                          code,
+                          name: v.name,
+                          price,
+                        })
+                    : undefined
+                }
+              />
             ) : (
               <Ticks
                 ticks={ticks.data?.ticks ?? null}
@@ -361,7 +381,39 @@ export function StockScreen({ route }: RootScreenProps<'Stock'>) {
           </>
         )}
       </ScrollView>
-      <AiFab />
+      {sec ? (
+        <View style={[s.tradeBar, { paddingBottom: 8 + insets.bottom }]}>
+          <Pressable
+            style={({ pressed }) => [
+              s.tradeBtn,
+              { backgroundColor: color.up },
+              pressed && s.tradePressed,
+            ]}
+            onPress={() =>
+              nav.navigate('Order', { side: 'B', code, name: v.name })
+            }
+            accessibilityRole="button"
+          >
+            <Text style={s.tradeText}>买入</Text>
+          </Pressable>
+          <Pressable
+            style={({ pressed }) => [
+              s.tradeBtn,
+              { backgroundColor: color.sell },
+              pressed && s.tradePressed,
+            ]}
+            onPress={() =>
+              nav.navigate('Order', { side: 'S', code, name: v.name })
+            }
+            accessibilityRole="button"
+          >
+            <Text style={s.tradeText}>
+              卖出{holding.sellable ? '' : holding.held ? '（T+1）' : ''}
+            </Text>
+          </Pressable>
+        </View>
+      ) : null}
+      <AiFab lift={sec ? 60 + insets.bottom : 0} />
     </View>
   );
 }
@@ -381,19 +433,28 @@ function OrderBook({
   snap,
   d,
   color3,
+  onPick,
 }: {
   snap: Snapshot | null;
   d: number;
   color3: (p: number | null | undefined) => string;
+  /** 点卖盘价格 → 买入，点买盘价格 → 卖出（同花顺的习惯）。 */
+  onPick?: (side: 'B' | 'S', price: number) => void;
 }) {
   const row = (label: string, lv: [number, number] | undefined) => (
-    <View key={label} style={s.bookRow}>
+    <Pressable
+      key={label}
+      style={({ pressed }) => [s.bookRow, pressed && s.bookPressed]}
+      disabled={!lv || !onPick}
+      onPress={() => lv && onPick?.(label.startsWith('卖') ? 'B' : 'S', lv[0])}
+      accessibilityLabel={label + (lv ? ' ' + fmtPrice(lv[0], d) : '')}
+    >
       <Text style={s.bookK}>{label}</Text>
       <Text style={[s.bookP, num, { color: lv ? color3(lv[0]) : color.ink3 }]}>
         {lv ? fmtPrice(lv[0], d) : '--'}
       </Text>
       <Text style={[s.bookQ, num]}>{lv ? Math.round(lv[1] / 100) : ''}</Text>
-    </View>
+    </Pressable>
   );
   const empty = snap && !snap.bids.length && !snap.asks.length;
   return (
@@ -406,7 +467,9 @@ function OrderBook({
             {fmtPrice(snap?.last, d)}
           </Text>
         </Text>
-        <Text style={[s.bookMidText, num]}>单位：手</Text>
+        <Text style={[s.bookMidText, num]}>
+          单位：手{onPick ? ' · 点价格下单' : ''}
+        </Text>
       </View>
       {[0, 1, 2, 3, 4].map(i => row('买' + CN[i], snap?.bids[i]))}
       {empty ? (
@@ -597,6 +660,25 @@ const s = StyleSheet.create({
   indexNote: { margin: 10 },
   card: { backgroundColor: color.card, paddingVertical: 6 },
   bookRow: { flexDirection: 'row', paddingHorizontal: PAD, paddingVertical: 3 },
+  bookPressed: { backgroundColor: color.press },
+  tradeBar: {
+    flexDirection: 'row',
+    gap: 10,
+    paddingHorizontal: 12,
+    paddingTop: 8,
+    backgroundColor: color.card,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: color.line,
+  },
+  tradeBtn: {
+    flex: 1,
+    height: 42,
+    borderRadius: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  tradePressed: { opacity: 0.85 },
+  tradeText: { color: '#FFFFFF', fontSize: 16, fontWeight: '600' },
   bookK: { width: 40, fontSize: 13, color: color.ink3 },
   bookP: { flex: 1, textAlign: 'right', fontSize: 14 },
   bookQ: { width: 80, textAlign: 'right', fontSize: 14, color: color.ink2 },

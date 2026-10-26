@@ -47,8 +47,10 @@ import { amountFen, type Fen } from './units';
 import {
   checkCage,
   checkPriceLimit,
+  freezePriceOf,
   validateOrder,
   type OrderRequest,
+  type Validation,
 } from './validate';
 
 export interface Now {
@@ -70,6 +72,13 @@ export type PlaceResult =
       lesson?: string;
       events: EngineEvent[];
     };
+
+/** 下单前的预检（界面实时显示校验结果用），和 placeOrder 用同一套校验，但不改任何状态。 */
+export type OrderCheck = Validation & {
+  phase: Phase;
+  /** 普通委托提交后怎么走：暂存 / 集合竞价 / 连续竞价 / 下一交易日 / 盘后。 */
+  route: 'store' | 'auction' | 'continuous' | 'nextDay' | 'after';
+};
 
 export type SimpleResult =
   | { ok: true; events: EngineEvent[] }
@@ -390,24 +399,31 @@ export class Engine {
       : 'closed';
   }
 
-  placeOrder(now: Now, req: OrderRequest): PlaceResult {
-    this.events = [];
-    this.advanceTo(now);
+  /** 下单前的预检：和 placeOrder 同一套校验，不推进时间、不生成委托。 */
+  check(now: Now, req: OrderRequest): OrderCheck {
+    const c = this.validateFor(now, req);
+    return { ...c.v, phase: c.phase, route: c.route };
+  }
+
+  private validateFor(now: Now, req: OrderRequest) {
     const s = this.state;
     const sec = this.deps.security(req.code);
-    if (!sec) {
-      return {
-        ok: false,
-        rule: '交易品种',
-        msg: '暂不支持这个品种（V1 支持沪深主板、创业板、科创板和 ETF）。',
-        events: this.flush(),
-      };
-    }
     const tradingDay = this.deps.calendar.isTradingDay(now.date);
     const phase = this.phaseOf(now);
+    const route: OrderCheck['route'] =
+      req.kind === 'after' ? 'after' : PHASES[phase].route;
     const snap = this.todaySnap(req.code, now.date);
+    if (!sec) {
+      const v: Validation = {
+        ok: false,
+        level: 'block',
+        rule: '交易品种',
+        msg: '暂不支持这个品种（V1 支持沪深主板、创业板、科创板和 ETF）。',
+      };
+      return { sec, v, phase, route, snap };
+    }
     const h = holdingOf(s, req.code);
-    const v = validateOrder(req, {
+    let v = validateOrder(req, {
       sec,
       snap,
       phase,
@@ -417,21 +433,29 @@ export class Engine {
       sellable: h.sellable,
       fee: s.fee,
     });
-    if (!v.ok && v.level === 'block') {
-      return {
+    if ((v.ok || v.level !== 'block') && route === 'continuous' && !snap) {
+      v = {
         ok: false,
-        rule: v.rule,
-        msg: v.msg,
-        lesson: v.lesson,
-        events: this.flush(),
-      };
-    }
-    const route = req.kind === 'after' ? 'after' : PHASES[phase].route;
-    if (route === 'continuous' && !snap) {
-      return {
-        ok: false,
+        level: 'block',
         rule: '行情',
         msg: '暂时没有' + sec.name + '的行情，稍后再试。',
+      };
+    }
+    return { sec, v, phase, route, snap };
+  }
+
+  placeOrder(now: Now, req: OrderRequest): PlaceResult {
+    this.events = [];
+    this.advanceTo(now);
+    const s = this.state;
+    const { sec, v, phase, route, snap } = this.validateFor(now, req);
+    if (!sec || (!v.ok && v.level === 'block')) {
+      const b = v as Extract<Validation, { ok: false }>;
+      return {
+        ok: false,
+        rule: b.rule,
+        msg: b.msg,
+        lesson: b.lesson,
         events: this.flush(),
       };
     }
@@ -442,6 +466,7 @@ export class Engine {
       side: req.side,
       kind: req.kind,
       price: req.price,
+      protect: req.kind === 'limit' ? null : req.protect ?? null,
       qty: req.qty,
       filled: 0,
       amount: 0,
@@ -501,15 +526,9 @@ export class Engine {
     return { ok: true, order: o, events: this.flush() };
   }
 
-  /** 买入冻结用的价格：限价单用委托价，市价单和盘后单用涨停价（没有涨跌停时用最新价）。 */
+  /** 买入冻结用的价格：见 freezePriceOf。 */
   private freezePrice(o: Order, snap: Snapshot | null): number {
-    if (o.kind === 'limit' && o.price != null) {
-      return o.price;
-    }
-    if (o.kind === 'after' && o.price != null) {
-      return o.price;
-    }
-    return snap?.up ?? snap?.last ?? snap?.prevClose ?? 0;
+    return freezePriceOf(o, snap);
   }
 
   private setFrozen(o: Order, fen: Fen): void {
@@ -678,6 +697,14 @@ export class Engine {
         this.finishCancel(o, why, true);
       }
     };
+    // 沪市市价单的保护限价：成交价和转为限价后的价格都不超过它（买入不高于、卖出不低于）
+    const protect = o.kind === 'limit' ? null : o.protect ?? null;
+    const capped = (price: number) =>
+      protect == null
+        ? price
+        : o.side === 'B'
+        ? Math.min(price, protect)
+        : Math.max(price, protect);
     const restAt = (price: number) => {
       if (rem() <= 0) {
         return;
@@ -704,22 +731,25 @@ export class Engine {
       return;
     }
     if (o.kind === 'b5_ioc' || o.kind === 'ioc') {
-      apply(walkBook(o.side, rem(), null, snap, liq, d, 5));
-      return cancelRest('即时成交剩余撤销');
+      apply(walkBook(o.side, rem(), protect, snap, liq, d, 5));
+      return cancelRest(
+        '即时成交剩余撤销' +
+          (protect != null ? '（五档内或保护限价内的量不够）' : ''),
+      );
     }
     if (o.kind === 'fok') {
-      if (liquidityWithin(o.side, null, snap, liq, 5) < rem()) {
+      if (liquidityWithin(o.side, protect, snap, liq, 5) < rem()) {
         return this.finishCancel(
           o,
           '全额成交或撤销：对手盘五档内的量不够，整笔撤销',
           true,
         );
       }
-      apply(walkBook(o.side, rem(), null, snap, liq, d, 5));
+      apply(walkBook(o.side, rem(), protect, snap, liq, d, 5));
       return;
     }
     if (o.kind === 'b5_limit') {
-      const plans = walkBook(o.side, rem(), null, snap, liq, d, 5);
+      const plans = walkBook(o.side, rem(), protect, snap, liq, d, 5);
       apply(plans);
       if (rem() > 0) {
         const own = ownLevels(o.side, snap)[0];
@@ -727,7 +757,7 @@ export class Engine {
         if (price == null) {
           return cancelRest('没有成交也没有本方报价，剩余部分撤销');
         }
-        restAt(price);
+        restAt(capped(price));
       }
       return;
     }
@@ -736,8 +766,9 @@ export class Engine {
       if (!best) {
         return this.finishCancel(o, '对手方没有报价，委托撤销', true);
       }
-      apply(walkBook(o.side, rem(), best[0], snap, liq, d, 1));
-      restAt(best[0]);
+      const price = capped(best[0]);
+      apply(walkBook(o.side, rem(), price, snap, liq, d, 1));
+      restAt(price);
       return;
     }
     if (o.kind === 'obest') {
@@ -745,8 +776,11 @@ export class Engine {
       if (!own) {
         return this.finishCancel(o, '本方没有报价，委托撤销', true);
       }
-      restAt(own[0]);
-      o.queueAhead = own[1];
+      const price = capped(own[0]);
+      restAt(price);
+      if (price === own[0]) {
+        o.queueAhead = own[1];
+      }
       return;
     }
   }

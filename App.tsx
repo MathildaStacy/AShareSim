@@ -1,5 +1,5 @@
 /**
- * AShareSim：底部 5 个 Tab 的正式界面（M2 第 2 步）。本地库打开之前显示启动页。
+ * AShareSim：底部 5 个 Tab 的正式界面。本地库打开之前显示启动页；全局提示（Toast）盖在最上层。
  * M2 第 1 步的调试页挪到了「我的 → 调试页」。
  */
 import { NavigationContainer } from '@react-navigation/native';
@@ -7,7 +7,10 @@ import { useEffect } from 'react';
 import { StatusBar, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { boot, useApp } from './src/app/boot';
+import { cleanupExports } from './src/app/exportFile';
+import { ToastHost } from './src/ui/components/ToastHost';
 import { RootStack } from './src/ui/navigation/RootStack';
+import { prefs } from './src/ui/prefs';
 import { color } from './src/ui/theme';
 
 function App() {
@@ -15,7 +18,13 @@ function App() {
   const error = useApp(s => s.error);
   useEffect(() => {
     boot().catch(() => undefined);
+    cleanupExports().catch(() => undefined);
   }, []);
+  useEffect(() => {
+    if (core) {
+      prefs.load(core).catch(() => undefined);
+    }
+  }, [core]);
   return (
     <SafeAreaProvider>
       <StatusBar barStyle="dark-content" />
@@ -31,6 +40,7 @@ function App() {
           </Text>
         </View>
       )}
+      <ToastHost />
     </SafeAreaProvider>
   );
 }

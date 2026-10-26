@@ -89,3 +89,27 @@ export type Trend = 'up' | 'down' | 'flat';
 export function trendOf(v: number | null | undefined): Trend {
   return v == null || v === 0 ? 'flat' : v > 0 ? 'up' : 'down';
 }
+
+/** 数量带千分位。 */
+export function fmtQty(n: number): string {
+  return n.toLocaleString('zh-CN');
+}
+
+/** 申报单位名：ETF 是份，股票是股。 */
+export function unitOf(code: string, type?: string): '股' | '份' {
+  return boardOf(code, type) === 'etf' ? '份' : '股';
+}
+
+/** 带正负号的金额（分 → 元，两位小数，千分位）。 */
+export function fmtSignedFen(fen: number): string {
+  const abs = Math.abs(fen);
+  const yuan = Math.floor(abs / 100)
+    .toString()
+    .replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  return (
+    (fen > 0 ? '+' : fen < 0 ? '-' : '') +
+    yuan +
+    '.' +
+    String(abs % 100).padStart(2, '0')
+  );
+}

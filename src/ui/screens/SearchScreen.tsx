@@ -1,4 +1,7 @@
-/** 搜索：代码 / 名称 / 拼音首字母。先查本地证券表，同时请求腾讯 smartbox（停顿 300 毫秒再发）。 */
+/**
+ * 搜索：代码 / 名称 / 拼音首字母。先查本地证券表，同时请求腾讯 smartbox（停顿 300 毫秒再发）。
+ * 从下单页进来（pick）时，点一行带着代码回到下单页；指数不能下单，不显示。
+ */
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useEffect, useState } from 'react';
@@ -17,7 +20,7 @@ import { Button, Empty, NavBar, Note, Tags } from '../components/ui';
 import { boardOf, isIndex, tagsOf } from '../format';
 import { useCore } from '../hooks';
 import { matchLocal } from '../search';
-import type { RootStackParamList } from '../navigation/types';
+import type { RootScreenProps, RootStackParamList } from '../navigation/types';
 import { color, num, PAD } from '../theme';
 import { useWatch, watch } from '../watchStore';
 
@@ -27,7 +30,8 @@ function exchangeName(code: string) {
   return code.startsWith('sh') ? '上交所' : '深交所';
 }
 
-export function SearchScreen() {
+export function SearchScreen({ route }: RootScreenProps<'Search'>) {
+  const pick = route.params?.pick ?? null;
   const core = useCore();
   const nav = useNavigation<Nav>();
   const watched = useWatch(s => s.codes);
@@ -78,12 +82,15 @@ export function SearchScreen() {
 
   const seen = new Set<string>();
   const hits = [...matchLocal(local, q), ...remote].filter(h =>
-    seen.has(h.code) ? false : (seen.add(h.code), true),
+    seen.has(h.code) ||
+    (pick && (isIndex(h.code, h.type) || !boardOf(h.code, h.type)))
+      ? false
+      : (seen.add(h.code), true),
   );
 
   return (
     <View style={s.page}>
-      <NavBar title="搜索" back />
+      <NavBar title={pick ? '选择证券' : '搜索'} back />
       <View style={s.box}>
         <TextInput
           value={q}
@@ -115,11 +122,18 @@ export function SearchScreen() {
             <Pressable
               style={({ pressed }) => [s.row, pressed && s.pressed]}
               onPress={() =>
-                nav.navigate('Stock', {
-                  code: h.code,
-                  name: h.name,
-                  type: h.type,
-                })
+                pick
+                  ? nav.popTo('Order', {
+                      side: pick.side,
+                      kind: pick.kind,
+                      code: h.code,
+                      name: h.name,
+                    })
+                  : nav.navigate('Stock', {
+                      code: h.code,
+                      name: h.name,
+                      type: h.type,
+                    })
               }
             >
               <View style={s.grow}>
@@ -134,7 +148,7 @@ export function SearchScreen() {
                     exchangeName(h.code)}
                 </Text>
               </View>
-              {index ? null : (
+              {index || pick ? null : (
                 <Button
                   small
                   tone={inWatch ? 'ghost' : 'buy'}
@@ -149,7 +163,9 @@ export function SearchScreen() {
           <Empty
             text={
               !q.trim()
-                ? '支持沪深 A 股、ETF 和指数。北交所、债券、港股暂不支持。'
+                ? pick
+                  ? '输入要买卖的证券。支持沪深主板、创业板、科创板和 ETF。'
+                  : '支持沪深 A 股、ETF 和指数。北交所、债券、港股暂不支持。'
                 : busy
                 ? '搜索中…'
                 : '没有找到'
