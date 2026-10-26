@@ -11,7 +11,12 @@ import type { Db } from '../data/db';
 import * as repo from '../data/repos';
 import { isLive, newAccount } from '../engine/account';
 import { TradingCalendar, type DateStr } from '../engine/calendar';
-import { DEFAULT_FEE_PROFILE } from '../engine/fees';
+import { DEFAULT_FEE_PROFILE, type FeeProfile } from '../engine/fees';
+import {
+  checkTransfer,
+  type TransferCheck,
+  type TransferDir,
+} from '../engine/funds';
 import {
   Engine,
   type Now,
@@ -22,13 +27,14 @@ import {
 import { classify, isSTName, type Security } from '../engine/securities';
 import { AFTER_END, AFTER_START, CLOSE, T, type Sec } from '../engine/session';
 import type { EngineEvent, Snapshot } from '../engine/types';
-import type { Fen } from '../engine/units';
+import { formatFen, type Fen } from '../engine/units';
 import type { OrderRequest } from '../engine/validate';
 import { beijingIso, beijingNow } from '../market/clock';
 import type { MarketClient } from '../market/client';
 import { baseFromPrevClose, gapSnapshots, mergeByTime } from '../market/replay';
 import type { Quote, QuoteInfo } from '../market/tencent';
 import { describeEvent } from './describe';
+import { feeDiff } from './feeForm';
 
 /** 默认累计净入金上限 40 万（PRODUCT_DESIGN §6.3）。 */
 export const DEFAULT_DEPOSIT_CAP: Fen = 40_000_000;
@@ -63,7 +69,7 @@ export class Simulator {
   private constructor(
     private db: Db,
     private client: MarketClient,
-    readonly accountId: number,
+    private currentId: number,
     state: ReturnType<typeof newAccount>,
     readonly calendar: TradingCalendar,
     private clock: () => Now,
@@ -105,6 +111,11 @@ export class Simulator {
   }
 
   // ---------- 查询 ----------
+
+  /** 当前账户的 id；重置账户后换成新账户的。 */
+  get accountId(): number {
+    return this.currentId;
+  }
 
   security(code: string): (Security & { type: string }) | null {
     return this.securities.get(code) ?? null;
@@ -294,15 +305,147 @@ export class Simulator {
     return r;
   }
 
+  /** 银证转账前的检查（金额、转账时间、上限、可取），转账页实时显示用。 */
+  checkTransfer(dir: TransferDir, fen: Fen): TransferCheck {
+    return checkTransfer(
+      this.engine.state,
+      this.calendar,
+      this.clock(),
+      dir,
+      fen,
+    );
+  }
+
+  /**
+   * 银证转账（转账页）：先按转账时间等规则检查，再入金 / 出金。被拦下的记进操作日志（kind reject），
+   * AI 能回答「刚才为什么转不了」。调试页的 deposit 不查转账时间。
+   */
+  async transfer(dir: TransferDir, fen: Fen): Promise<SimpleResult> {
+    const c = this.checkTransfer(dir, fen);
+    if (!c.ok) {
+      await this.log(
+        'reject',
+        (dir === 'in' ? '银行转证券 ' : '证券转银行 ') +
+          formatFen(Math.max(0, fen)) +
+          ' 元被拦下：' +
+          c.msg,
+        { rule: c.rule },
+      );
+      return { ok: false, msg: c.msg, events: [] };
+    }
+    return dir === 'in' ? this.deposit(fen) : this.withdraw(fen);
+  }
+
   private async logTransfer(text: string): Promise<void> {
+    await this.log('transfer', text);
+  }
+
+  private async log(
+    kind: repo.ActivityKind,
+    text: string,
+    ref: Record<string, unknown> | null = null,
+  ): Promise<void> {
     await repo.logActivity(this.db, {
-      accountId: this.accountId,
+      accountId: this.currentId,
       tradeDate: this.engine.state.date,
       ts: beijingIso(),
-      kind: 'transfer',
+      kind,
       text,
-      ref: null,
+      ref,
     });
+  }
+
+  /** 设置的修改记进操作日志（kind setting）。 */
+  logSetting(text: string, ref: Record<string, unknown> | null = null) {
+    return this.log('setting', text, ref);
+  }
+
+  // ---------- 费率和账户设置 ----------
+
+  /**
+   * 改费率：只对之后提交的委托生效（已有委托按各自提交时的费率）。why 写进操作日志，例如「按交割单校准」。
+   * 没有变化时返回空数组，不记日志。
+   */
+  async setFeeProfile(
+    profile: FeeProfile,
+    why = '修改费率',
+  ): Promise<string[]> {
+    const diff = feeDiff(this.engine.state.fee, profile);
+    if (!diff.length) {
+      return diff;
+    }
+    this.engine.setFeeProfile(profile);
+    await this.logSetting(why + '：' + diff.join('，'), { setting: 'fee' });
+    await this.commit([], true);
+    this.listeners.forEach(fn => fn([]));
+    return diff;
+  }
+
+  /** 改累计净入金上限（范围由设置页校验，见 sim/settings.ts）。 */
+  async setDepositCap(fen: Fen): Promise<void> {
+    const old = this.engine.state.depositCap;
+    if (fen === old) {
+      return;
+    }
+    this.engine.setDepositCap(fen);
+    await this.logSetting(
+      '累计净入金上限 ' + formatFen(old) + ' → ' + formatFen(fen) + ' 元',
+      { setting: 'depositCap' },
+    );
+    await this.commit([], true);
+    this.listeners.forEach(fn => fn([]));
+  }
+
+  /**
+   * 重置账户：旧账户（状态、委托、交割单、操作日志）原样归档、只读，未完成委托随旧账户归档、不再撮合。
+   * 新账户从 0 元开始，沿用当前的费率设置和入金上限（这两项是「你的券商」的设置）。返回旧账户和新账户的 id。
+   */
+  async resetAccount(): Promise<{ archived: number; current: number }> {
+    const nowIso = beijingIso();
+    const old = this.engine.state;
+    const oldId = this.currentId;
+    const state = newAccount(this.clock().date, {
+      fee: old.fee,
+      depositCap: old.depositCap,
+    });
+    let newId = 0;
+    // 旧账户里没完成的委托不再撮合：状态原样保留，说明改掉（否则还写着「9:15 报送」）
+    for (const o of old.orders.filter(isLive)) {
+      o.note = '随账户归档，不再撮合';
+    }
+    await this.db.transaction(async tx => {
+      await repo.saveAccountState(tx, oldId, old, nowIso);
+      await repo.archiveAccount(tx, oldId, nowIso);
+      const n = (await repo.allAccounts(tx)).length;
+      newId = await repo.createAccount(
+        tx,
+        '模拟账户 ' + (n + 1),
+        state,
+        nowIso,
+      );
+      await repo.logActivity(tx, {
+        accountId: oldId,
+        tradeDate: old.date,
+        ts: nowIso,
+        kind: 'setting',
+        text: '重置账户：这个账户已归档',
+        ref: { setting: 'reset', next: newId },
+      });
+      await repo.logActivity(tx, {
+        accountId: newId,
+        tradeDate: state.date,
+        ts: nowIso,
+        kind: 'setting',
+        text: '重置账户：旧账户已归档（可在「历史账户」查看），新账户从 0 元开始，沿用原来的费率和入金上限',
+        ref: { setting: 'reset', archived: oldId },
+      });
+    });
+    this.engine.state = state;
+    this.currentId = newId;
+    this.afterFed.clear();
+    this.dirty = false;
+    this.listeners.forEach(fn => fn([]));
+    return { archived: oldId, current: newId };
   }
 
   // ---------- 盘后固定价格交易 ----------

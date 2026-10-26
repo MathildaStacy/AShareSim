@@ -1,6 +1,7 @@
 /**
  * 各张表的读写。都是薄薄一层 SQL，业务逻辑在 sim/ 里。
  */
+import { upgradeState } from '../engine/account';
 import { HOLIDAYS, type DateStr } from '../engine/calendar';
 import type {
   AccountState,
@@ -49,26 +50,50 @@ export interface AccountRow {
   name: string;
   state: AccountState;
   createdAt: string;
+  /** 归档时间；当前账户为 null。 */
+  archivedAt?: string | null;
 }
 
+interface AccountDbRow {
+  id: number;
+  name: string;
+  state: string;
+  created_at: string;
+  archived_at: string | null;
+}
+
+const toAccount = (row: AccountDbRow): AccountRow => ({
+  id: Number(row.id),
+  name: row.name,
+  state: upgradeState(JSON.parse(row.state) as AccountState),
+  createdAt: row.created_at,
+  archivedAt: row.archived_at,
+});
+
 export async function currentAccount(db: Db): Promise<AccountRow | null> {
-  const row = await db.get<{
-    id: number;
-    name: string;
-    state: string;
-    created_at: string;
-  }>(
-    'SELECT id, name, state, created_at FROM account WHERE archived_at IS NULL ORDER BY id DESC LIMIT 1',
+  const row = await db.get<AccountDbRow>(
+    'SELECT id, name, state, created_at, archived_at FROM account WHERE archived_at IS NULL ORDER BY id DESC LIMIT 1',
   );
-  if (!row) {
-    return null;
-  }
-  return {
-    id: row.id,
-    name: row.name,
-    state: JSON.parse(row.state) as AccountState,
-    createdAt: row.created_at,
-  };
+  return row ? toAccount(row) : null;
+}
+
+/** 全部账户（当前的和已归档的），新的在前。 */
+export async function allAccounts(db: Db): Promise<AccountRow[]> {
+  const rows = await db.all<AccountDbRow>(
+    'SELECT id, name, state, created_at, archived_at FROM account ORDER BY id DESC',
+  );
+  return rows.map(toAccount);
+}
+
+export async function accountById(
+  db: Db,
+  id: number,
+): Promise<AccountRow | null> {
+  const row = await db.get<AccountDbRow>(
+    'SELECT id, name, state, created_at, archived_at FROM account WHERE id = ?',
+    [id],
+  );
+  return row ? toAccount(row) : null;
 }
 
 export async function createAccount(
@@ -277,11 +302,14 @@ export async function snapshotsOf(
   return rows.map(toSnapshot);
 }
 
-/** 只保留最近 keepDays 个有快照的日期。 */
+/** 只保留最近 keepDays 个有快照的日期；0 表示永久保留。 */
 export async function pruneSnapshots(
   db: Db,
   keepDays: number,
 ): Promise<number> {
+  if (keepDays <= 0) {
+    return 0;
+  }
   const dates = await db.all<{ date: string }>(
     'SELECT DISTINCT date FROM quotes_snapshot ORDER BY date DESC',
   );
@@ -458,31 +486,69 @@ export async function logActivity(db: Db, a: Activity): Promise<void> {
   );
 }
 
-export async function recentActivity(db: Db, n: number): Promise<Activity[]> {
-  const rows = await db.all<{
-    id: number;
-    account_id: number | null;
-    trade_date: string;
-    ts: string;
-    kind: ActivityKind;
-    text: string;
-    ref: string | null;
-  }>('SELECT * FROM activity_log ORDER BY id DESC LIMIT ?', [n]);
-  return rows.map(r => ({
-    id: Number(r.id),
-    accountId: r.account_id == null ? null : Number(r.account_id),
-    tradeDate: r.trade_date,
-    ts: r.ts,
-    kind: r.kind,
-    text: r.text,
-    ref: r.ref ? JSON.parse(r.ref) : null,
-  }));
+interface ActivityDbRow {
+  id: number;
+  account_id: number | null;
+  trade_date: string;
+  ts: string;
+  kind: ActivityKind;
+  text: string;
+  ref: string | null;
 }
 
-/** 保留最近 500 条，且不超过 90 天（AI_ASSISTANT.md §3）。 */
+const toActivity = (r: ActivityDbRow): Activity => ({
+  id: Number(r.id),
+  accountId: r.account_id == null ? null : Number(r.account_id),
+  tradeDate: r.trade_date,
+  ts: r.ts,
+  kind: r.kind,
+  text: r.text,
+  ref: r.ref ? JSON.parse(r.ref) : null,
+});
+
+/**
+ * 最近 n 条操作，从新到旧。给了 accountId 时只要这个账户的（和不属于任何账户的）记录：
+ * 重置账户后，AI 的「最近操作」只带当前账户的（PRODUCT_DESIGN §10）。
+ */
+export async function recentActivity(
+  db: Db,
+  n: number,
+  accountId?: number,
+): Promise<Activity[]> {
+  const rows =
+    accountId == null
+      ? await db.all<ActivityDbRow>(
+          'SELECT * FROM activity_log ORDER BY id DESC LIMIT ?',
+          [n],
+        )
+      : await db.all<ActivityDbRow>(
+          'SELECT * FROM activity_log WHERE account_id = ? OR account_id IS NULL ORDER BY id DESC LIMIT ?',
+          [accountId, n],
+        );
+  return rows.map(toActivity);
+}
+
+/** 某个账户自己的操作日志（历史账户详情页），从新到旧。 */
+export async function activityOf(
+  db: Db,
+  accountId: number,
+  n: number,
+): Promise<Activity[]> {
+  const rows = await db.all<ActivityDbRow>(
+    'SELECT * FROM activity_log WHERE account_id = ? ORDER BY id DESC LIMIT ?',
+    [accountId, n],
+  );
+  return rows.map(toActivity);
+}
+
+/**
+ * 保留最近 500 条，且不超过 90 天（AI_ASSISTANT.md §3）。归档账户的操作日志随账户保存，不参与清理。
+ */
 export async function pruneActivity(db: Db, oldestTs: string): Promise<void> {
+  const live =
+    '(account_id IS NULL OR account_id NOT IN (SELECT id FROM account WHERE archived_at IS NOT NULL))';
   await db.run(
-    'DELETE FROM activity_log WHERE ts < ? OR id <= (SELECT id FROM activity_log ORDER BY id DESC LIMIT 1 OFFSET 500)',
+    `DELETE FROM activity_log WHERE ${live} AND (ts < ? OR id <= (SELECT id FROM activity_log WHERE ${live} ORDER BY id DESC LIMIT 1 OFFSET 500))`,
     [oldestTs],
   );
 }

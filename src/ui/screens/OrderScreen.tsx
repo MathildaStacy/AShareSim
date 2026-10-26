@@ -53,6 +53,7 @@ import {
   toRequest,
   type OrderForm,
 } from '../../sim/orderForm';
+import { feeLabel, feeNote } from '../../sim/feeForm';
 import { BOARD_NAME } from '../../sim/ruleCard';
 import { ConfirmDialog, type DialogRow } from '../components/Dialog';
 import { OrderRow, PositionList } from '../components/tradeRows';
@@ -202,6 +203,10 @@ export function OrderScreen({ route }: RootScreenProps<'Order'>) {
   const tradeSide = side === 'S' ? 'S' : 'B';
   const set = (patch: Partial<OrderForm>) => setForm(f => ({ ...f, ...patch }));
   const switchSide = (k: OrderSide) => {
+    // 再点一次当前分段不清空表单
+    if (k === side) {
+      return;
+    }
     setSide(k);
     if (k === 'B' || k === 'S') {
       setPriceTouched(false);
@@ -327,15 +332,7 @@ export function OrderScreen({ route }: RootScreenProps<'Order'>) {
           (tradeSide === 'B' ? '，冻结 ' + formatFen(est.freeze) + ' 元' : ''),
       );
     }
-    lines.push(
-      '费率：佣金万 ' +
-        rateToWan(rate) +
-        '、最低 ' +
-        minFen / 100 +
-        ' 元（' +
-        (fee.calibrated ? '已用交割单校准' : '默认费率，还没用真实交割单校准') +
-        '）',
-    );
+    lines.push('费率：' + feeLabel(fee, sec?.board ?? 'main'));
     lines.push(
       tradeSide === 'B'
         ? '可买 ' +
@@ -799,12 +796,17 @@ export function OrderScreen({ route }: RootScreenProps<'Order'>) {
                 <FeeItem k="冻结资金（含费用）" v={formatFen(est.freeze)} />
               ) : null}
               <Text style={s.feeNote}>
-                {fee.calibrated
-                  ? '费率已用真实交割单校准。'
-                  : '默认费率：你还没用真实交割单校准，佣金按股票万 2.5、ETF 万 0.5、最低 5 元估算（不低于多数券商，模拟只会略差）。'}
+                {feeNote(fee, sec?.board ?? 'main')}
                 {tradeSide === 'S' && !etf
                   ? '持有期间分过红的，卖出后下一交易日补扣股息红利税。'
                   : ''}
+                <Text
+                  style={s.feeLink}
+                  onPress={() => nav.navigate('Fees')}
+                  accessibilityRole="link"
+                >
+                  {' 费率设置 ›'}
+                </Text>
               </Text>
             </View>
           ) : null}
@@ -1201,6 +1203,7 @@ const s = StyleSheet.create({
   feeK: { fontSize: 12, color: color.ink2 },
   feeV: { fontSize: 12, color: color.ink },
   feeNote: { fontSize: 11, lineHeight: 16, color: color.ink3, marginTop: 4 },
+  feeLink: { color: color.sell },
   check: { borderRadius: 4, paddingHorizontal: 8, paddingVertical: 6 },
   checkOk: { backgroundColor: color.downBg },
   checkWarn: { backgroundColor: color.warnBg },

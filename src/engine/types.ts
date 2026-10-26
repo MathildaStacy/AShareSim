@@ -108,6 +108,11 @@ export interface Order {
   queueAhead: number;
   /** 买入冻结的资金。 */
   frozen: Fen;
+  /**
+   * 提交时的费率设置。之后改费率只对新委托生效：这笔委托的冻结和成交计费一直按它算（PRODUCT_DESIGN §10）。
+   * 旧数据没有这个字段，按账户当前费率算。
+   */
+  feeProfile?: FeeProfile;
   /** 废单 / 撤单原因。 */
   reason: string;
   /** 当前状态说明（例如「排队中，前面约 3,200 股」）。 */

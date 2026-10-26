@@ -5,6 +5,7 @@ import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import type { AppCore } from '../../app/boot';
 import { exportText } from '../../app/exportFile';
 import * as repo from '../../data/repos';
 import { isLive } from '../../engine/account';
@@ -13,6 +14,7 @@ import { formatSec } from '../../engine/session';
 import type { LedgerEntry } from '../../engine/types';
 import { formatFen, formatPrice } from '../../engine/units';
 import { beijingIso } from '../../market/clock';
+import { feeSummary } from '../../sim/feeForm';
 import { ledgerCsv, ledgerFileName } from '../../sim/ledgerCsv';
 import { ConfirmDialog } from '../components/Dialog';
 import { FillRow, OrderRow } from '../components/tradeRows';
@@ -71,9 +73,7 @@ export function OrdersScreen({ route }: RootScreenProps<'Orders'>) {
   const histOrders = st.orders.filter(o => !(o.date === today || isLive(o)));
   const todayFills = st.fills.filter(f => f.date === today);
   const ledger = st.ledger;
-  const feeState = st.fee.calibrated
-    ? '已用交割单校准'
-    : '默认费率：股票万 2.5、ETF 万 0.5，最低 5 元，还没用真实交割单校准';
+  const feeState = feeSummary(st.fee);
 
   useQuoteCodes([...new Set(todayOrders.filter(isLive).map(o => o.code))]);
   useViewLog('orders:' + tab, '查看 查询 · ' + TAB_NAME[tab]);
@@ -167,24 +167,8 @@ export function OrdersScreen({ route }: RootScreenProps<'Orders'>) {
       return;
     }
     setBusy(true);
-    const name = ledgerFileName(st.date);
     try {
-      const csv = ledgerCsv(st.ledger, {
-        nameOf: c => core.sim.security(c)?.name ?? c,
-        decimalsOf: c => (core.sim.security(c)?.board === 'etf' ? 3 : 2),
-      });
-      await exportText(name, csv, 'text/csv');
-      toast.show('已打开分享面板：' + name);
-      await repo.logActivity(core.db, {
-        accountId: core.sim.accountId,
-        tradeDate: st.date,
-        ts: beijingIso(),
-        kind: 'export',
-        text: '导出 ' + name + '（' + st.ledger.length + ' 条）',
-        ref: null,
-      });
-    } catch (e) {
-      toast.show(e instanceof Error ? e.message : String(e), 'bad');
+      await exportLedger(core, st.ledger, ledgerFileName(st.date));
     } finally {
       setBusy(false);
     }
@@ -241,7 +225,12 @@ export function OrdersScreen({ route }: RootScreenProps<'Orders'>) {
             disabled={busy || !ledger.length}
           />
         </View>
-        <Note style={s.note}>{feeState}</Note>
+        <Pressable
+          onPress={() => nav.navigate('Fees')}
+          accessibilityRole="button"
+        >
+          <Note style={s.note}>{feeState + '。点这里看费率设置 ›'}</Note>
+        </Pressable>
         {ledger.length ? (
           <LedgerTable
             rows={ledger}
@@ -291,9 +280,35 @@ export function OrdersScreen({ route }: RootScreenProps<'Orders'>) {
   );
 }
 
+/** 导出交割单 CSV（打开系统分享面板）并记操作日志；当前账户和历史账户共用。 */
+export async function exportLedger(
+  core: AppCore,
+  ledger: LedgerEntry[],
+  name: string,
+): Promise<void> {
+  try {
+    const csv = ledgerCsv(ledger, {
+      nameOf: c => core.sim.security(c)?.name ?? c,
+      decimalsOf: c => (core.sim.security(c)?.board === 'etf' ? 3 : 2),
+    });
+    await exportText(name, csv, 'text/csv');
+    toast.show('已打开分享面板：' + name);
+    await repo.logActivity(core.db, {
+      accountId: core.sim.accountId,
+      tradeDate: core.sim.engine.state.date,
+      ts: beijingIso(),
+      kind: 'export',
+      text: '导出 ' + name + '（' + ledger.length + ' 条）',
+      ref: null,
+    });
+  } catch (e) {
+    toast.show(e instanceof Error ? e.message : String(e), 'bad');
+  }
+}
+
 type Col = { t: string; w: number; left?: boolean };
 
-function LedgerTable({
+export function LedgerTable({
   rows,
   regs,
   nameOf,

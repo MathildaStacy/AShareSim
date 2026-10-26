@@ -1,5 +1,6 @@
 /**
- * 交易、学习、我的。交易 Tab：账户概览、功能格、持仓（M2 第 3 步）；资金和设置在第 4 步，学习在 M3。
+ * 交易、学习、我的。交易 Tab：账户概览、功能格、持仓（M2 第 3 步）；资金和设置的页面是第 4 步，
+ * 「我的」按 PRODUCT_DESIGN §6.3 的顺序排入口；学习在 M3。
  */
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -16,7 +17,7 @@ import {
   PositionList,
   useAccount,
 } from '../components/tradeRows';
-import { AiFab, NavBar, Note, SectionTitle } from '../components/ui';
+import { AiFab, Button, NavBar, Note, SectionTitle } from '../components/ui';
 import { fmtQty, fmtSignedFen } from '../format';
 import {
   useAiContext,
@@ -25,8 +26,10 @@ import {
   useQuoteCodes,
   useViewLog,
 } from '../hooks';
+import { feeSummary } from '../../sim/feeForm';
+import { BACKGROUND_MODE_NAME, keepName } from '../../sim/settings';
 import { COST_BASIS_NAME, usePrefs } from '../prefs';
-import { toast } from '../toast';
+import { ResetDialog } from './AccountsScreens';
 import { PhaseBar } from './WatchScreen';
 import type { RootStackParamList } from '../navigation/types';
 import { color, num, PAD } from '../theme';
@@ -100,9 +103,34 @@ type GridItem = {
   label: string;
   icon: string;
   bg: string;
-  go?: () => void;
-  later?: string;
+  go: () => void;
 };
+
+/**
+ * 交易 Tab 第一次有挂单时提示一次去设置省电策略（后台跟踪没关时）。点过就不再提示。
+ */
+function usePowerTip(hasLive: boolean) {
+  const core = useCore();
+  const [dismissed, setDismissed] = useState(true);
+  useEffect(() => {
+    if (!hasLive) {
+      return;
+    }
+    repo
+      .getSetting(core.db, 'powerTipDismissed', false)
+      .then(setDismissed)
+      .catch(() => undefined);
+  }, [core, hasLive]);
+  return {
+    powerTip: !dismissed && core.refresher.settings.backgroundMode !== 'off',
+    dismissPowerTip: () => {
+      setDismissed(true);
+      repo
+        .setSetting(core.db, 'powerTipDismissed', true)
+        .catch(() => undefined);
+    },
+  };
+}
 
 export function TradeScreen() {
   const core = useCore();
@@ -110,6 +138,7 @@ export function TradeScreen() {
   const { sum, pos, floating, today, state } = useAccount();
   const basis = usePrefs(st => st.costBasis);
   const live = state.orders.filter(isLive);
+  const { powerTip, dismissPowerTip } = usePowerTip(live.length > 0);
   useQuoteCodes(pos.map(p => p.code));
   useViewLog('trade', '查看 交易');
   useAiContext('Trade', () => ({
@@ -153,10 +182,6 @@ export function TradeScreen() {
     ],
     tip: '浮动盈亏按持仓列表的成本口径（默认摊薄成本）算；当日参考盈亏是今天的价格变化和成交带来的盈亏。',
   }));
-  const later = (what: string) => () =>
-    toast.show(
-      what + '在 M2 第 4 步上线。现在可以在「我的 → 调试页」转入模拟资金。',
-    );
   const grid: GridItem[] = [
     {
       label: '买入',
@@ -198,15 +223,13 @@ export function TradeScreen() {
       label: '银证转账',
       icon: '转',
       bg: color.cyb,
-      go: later('银证转账'),
-      later: '第 4 步',
+      go: () => nav.navigate('Transfer'),
     },
     {
       label: '资金流水',
       icon: '流',
       bg: color.etf,
-      go: later('资金流水'),
-      later: '第 4 步',
+      go: () => nav.navigate('Flows'),
     },
     {
       label: '盘后交易',
@@ -218,8 +241,7 @@ export function TradeScreen() {
       label: '费率设置',
       icon: '费',
       bg: color.ink3,
-      go: later('费率设置'),
-      later: '第 4 步',
+      go: () => nav.navigate('Fees'),
     },
   ];
   return (
@@ -240,18 +262,10 @@ export function TradeScreen() {
               accessibilityRole="button"
               accessibilityLabel={g.label}
             >
-              <View
-                style={[
-                  s.gIcon,
-                  { backgroundColor: g.bg },
-                  g.later ? s.gLater : null,
-                ]}
-              >
+              <View style={[s.gIcon, { backgroundColor: g.bg }]}>
                 <Text style={s.gIconText}>{g.icon}</Text>
               </View>
-              <Text style={[s.gText, g.later ? { color: color.ink3 } : null]}>
-                {g.label}
-              </Text>
+              <Text style={s.gText}>{g.label}</Text>
             </Pressable>
           ))}
         </View>
@@ -259,7 +273,35 @@ export function TradeScreen() {
           title="持仓"
           right={'点一行看详情 · ' + COST_BASIS_NAME[basis]}
         />
-        <PositionList empty="还没有持仓。去买入第一笔吧（先在「我的 → 调试页」转入模拟资金）。" />
+        <PositionList
+          empty={
+            state.depositTotal > 0
+              ? '还没有持仓。去买入第一笔吧。'
+              : '还没有持仓。先去「银证转账」转入模拟资金，再买入第一笔。'
+          }
+        />
+        {!pos.length && state.depositTotal === 0 ? (
+          <View style={s.cta}>
+            <Button
+              title="去银证转账"
+              tone="buy"
+              onPress={() => nav.navigate('Transfer', { dir: 'in' })}
+            />
+          </View>
+        ) : null}
+        {live.length && powerTip ? (
+          <Pressable
+            onPress={() => {
+              dismissPowerTip();
+              nav.navigate('PowerGuide');
+            }}
+          >
+            <Note tone="warn" style={s.note}>
+              有挂单时 App 会在后台跟踪行情、按排队规则撮合。小米 HyperOS
+              默认会停掉后台的 App，点这里按步骤设置省电策略（只提示这一次）。
+            </Note>
+          </Pressable>
+        ) : null}
         {live.length ? (
           <Pressable onPress={() => nav.navigate('Orders', { tab: 'today' })}>
             <Note style={s.note}>
@@ -321,32 +363,53 @@ export function MeScreen() {
   const core = useCore();
   const nav = useNavigation<Nav>();
   const status = useApp(st => st.status);
-  const [stats, setStats] = useState({ rows: 0, days: 0, codes: 0 });
+  useApp(st => st.version);
+  const basis = usePrefs(st => st.costBasis);
+  const [archived, setArchived] = useState(0);
+  const [reset, setReset] = useState(false);
+  const st = core.sim.engine.state;
   useEffect(() => {
     repo
-      .snapshotStats(core.db)
-      .then(setStats)
+      .allAccounts(core.db)
+      .then(rows => setArchived(rows.filter(r => r.archivedAt).length))
       .catch(() => undefined);
-  }, [core, status?.lastOk]);
+  }, [core, reset]);
   useViewLog('me', '查看 我的');
   const mb = ((status?.bytesToday ?? 0) / 1024 / 1024).toFixed(2);
+  const mode = core.refresher.settings.backgroundMode;
+  const refreshLine = status
+    ? WINDOW_NAME[status.window] +
+      ' · ' +
+      (status.foreground ? '前台' : '后台') +
+      ' · 后台跟踪' +
+      (status.tracking ? '中' : '没开') +
+      ' · 今日请求 ' +
+      status.requestsToday +
+      ' 次，约 ' +
+      mb +
+      ' MB' +
+      (status.lastError ? ' · 出错：' + status.lastError : '')
+    : '…';
+  const fee = feeSummary(st.fee);
+  const calibrated = st.fee.calibratedStock || st.fee.calibratedEtf;
   useAiContext('Me', () => ({
     name: '我的',
     lines: [
-      '行情：' +
-        (status ? WINDOW_NAME[status.window] : '') +
-        '，今日请求 ' +
-        (status?.requestsToday ?? 0) +
-        ' 次，约 ' +
-        mb +
-        ' MB',
-      '本地快照 ' +
-        stats.rows +
-        ' 条（' +
-        stats.codes +
-        ' 只，' +
-        stats.days +
-        ' 天）',
+      '账户：' +
+        core.sim.engine.state.date +
+        '，累计净入金 ' +
+        formatFen(st.depositTotal) +
+        ' / 上限 ' +
+        formatFen(st.depositCap) +
+        ' 元，已归档账户 ' +
+        archived +
+        ' 个',
+      '费率：' + fee,
+      '持仓成本口径：' +
+        COST_BASIS_NAME[basis] +
+        '；后台跟踪：' +
+        BACKGROUND_MODE_NAME[mode],
+      '行情：' + refreshLine,
     ],
   }));
   return (
@@ -355,34 +418,76 @@ export function MeScreen() {
       <ScrollView contentContainerStyle={s.pad}>
         <AccountCard />
         <View style={s.card}>
-          <SectionTitle title="行情刷新" />
-          <Text style={[s.line, num]}>
-            {status
-              ? WINDOW_NAME[status.window] +
-                ' · ' +
-                (status.foreground ? '前台' : '后台') +
-                ' · 后台跟踪' +
-                (status.tracking ? '开' : '关')
-              : '…'}
-          </Text>
-          <Text style={[s.line, num]}>
-            今日请求 {status?.requestsToday ?? 0} 次 · 约 {mb} MB
-            {status?.lastError ? ' · 出错：' + status.lastError : ''}
-          </Text>
-          <Text style={[s.line, num, s.lineLast]}>
-            本地快照 {stats.rows} 条（{stats.codes} 只，{stats.days} 天）
-          </Text>
+          <Entry
+            title="银证转账"
+            sub={
+              '模拟入金 · 还可转入 ' +
+              formatFen(Math.max(0, st.depositCap - st.depositTotal)) +
+              ' 元'
+            }
+            onPress={() => nav.navigate('Transfer')}
+          />
+          <Entry
+            title="资金流水"
+            sub={st.ledger.length + ' 条'}
+            onPress={() => nav.navigate('Flows')}
+          />
+          <Entry
+            title="交割单"
+            sub="可导出 CSV"
+            onPress={() => nav.navigate('Orders', { tab: 'ledger' })}
+          />
         </View>
         <View style={s.card}>
-          <Entry title="银证转账 · 资金流水" sub="M2 第 4 步" />
           <Entry
-            title="费率设置 · 交割单校准"
-            sub="M2 第 4 步。现在用默认费率：股票万 2.5、ETF 万 0.5，最低 5 元"
+            title="费率设置"
+            sub={fee}
+            onPress={() => nav.navigate('Fees')}
           />
           <Entry
-            title="后台跟踪 · 省电设置"
-            sub="M2 第 4 步（HyperOS 省电策略引导）"
+            title="交割单校准"
+            sub={
+              calibrated
+                ? (st.fee.calibratedStock ? '股票已校准' : '股票未校准') +
+                  ' · ' +
+                  (st.fee.calibratedEtf ? 'ETF 已校准' : 'ETF 未校准')
+                : '未校准：开户后抄一条真实交割单'
+            }
+            onPress={() => nav.navigate('Calibrate')}
           />
+        </View>
+        <View style={s.card}>
+          <Entry
+            title="设置"
+            sub={
+              '成本口径 ' +
+              COST_BASIS_NAME[basis] +
+              ' · 后台跟踪 ' +
+              BACKGROUND_MODE_NAME[mode] +
+              ' · 快照 ' +
+              keepName(core.refresher.settings.snapshotKeepDays)
+            }
+            onPress={() => nav.navigate('Settings')}
+          />
+          <Entry
+            title="后台跟踪与省电"
+            sub={refreshLine}
+            onPress={() => nav.navigate('PowerGuide')}
+          />
+        </View>
+        <View style={s.card}>
+          <Entry
+            title="历史账户"
+            sub={archived ? '已归档 ' + archived + ' 个' : '还没有归档的账户'}
+            onPress={() => nav.navigate('Accounts')}
+          />
+          <Entry
+            title="重置账户"
+            sub="旧账户归档（可查看、导出），新账户从 0 元开始"
+            onPress={() => setReset(true)}
+          />
+        </View>
+        <View style={s.card}>
           <Entry title="AI 设置" sub="M4" />
           <Entry
             title="调试页"
@@ -400,6 +505,7 @@ export function MeScreen() {
           </Text>
         </View>
       </ScrollView>
+      <ResetDialog visible={reset} onClose={() => setReset(false)} />
       <AiFab />
     </View>
   );
@@ -409,6 +515,7 @@ const s = StyleSheet.create({
   page: { flex: 1, backgroundColor: color.bg },
   pad: { paddingBottom: 90 },
   card: { backgroundColor: color.card, marginTop: 8 },
+  cta: { paddingHorizontal: 10, marginTop: 4 },
   note: { margin: 10 },
   acTop: { paddingHorizontal: PAD, paddingTop: 14 },
   acTotal: { fontSize: 26, fontWeight: '600', color: color.ink, marginTop: 2 },
@@ -457,7 +564,6 @@ const s = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  gLater: { opacity: 0.45 },
   gIconText: { color: '#FFFFFF', fontSize: 15, fontWeight: '600' },
   gText: { fontSize: 12, color: color.ink, marginTop: 4 },
   about: {

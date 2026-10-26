@@ -11,14 +11,21 @@ import {
   Star,
   UserRound,
 } from 'lucide-react-native';
+import {
+  AccountsScreen,
+  ArchivedAccountScreen,
+} from '../screens/AccountsScreens';
 import { AiScreen } from '../screens/AiScreen';
 import { DebugScreen } from '../screens/DebugScreen';
 import { FillDetailScreen, OrderDetailScreen } from '../screens/DetailScreens';
+import { CalibrateScreen, FeesScreen } from '../screens/FeeScreens';
+import { FlowsScreen, TransferScreen } from '../screens/FundsScreens';
 import { MarketScreen } from '../screens/MarketScreen';
 import { OrderScreen } from '../screens/OrderScreen';
 import { OrdersScreen } from '../screens/OrdersScreen';
 import { PositionScreen, PositionsScreen } from '../screens/PositionsScreen';
 import { SearchScreen } from '../screens/SearchScreen';
+import { PowerGuideScreen, SettingsScreen } from '../screens/SettingsScreens';
 import { StockScreen } from '../screens/StockScreen';
 import { LearnScreen, MeScreen, TradeScreen } from '../screens/TabScreens';
 import { WatchEditScreen } from '../screens/WatchEditScreen';
@@ -115,6 +122,14 @@ export function RootStack() {
       <Stack.Screen name="Orders" component={OrdersScreen} />
       <Stack.Screen name="OrderDetail" component={OrderDetailScreen} />
       <Stack.Screen name="FillDetail" component={FillDetailScreen} />
+      <Stack.Screen name="Transfer" component={TransferScreen} />
+      <Stack.Screen name="Flows" component={FlowsScreen} />
+      <Stack.Screen name="Fees" component={FeesScreen} />
+      <Stack.Screen name="Calibrate" component={CalibrateScreen} />
+      <Stack.Screen name="Settings" component={SettingsScreen} />
+      <Stack.Screen name="PowerGuide" component={PowerGuideScreen} />
+      <Stack.Screen name="Accounts" component={AccountsScreen} />
+      <Stack.Screen name="ArchivedAccount" component={ArchivedAccountScreen} />
       <Stack.Screen
         name="Ai"
         component={AiScreen}

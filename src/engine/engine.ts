@@ -6,7 +6,14 @@
  */
 import { holdingOf, isLive, available, withdrawable } from './account';
 import type { DateStr, TradingCalendar } from './calendar';
-import { buyFreeze, divTaxRate, fillFee, ZERO_FEE } from './fees';
+import {
+  buyFreeze,
+  divTaxRate,
+  fillFee,
+  ZERO_FEE,
+  type FeeProfile,
+} from './fees';
+import { checkTransfer, type TransferDir } from './funds';
 import {
   Liquidity,
   queueAheadAt,
@@ -382,6 +389,21 @@ export class Engine {
     return { ok: true, events: this.flush() };
   }
 
+  /** 转账前的检查（金额、转账时间、上限、可取），界面实时显示用；deposit / withdraw 本身不查时间。 */
+  checkTransfer(now: Now, dir: TransferDir, fen: Fen) {
+    return checkTransfer(this.state, this.deps.calendar, now, dir, fen);
+  }
+
+  /** 改费率：只对之后提交的委托生效，已有委托按各自提交时的费率（Order.feeProfile）。 */
+  setFeeProfile(profile: FeeProfile): void {
+    this.state.fee = { ...profile };
+  }
+
+  /** 改累计净入金上限（范围由调用方校验）。 */
+  setDepositCap(fen: Fen): void {
+    this.state.depositCap = fen;
+  }
+
   // ---------- 委托 ----------
 
   private sec(code: string): Security {
@@ -481,6 +503,7 @@ export class Engine {
       arrived: false,
       queueAhead: 0,
       frozen: 0,
+      feeProfile: { ...s.fee },
       reason: '',
       note: '',
       fills: [],
@@ -493,7 +516,7 @@ export class Engine {
     if (o.side === 'B') {
       this.setFrozen(
         o,
-        buyFreeze(sec, this.freezePrice(o, snap), o.qty, s.fee),
+        buyFreeze(sec, this.freezePrice(o, snap), o.qty, feeOf(o, s)),
       );
     }
     if (route === 'after') {
@@ -713,7 +736,7 @@ export class Engine {
       o.queueAhead = queueAheadAt(o.side, price, snap);
       o.note = queueNote(o, sec);
       if (o.side === 'B') {
-        this.setFrozen(o, buyFreeze(sec, price, rem(), this.state.fee));
+        this.setFrozen(o, buyFreeze(sec, price, rem(), feeOf(o, this.state)));
       }
     };
 
@@ -907,7 +930,7 @@ export class Engine {
       return;
     }
     const amount = amountFen(plan.price, qty);
-    const fee = fillFee(sec, o.side, o.amount, amount, s.fee);
+    const fee = fillFee(sec, o.side, o.amount, amount, feeOf(o, s));
     o.amount += amount;
     o.filled += qty;
     for (const k of [
@@ -958,7 +981,7 @@ export class Engine {
               sec,
               this.freezePrice(o, this.todaySnap(o.code)),
               left,
-              s.fee,
+              feeOf(o, s),
             )
           : 0,
       );
@@ -1078,6 +1101,11 @@ export class Engine {
       note: extra.note ?? '',
     });
   }
+}
+
+/** 这笔委托用的费率：提交时记下的，旧数据没有就用账户当前的。 */
+export function feeOf(o: Order, s: AccountState): FeeProfile {
+  return o.feeProfile ?? s.fee;
 }
 
 function queueNote(o: Order, sec: Security): string {

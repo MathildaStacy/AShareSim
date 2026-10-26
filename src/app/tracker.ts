@@ -43,3 +43,24 @@ export const batterySettings = {
   request: () => Native?.requestIgnoreBatteryOptimizations(),
   openAppSettings: () => Native?.openAppSettings(),
 };
+
+/** 通知权限（Android 13 起要运行时申请）：后台跟踪的通知显示流量和「停止跟踪」按钮。更早的系统默认就有。 */
+export const notificationPermission = {
+  async granted(): Promise<boolean> {
+    if (Platform.OS !== 'android' || Number(Platform.Version) < 33) {
+      return true;
+    }
+    return PermissionsAndroid.check(
+      PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS,
+    );
+  },
+  async request(): Promise<boolean> {
+    if (Platform.OS !== 'android' || Number(Platform.Version) < 33) {
+      return true;
+    }
+    const r = await PermissionsAndroid.request(
+      PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS,
+    );
+    return r === PermissionsAndroid.RESULTS.GRANTED;
+  },
+};

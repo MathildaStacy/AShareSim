@@ -1,5 +1,9 @@
 import type { DateStr } from './calendar';
-import { DEFAULT_FEE_PROFILE, type FeeProfile } from './fees';
+import {
+  DEFAULT_FEE_PROFILE,
+  upgradeFeeProfile,
+  type FeeProfile,
+} from './fees';
 import type { AccountState, Order } from './types';
 import { amountFen, type Fen, type Li } from './units';
 
@@ -27,6 +31,11 @@ export function newAccount(
     pendingDividends: [],
     seq: 1000,
   };
+}
+
+/** 从库里读出来的账户状态补齐新字段（旧版本存的 JSON 少字段时）。 */
+export function upgradeState(state: AccountState): AccountState {
+  return { ...state, fee: upgradeFeeProfile(state.fee) };
 }
 
 export const isLive = (o: Order): boolean =>

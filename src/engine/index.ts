@@ -8,3 +8,4 @@ export * from './validate';
 export * from './matching';
 export * from './account';
 export * from './engine';
+export * from './funds';

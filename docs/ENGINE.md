@@ -52,7 +52,7 @@ engine.advance(now);           // 没有行情时也要推进时间：报送暂�
 
 ## 4. 测试
 
-`npm test -- __tests__/engine`，共 75 项（M2 第 1 步加了 3 项，第 3 步加了 7 项：沪市市价类型和保护限价、ST 不能市价、预检 `check`；`__tests__/market`、`__tests__/sim` 是适配层和运行时的测试）：
+`npm test -- __tests__/engine`，共 83 项（M2 第 1 步加了 3 项，第 3 步加了 7 项，第 4 步加了 8 项（见第 8 节）；第 3 步的是：沪市市价类型和保护限价、ST 不能市价、预检 `check`；`__tests__/market`、`__tests__/sim` 是适配层和运行时的测试）：
 
 - 官方算例（`official.test.ts`）：上海市税务局对差别化个税政策的解答里的例 1–4，持股期限的边界、先进先出、补税金额全部一致（金额按现行财税〔2015〕101 号换算）。
 
@@ -102,3 +102,18 @@ engine.advance(now);           // 没有行情时也要推进时间：报送暂�
 - `Engine.check(now, req)` / `Simulator.checkOrder(req)`：下单前预检，和 `placeOrder` 走同一个 `validateFor`，不推进时间、不改状态；返回校验结果和这笔委托会怎么走（暂存 / 集合竞价 / 连续竞价 / 下一交易日 / 盘后）。下单页每次重画都调用它，被拦下时写明违反哪条规则。
 - `OrderRequest.protect`：沪市市价单的保护限价（必填）。最优五档剩撤 / 转限价只吃到保护限价以内的档位，转限价、对手方最优、本方最优的价格不超过它；买入冻结用 `freezePriceOf`（限价 = 委托价，沪市市价 = 保护限价，深市市价和不带价的盘后单 = 涨停价）。
 - 表单上的换算（解析价格、可买数量、仓位快捷键、预估费用、价格笼子提示、报送时间、能不能撤单）在 `src/sim/orderForm.ts`，成交详情的费用算式在 `src/sim/fillExplain.ts`，交割单 CSV 在 `src/sim/ledgerCsv.ts`，当日参考盈亏在 `src/sim/pnl.ts`，都是纯函数并有测试。
+
+## 8. M2 第 4 步：资金、费率和设置
+
+| 文件 | 内容 |
+| --- | --- |
+| `src/engine/funds.ts` | 银证转账检查 `checkTransfer`：金额、转账时间（交易日 9:00–16:00，新账户第一笔入金不限）、累计净入金上限、可取（写明不可取的原因：当天卖出、买入冻结）。`Engine.deposit` / `withdraw` 本身不查时间，调试页和引擎测试直接用 |
+| `src/engine/fees.ts` | `FeeProfile` 的「已校准」分成 `calibratedStock` / `calibratedEtf`（`upgradeFeeProfile` 兼容旧数据）；`FEE_LIMITS`（佣金率 0–万 30、最低佣金 0–5 元）；`inferRate` 在四舍五入的区间里取最整的费率；`calibrate` 多比对规费另收时的经手费、证管费，给出区间和「不高于万 x」 |
+| `src/engine/types.ts`、`engine.ts` | `Order.feeProfile`：提交时的费率。`feeOf(order, state)` 取它（旧委托没有就用账户当前的），冻结、重新冻结和成交计费都用它，所以改费率不影响已挂委托。`Engine.setFeeProfile`、`setDepositCap` |
+| `src/engine/account.ts` | `upgradeState`：从库里读出的旧状态补齐新字段 |
+| `src/sim/simulator.ts` | `transfer`（先查转账时间再入金 / 出金，被拦下的记 `reject`）、`setFeeProfile` / `setDepositCap`（记 `setting`，写明改了什么）、`resetAccount`（旧账户原样归档，新账户沿用费率和入金上限，在同一个事务里） |
+| `src/sim/feeForm.ts`、`calibrateForm.ts`、`flows.ts`、`settings.ts` | 费率表单和费率状态文字、交割单录入解析和一键套用（套用后重新比对，一致才标记已校准）、资金流水（从交割单派生）、设置选项和入金上限校验，都是纯函数 |
+| `src/data/repos.ts` | `allAccounts` / `accountById`、`activityOf`；`recentActivity` 可以只取当前账户的；`pruneActivity` 不清理归档账户的操作日志；`pruneSnapshots(0)` 表示永久保留 |
+| `src/app/settings.ts` | 改后台跟踪模式、间隔和快照保留：存设置、交给运行中的 Refresher、立刻按新设置开关后台跟踪、记操作日志 |
+
+测试：`__tests__/engine/funds.test.ts`（转账时间、上限、可取、改费率不影响已挂委托、旧数据升级、反推费率）、`__tests__/sim/step4.test.ts`（表单和流水）、`__tests__/sim/simulator.test.ts`（转账、设置日志、重置归档、日志清理）、`__tests__/ui/fundsScreens.test.tsx`（新页面的冒烟测试和页面上下文）。全部 227 项。

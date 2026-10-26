@@ -37,6 +37,15 @@ export type RootStackParamList = {
   Orders: { tab?: OrdersTab } | undefined;
   OrderDetail: { id: number };
   FillDetail: { id: number };
+  /** 银证转账：in 银行转证券（默认），out 证券转银行。 */
+  Transfer: { dir?: 'in' | 'out' } | undefined;
+  Flows: undefined;
+  Fees: undefined;
+  Calibrate: undefined;
+  Settings: undefined;
+  PowerGuide: undefined;
+  Accounts: undefined;
+  ArchivedAccount: { id: number };
 };
 
 export type RootScreenProps<K extends keyof RootStackParamList> =

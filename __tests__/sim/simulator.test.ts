@@ -266,3 +266,84 @@ describe('Simulator：盘后固定价格交易用分时数据撮合', () => {
     expect(first).toBe(500); // 15:06 这一分钟就有 58 手盘后成交
   });
 });
+
+describe('Simulator：资金和设置（M2 第 4 步）', () => {
+  test('银证转账查转账时间，被拦下的记进操作日志', async () => {
+    const clock = { date: '2026-10-24', t: T(20, 0) }; // 周六晚上
+    const { db, sim } = await setup(clock);
+    // 新账户第一笔入金不限时间
+    expect((await sim.transfer('in', 10_000_000)).ok).toBe(true);
+    const r = await sim.transfer('in', 100);
+    expect(r.ok).toBe(false);
+    const [a] = await repo.recentActivity(db, 1);
+    expect(a).toMatchObject({ kind: 'reject', ref: { rule: '银证转账时间' } });
+    expect(a.text).toContain('银行转证券 1.00 元被拦下');
+    clock.date = '2026-10-26';
+    clock.t = T(10, 0);
+    expect((await sim.transfer('out', 5_000_000)).ok).toBe(true);
+    expect(sim.engine.state.depositTotal).toBe(5_000_000);
+  });
+
+  test('改费率、改入金上限都记 setting 日志并保存', async () => {
+    const clock = { date: '2026-10-26', t: T(10, 0) };
+    const { db, sim } = await setup(clock);
+    const fee = { ...sim.engine.state.fee, stockRate: 10_000 };
+    expect(await sim.setFeeProfile(fee)).toEqual([
+      '股票佣金率 万 2.5 → 万 1',
+    ]);
+    expect(await sim.setFeeProfile(fee)).toEqual([]); // 没变化不记
+    await sim.setDepositCap(50_000_000);
+    const log = await repo.recentActivity(db, 5);
+    expect(log.map(l => [l.kind, l.text])).toEqual([
+      ['setting', '累计净入金上限 400,000.00 → 500,000.00 元'],
+      ['setting', '修改费率：股票佣金率 万 2.5 → 万 1'],
+    ]);
+    const saved = await repo.currentAccount(db);
+    expect(saved!.state.fee.stockRate).toBe(10_000);
+    expect(saved!.state.depositCap).toBe(50_000_000);
+  });
+
+  test('重置账户：旧账户归档，新账户沿用费率和上限；AI 只看当前账户的操作', async () => {
+    const clock = { date: '2026-10-26', t: T(10, 0) };
+    const { db, sim } = await setup(clock);
+    await sim.deposit(10_000_000);
+    await sim.setFeeProfile({ ...sim.engine.state.fee, etfRate: 1_000 });
+    await sim.setDepositCap(60_000_000);
+    const oldId = sim.accountId;
+    const r = await sim.resetAccount();
+    expect(r.archived).toBe(oldId);
+    expect(sim.accountId).toBe(r.current);
+    expect(sim.engine.state).toMatchObject({
+      cash: 0,
+      depositTotal: 0,
+      depositCap: 60_000_000,
+      ledger: [],
+    });
+    expect(sim.engine.state.fee.etfRate).toBe(1_000);
+    const all = await repo.allAccounts(db);
+    expect(all.map(a => [a.name, a.archivedAt != null])).toEqual([
+      ['模拟账户 2', false],
+      ['模拟账户 1', true],
+    ]);
+    const old = await repo.accountById(db, oldId);
+    expect(old!.state.cash).toBe(10_000_000);
+    // 重新打开 App 拿到的是新账户
+    const again = await Simulator.open(db, client, () => clock);
+    expect(again.accountId).toBe(r.current);
+    // 当前账户的最近操作不带旧账户的
+    const recent = await repo.recentActivity(db, 20, r.current);
+    expect(recent.every(a => a.accountId === r.current)).toBe(true);
+    expect((await repo.activityOf(db, oldId, 20)).length).toBeGreaterThan(2);
+  });
+
+  test('操作日志清理不动归档账户的', async () => {
+    const clock = { date: '2026-10-26', t: T(10, 0) };
+    const { db, sim } = await setup(clock);
+    await sim.deposit(10_000_000);
+    const oldId = sim.accountId;
+    await sim.resetAccount();
+    await repo.pruneActivity(db, '2999-01-01'); // 当前账户的全部过期
+    expect((await repo.activityOf(db, oldId, 50)).length).toBeGreaterThan(0);
+    expect((await repo.activityOf(db, sim.accountId, 50)).length).toBe(0);
+  });
+});

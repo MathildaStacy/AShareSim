@@ -92,6 +92,12 @@ export function ledgerCsv(
   );
 }
 
-export function ledgerFileName(date: string): string {
-  return '交割单_' + date + '.csv';
+/** 历史账户导出时带上账户名，和当前账户的文件区分开。 */
+export function ledgerFileName(date: string, account?: string): string {
+  return (
+    '交割单_' +
+    (account ? account.replace(/\s+/g, '') + '_' : '') +
+    date +
+    '.csv'
+  );
 }

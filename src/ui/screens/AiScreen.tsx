@@ -22,7 +22,7 @@ export function AiScreen() {
   const [acts, setActs] = useState<repo.Activity[]>([]);
   useEffect(() => {
     repo
-      .recentActivity(core.db, RECENT_N)
+      .recentActivity(core.db, RECENT_N, core.sim.accountId)
       .then(setActs)
       .catch(() => undefined);
   }, [core]);

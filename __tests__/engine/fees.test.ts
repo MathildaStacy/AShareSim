@@ -94,7 +94,7 @@ describe('交割单校准', () => {
   test('一致', () => {
     const r = calibrate({ ...slip, commission: 1045 }, P);
     expect(r.allOk).toBe(true);
-    expect(r.suggestion).toEqual({ calibrated: true });
+    expect(r.suggestion).toEqual({ calibratedStock: true });
   });
   test('反推佣金率：5.02 元 → 万 1.20', () => {
     const r = calibrate({ ...slip, commission: 502 }, P);

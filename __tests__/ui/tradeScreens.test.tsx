@@ -18,7 +18,7 @@ import { T, yuanToLi } from '../../src/engine';
 import type { MarketClient } from '../../src/market/client';
 import { parseQuotes } from '../../src/market/tencent';
 import { Simulator } from '../../src/sim/simulator';
-import type { Refresher } from '../../src/sim/refresher';
+import { DEFAULT_REFRESH, type Refresher } from '../../src/sim/refresher';
 import {
   FillDetailScreen,
   OrderDetailScreen,
@@ -80,6 +80,7 @@ async function setup() {
     throw new Error(r2.msg);
   }
   const refresher = {
+    settings: { ...DEFAULT_REFRESH },
     setExtraCodes() {},
     kick() {},
   } as unknown as Refresher;

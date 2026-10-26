@@ -10,6 +10,8 @@ import { ruleOf } from '../../engine/securities';
 import { formatSec, PHASES, phaseAt } from '../../engine/session';
 import { KIND_NAME, type Order } from '../../engine/types';
 import { formatFen, formatPrice } from '../../engine/units';
+import { feeOf } from '../../engine/engine';
+import { feeDiff, feeLabel } from '../../sim/feeForm';
 import { basisLines, feeLines } from '../../sim/fillExplain';
 import { cancelState } from '../../sim/orderForm';
 import { ConfirmDialog } from '../components/Dialog';
@@ -310,11 +312,16 @@ export function FillDetailScreen({ route }: RootScreenProps<'FillDetail'>) {
   const name = f ? sec?.name ?? f.code.slice(2) : '';
   const unit = f ? unitOf(f.code, sec?.type) : '股';
   const board = sec?.board ?? 'main';
-  const lines = f ? feeLines(f, { board }, st.fee, d) : [];
+  // 费用按这笔委托提交时的费率算（之后改费率不影响已有委托）
+  const profile = o ? feeOf(o, st) : st.fee;
+  const lines = f ? feeLines(f, { board }, profile, d) : [];
   const basis = f ? basisLines(f.basis, f.side, d, unit) : [];
-  const feeState = st.fee.calibrated
-    ? '费率已用交割单校准。'
-    : '用的是默认费率（股票万 2.5、ETF 万 0.5，最低 5 元），还没用真实交割单校准。';
+  const feeState =
+    '按委托提交时的费率：' +
+    feeLabel(profile, board) +
+    (profile !== st.fee && feeDiff(profile, st.fee).length
+      ? '。之后改过费率，只对新委托生效。'
+      : '。');
   const sideName = f?.side === 'B' ? '买入' : '卖出';
 
   useViewLog('fill:' + id, f ? '查看 成交详情 ' + f.no + ' ' + name : null);

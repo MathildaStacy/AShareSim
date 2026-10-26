@@ -14,8 +14,9 @@ import {
   type Sec,
 } from '../engine/session';
 import type { Snapshot } from '../engine/types';
-import { formatPrice, rateToWan } from '../engine/units';
+import { formatPrice } from '../engine/units';
 import { cageRange } from '../engine/validate';
+import { feeLabel } from './feeForm';
 
 export const BOARD_NAME: Record<Board, string> = {
   main: '主板',
@@ -235,18 +236,10 @@ export function ruleCard(input: RuleCardInput): RuleItem[] {
   });
 
   const etf = sec.board === 'etf';
-  const rate = etf ? fee.etfRate : fee.stockRate;
-  const min = etf ? fee.etfMinFen : fee.stockMinFen;
   out.push({
     k: '交易费用',
     v:
-      '佣金万 ' +
-      rateToWan(rate) +
-      '、最低 ' +
-      min / 100 +
-      ' 元（' +
-      (fee.calibrated ? '已用交割单校准' : '默认费率') +
-      '）' +
+      feeLabel(fee, sec.board) +
       (etf
         ? '；ETF 免印花税、过户费'
         : '；过户费 0.001%（双向）；印花税 0.05%（仅卖出）'),
