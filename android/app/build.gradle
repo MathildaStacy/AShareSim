@@ -92,22 +92,15 @@ android {
             keyAlias 'androiddebugkey'
             keyPassword 'android'
         }
-        // 正式签名：密钥和密码放在仓库外（~/.gradle/gradle.properties 里的 ASHARESIM_*），没配置时（CI）退回 debug 签名
-        if (project.hasProperty('ASHARESIM_STORE_FILE')) {
-            release {
-                storeFile file(ASHARESIM_STORE_FILE)
-                storePassword ASHARESIM_STORE_PASSWORD
-                keyAlias ASHARESIM_KEY_ALIAS
-                keyPassword ASHARESIM_KEY_PASSWORD
-            }
-        }
     }
     buildTypes {
         debug {
             signingConfig signingConfigs.debug
         }
         release {
-            signingConfig project.hasProperty('ASHARESIM_STORE_FILE') ? signingConfigs.release : signingConfigs.debug
+            // 发布版也用仓库里的 debug 密钥签名（2026-10-26 决定）：密钥跟着 git 走，不会丢、不用备份，
+            // 任何机器打出来的包都能覆盖安装。只自己从 GitHub Release 装，公开密钥的风险可以接受
+            signingConfig signingConfigs.debug
             minifyEnabled enableProguardInReleaseBuilds
             proguardFiles getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro"
         }

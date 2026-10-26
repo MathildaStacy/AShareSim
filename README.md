@@ -36,7 +36,7 @@ npm test -- __tests__/engine   # 只跑引擎测试
 npm run android    # 需要 Android SDK；iOS 后补
 ```
 
-发布版 APK：`cd android && ./gradlew :app:assembleRelease -PreactNativeArchitectures=arm64-v8a`，输出在 `android/app/build/outputs/apk/release/`。正式签名的密钥和密码在仓库外（`~/.gradle/gradle.properties` 里的 `ASHARESIM_*`，密钥文件在 `~/.asharesim/`），没配置时退回 debug 签名（CI 就是这样）。密钥丢了以后的版本就没法覆盖安装，要卸载重装（本地数据会丢），所以要备份。
+发布版 APK：`cd android && ./gradlew :app:assembleRelease -PreactNativeArchitectures=arm64-v8a`，输出在 `android/app/build/outputs/apk/release/`。发布版和调试版都用仓库里的 `android/app/debug.keystore` 签名，不用另外保管密钥，任何机器打出来的包都能覆盖安装。
 
 | 文档 | 内容 |
 | --- | --- |
