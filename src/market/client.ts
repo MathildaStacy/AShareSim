@@ -4,17 +4,28 @@
  */
 import { beijingNow } from './clock';
 import { bonusUrl, parseBonus, type CorporateActionRow } from './eastmoney';
+import { parseSinaEtfRank, sinaEtfRankUrl } from './sina';
 import {
   parseKline,
   parseMinute,
   parseMinuteDays,
   parseQuotes,
+  parseRank,
   parseSearch,
+  parseTicks,
+  parseTickTimeline,
+  rankUrl,
+  tickPageUrl,
+  tickTimelineUrl,
   type KBar,
   type KlinePeriod,
   type MinuteDay,
   type Quote,
+  type RankBoard,
+  type RankItem,
+  type RankSort,
   type SearchHit,
+  type Tick,
 } from './tencent';
 
 export type FetchText = (url: string, timeoutMs: number) => Promise<string>;
@@ -135,6 +146,46 @@ export class MarketClient {
       'https://smartbox.gtimg.cn/s3/?v=2&t=all&c=1&q=' + encodeURIComponent(q),
     );
     return parseSearch(text);
+  }
+
+  /** 沪深 A / 创业板 / 科创板排行（腾讯）。北交所在解析时去掉，所以多要几只。 */
+  async rank(
+    board: RankBoard,
+    sort: RankSort,
+    count: number,
+  ): Promise<RankItem[]> {
+    const text = await this.get(rankUrl(board, sort, count + 5));
+    return parseRank(JSON.parse(text)).slice(0, count);
+  }
+
+  /** ETF 排行（新浪，见 sina.ts）。 */
+  async etfRank(sort: RankSort, count: number): Promise<RankItem[]> {
+    const text = await this.get(sinaEtfRankUrl(sort, count));
+    return parseSinaEtfRank(JSON.parse(text));
+  }
+
+  /**
+   * 最近的成交明细（分笔），从早到晚，最多 count 行：先查页数，再取最后一页，不够再往前取一页。
+   * 当天还没有成交时返回空。
+   */
+  async ticks(
+    code: string,
+    count: number,
+  ): Promise<{ date: string; ticks: Tick[] }> {
+    const tl = parseTickTimeline(await this.get(tickTimelineUrl(code)));
+    if (!tl || tl.pages === 0) {
+      return { date: tl?.date ?? '', ticks: [] };
+    }
+    let ticks = parseTicks(
+      await this.get(tickPageUrl(code, tl.pages - 1)),
+    ).ticks;
+    if (ticks.length < count && tl.pages > 1) {
+      ticks = [
+        ...parseTicks(await this.get(tickPageUrl(code, tl.pages - 2))).ticks,
+        ...ticks,
+      ];
+    }
+    return { date: tl.date, ticks: ticks.slice(-count) };
   }
 
   async corporateActions(code: string): Promise<CorporateActionRow[]> {

@@ -33,6 +33,8 @@ interface AppStore {
   status: RefreshStatus | null;
   /** 账户状态每变一次加 1，界面据此重新读引擎状态。 */
   version: number;
+  /** 每刷新一轮行情加 1，行情页据此重画。 */
+  tick: number;
   lastEvents: EngineEvent[];
 }
 
@@ -41,6 +43,7 @@ export const useApp = create<AppStore>(() => ({
   error: null,
   status: null,
   version: 0,
+  tick: 0,
   lastEvents: [],
 }));
 
@@ -77,7 +80,9 @@ async function doBoot(): Promise<AppCore> {
   sim.subscribe(events =>
     useApp.setState(s => ({ version: s.version + 1, lastEvents: events })),
   );
-  refresher.onStatus(status => useApp.setState({ status }));
+  refresher.onStatus(status =>
+    useApp.setState(s => ({ status, tick: s.tick + 1 })),
+  );
 
   await sim.refreshCorporateActions().catch(() => undefined);
   await sim.catchUp().catch(() => undefined);

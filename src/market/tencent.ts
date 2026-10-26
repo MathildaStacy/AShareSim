@@ -332,3 +332,140 @@ export function parseSearch(text: string): SearchHit[] {
   }
   return out;
 }
+
+// ---------- 排行 ----------
+
+/** 排行榜的一行。ETF 榜来自新浪（腾讯排行没有 ETF 板块），字段相同。 */
+export interface RankItem {
+  code: string;
+  name: string;
+  type: string;
+  /** 最新价（厘），停牌或没有成交为 null。 */
+  last: Li | null;
+  change: Li | null;
+  pct: number | null;
+  /** 成交量（股 / 份）和成交额（分）。 */
+  volume: number;
+  amount: Fen;
+}
+
+export type RankBoard = 'aStock' | 'cyb' | 'kcb';
+export type RankSort = 'up' | 'down' | 'amount';
+
+/**
+ * 腾讯排行 `proxy.finance.qq.com/cgi/cgi-bin/rank/hs/getBoardRankList`（2026-10-26 实测）：
+ * board_code 只认 aStock / cyb / kcb；sort_type=priceRatio 按涨跌幅、turnover 按成交额，direct=down 降序。
+ */
+export function rankUrl(board: RankBoard, sort: RankSort, count: number) {
+  const sortType = sort === 'amount' ? 'turnover' : 'priceRatio';
+  const direct = sort === 'down' ? 'up' : 'down';
+  return `https://proxy.finance.qq.com/cgi/cgi-bin/rank/hs/getBoardRankList?_appver=11.17.0&board_code=${board}&sort_type=${sortType}&direct=${direct}&offset=0&count=${count}`;
+}
+
+/** 沪深两市的 6 位代码（排行里混着北交所 bj92xxxx，V1 不支持）。 */
+const isHuShen = (code: string) => /^(sh|sz)\d{6}$/.test(code);
+
+/**
+ * 解析腾讯排行：zxj 现价（元）、zd 涨跌额、zdf 涨跌幅（%）、volume 成交量（手，科创板带小数，也是手）、
+ * turnover 成交额（万元）。
+ */
+export function parseRank(json: unknown): RankItem[] {
+  const list = (json as any)?.data?.rank_list;
+  if (!Array.isArray(list)) {
+    return [];
+  }
+  const out: RankItem[] = [];
+  for (const r of list) {
+    if (typeof r?.code !== 'string' || !isHuShen(r.code)) {
+      continue;
+    }
+    const last = toLi(r.zxj);
+    out.push({
+      code: r.code,
+      name: String(r.name ?? '').replace(/\s+/g, ''),
+      type: String(r.stock_type ?? ''),
+      last,
+      change: last != null ? Math.round((num(r.zd) ?? 0) * 1000) : null,
+      pct: last != null ? num(r.zdf) : null,
+      volume: Math.round((num(r.volume) ?? 0) * 100),
+      amount: Math.round((num(r.turnover) ?? 0) * 1_000_000),
+    });
+  }
+  return out;
+}
+
+// ---------- 成交明细（分笔） ----------
+
+/**
+ * 一行成交明细。腾讯免费接口给的是「分笔」：约每 3 秒合并成一行，不是 Level-2 的逐笔成交。
+ * side：B 这几秒以主动买为主（买方按卖价成交），S 主动卖为主，M 分不出来。
+ */
+export interface Tick {
+  seq: number;
+  t: Sec;
+  price: Li;
+  /** 和上一行比的价格变化（厘）。 */
+  change: Li;
+  /** 股 / 份。接口给的是手，科创板也是手（2026-10-26 和快照的成交量对过）。 */
+  volume: number;
+  amount: Fen;
+  side: 'B' | 'S' | 'M';
+}
+
+/**
+ * 成交明细接口：
+ * - `stock.gtimg.cn/data/index.php?appn=detail&action=timeline&c=sh600036` 返回每一页的时间范围，页数随交易增加
+ * - `...&action=data&c=sh600036&p=N` 返回第 N 页（约 70 行），行格式「序号/时间/价格/涨跌/量（手）/额（元）/方向」
+ *
+ * 15:05 以后还有收盘价的成交，是盘后固定价格交易。
+ */
+export const tickTimelineUrl = (code: string) =>
+  `https://stock.gtimg.cn/data/index.php?appn=detail&action=timeline&c=${code}`;
+export const tickPageUrl = (code: string, page: number) =>
+  `https://stock.gtimg.cn/data/index.php?appn=detail&action=data&c=${code}&p=${page}`;
+
+/** 解析分页时间表：日期和页数。 */
+export function parseTickTimeline(
+  text: string,
+): { date: DateStr; pages: number } | null {
+  const m = /v_\w+=\[(\d{8}),"(.*)"\]/s.exec(text);
+  if (!m) {
+    return null;
+  }
+  return {
+    date: yyyymmdd(m[1]),
+    pages: m[2] ? m[2].split('|').length : 0,
+  };
+}
+
+const hmsToSec = (s: string): Sec | null => {
+  const m = /^(\d{2}):(\d{2}):(\d{2})$/.exec(s);
+  return m ? Number(m[1]) * 3600 + Number(m[2]) * 60 + Number(m[3]) : null;
+};
+
+/** 解析一页成交明细，按时间从早到晚。 */
+export function parseTicks(text: string): { page: number; ticks: Tick[] } {
+  const m = /v_\w+=\[(\d+),"(.*)"\]/s.exec(text);
+  if (!m) {
+    return { page: -1, ticks: [] };
+  }
+  const ticks: Tick[] = [];
+  for (const row of m[2].split('|')) {
+    const [seq, time, price, change, vol, amt, side] = row.split('/');
+    const t = hmsToSec(time ?? '');
+    const p = toLi(price);
+    if (t == null || p == null) {
+      continue;
+    }
+    ticks.push({
+      seq: Number(seq),
+      t,
+      price: p,
+      change: Math.round((num(change) ?? 0) * 1000),
+      volume: Math.round((num(vol) ?? 0) * 100),
+      amount: Math.round((num(amt) ?? 0) * 100),
+      side: side === 'B' || side === 'S' ? side : 'M',
+    });
+  }
+  return { page: Number(m[1]), ticks };
+}

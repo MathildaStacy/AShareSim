@@ -12,7 +12,10 @@
 
 - M0 设计：完成（产品设计、规则规格、AI 设计、可交互原型）。
 - M1 引擎：完成。规则、费用、撮合、清算引擎和测试（`src/engine/`，说明见 [docs/ENGINE.md](docs/ENGINE.md)），用官方算例和真实行情数据验收。
-- M2 行情 + 交易：进行中。第 1 步（数据层、腾讯行情适配、补撮合、后台跟踪）完成，`App.tsx` 目前是调试页；第 2 步做行情界面。
+- M2 行情 + 交易：进行中。
+  - 第 1 步（数据层、腾讯行情适配、补撮合、后台跟踪）完成。
+  - 第 2 步（行情界面）完成：底部 5 个 Tab；自选（排序、拖动排序）、搜索、行情（8 个指数和 4 个板块的排行）、个股详情（分时 / 日 K / 周 K、五档盘口、成交明细、本股规则卡、F10 简况）。界面代码在 `src/ui/`，调试页挪到「我的 → 调试页」。
+  - 下一步：第 3 步交易界面（下单 / 撤单 / 持仓 / 委托 / 成交 / 交割单和 CSV 导出），第 4 步资金和设置。
 
 ## 开发
 
@@ -33,10 +36,10 @@ npm run android    # 需要 Android SDK；iOS 后补
 | [docs/design/prototype.html](docs/design/prototype.html) | 可交互原型，用浏览器直接打开（源文件在 [docs/design/prototype/](docs/design/prototype/)） |
 | [docs/research/quant-roadmap.html](docs/research/quant-roadmap.html) | 量化学习路线（产品目标的出处） |
 
-## 技术栈（计划）
+## 技术栈
 
-沿用 NovelCreationPartner 的组合：React Native 0.87 + TypeScript、react-navigation 7、zustand、op-sqlite（本地行情库和账户账本）、react-native-svg（K 线 / 分时图）、react-native-keychain（AI Key）。
-本地优先，没有后端：行情直接请求腾讯行情接口，AI 直接用你自己的 Base URL + API Key，支持 OpenAI Responses 和 Anthropic Messages 两种协议。
+沿用 NovelCreationPartner 的组合：React Native 0.87 + TypeScript、react-navigation 7、zustand、op-sqlite（本地行情库和账户账本）、react-native-svg（K 线 / 分时图）、lucide 图标；M4 加 react-native-keychain（AI Key）。
+本地优先，没有后端：行情直接请求腾讯行情接口（ETF 排行用新浪，分红送配用东方财富），AI 直接用你自己的 Base URL + API Key，支持 OpenAI Responses 和 Anthropic Messages 两种协议。
 
 ## 免责声明
 

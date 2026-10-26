@@ -50,6 +50,8 @@ export class Simulator {
   readonly engine: Engine;
   private securities = new Map<string, Security & { type: string }>();
   private infos = new Map<string, QuoteInfo>();
+  /** 每只代码（含指数）最新一次的行情，界面显示用。 */
+  private quotes = new Map<string, Quote>();
   private watch = new Set<string>();
   private dirty = false;
   private lastSave = 0;
@@ -109,6 +111,11 @@ export class Simulator {
 
   info(code: string): QuoteInfo | null {
     return this.infos.get(code) ?? null;
+  }
+
+  /** 最新行情（快照 + 显示字段）。指数不进引擎，只能从这里拿。 */
+  quote(code: string): Quote | null {
+    return this.quotes.get(code) ?? null;
   }
 
   subscribe(fn: Listener): () => void {
@@ -189,6 +196,7 @@ export class Simulator {
     for (const q of sorted) {
       const { snapshot: s, info } = q;
       this.infos.set(s.code, info);
+      this.quotes.set(s.code, q);
       const known = this.securities.get(s.code);
       if (
         info.type !== 'ZS' &&
