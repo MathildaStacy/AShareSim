@@ -19,6 +19,13 @@
   - 第 4 步（资金和设置）完成：银证转账（模拟入金，累计净入金上限；交易日 9:00–16:00，新账户第一笔入金不限时间；卖出的钱 T+1 才可取）、资金流水（从交割单派生，汇总和待发生的红利 / 红利税）、费率设置（股票 / ETF 佣金率和最低佣金、免五、规费另收、合并计佣；改费率只对之后的委托生效）、交割单校准（逐项比对、反推佣金率和是否免五、一键套用）、设置（成本口径、快照保留、后台跟踪模式和间隔、入金上限）、后台跟踪与省电引导（HyperOS）、历史账户和重置账户（旧账户归档、可导出）。交易 Tab 和「我的」的入口都换成了真页面，每个页面都有 AI 页面上下文，设置的修改记进操作日志。
   - 下一步：M2 验收（连续 5 个交易日真实使用），然后 M3 学习模块。
 
+## 安装（Android）
+
+从 [Releases](https://github.com/MathildaStacy/AShareSim/releases) 下载 `AShareSim-v*-arm64.apk`，在手机上打开安装（第一次要允许浏览器或文件管理「安装未知应用」）。只打了 arm64-v8a，近几年的手机都是这个架构。
+
+- 升级：直接安装新版本覆盖，账户、自选和设置都保留（每个版本用同一个签名）。
+- 小米 HyperOS：装好后按「我的 → 后台跟踪与省电」把省电策略设为无限制、打开自启动，否则挂单时后台跟踪会被系统停掉。
+
 ## 开发
 
 ```bash
@@ -28,6 +35,8 @@ npm run check      # eslint + tsc + jest
 npm test -- __tests__/engine   # 只跑引擎测试
 npm run android    # 需要 Android SDK；iOS 后补
 ```
+
+发布版 APK：`cd android && ./gradlew :app:assembleRelease -PreactNativeArchitectures=arm64-v8a`，输出在 `android/app/build/outputs/apk/release/`。正式签名的密钥和密码在仓库外（`~/.gradle/gradle.properties` 里的 `ASHARESIM_*`，密钥文件在 `~/.asharesim/`），没配置时退回 debug 签名（CI 就是这样）。密钥丢了以后的版本就没法覆盖安装，要卸载重装（本地数据会丢），所以要备份。
 
 | 文档 | 内容 |
 | --- | --- |

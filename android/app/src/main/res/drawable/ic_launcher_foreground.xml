@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- AShareSim 图标前景：三根上涨的 K 线（红涨绿跌），源文件 docs/design/icon.svg -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp"
+    android:viewportWidth="108" android:viewportHeight="108">
+    <path android:fillColor="#0E9F5B" android:pathData="M36.80,51.00 H36.80 A1.10,1.10 0 0 1 37.90,52.10 V77.90 A1.10,1.10 0 0 1 36.80,79.00 H36.80 A1.10,1.10 0 0 1 35.70,77.90 V52.10 A1.10,1.10 0 0 1 36.80,51.00 Z"/>
+    <path android:fillColor="#0E9F5B" android:pathData="M33.00,57.00 H40.60 A1.80,1.80 0 0 1 42.40,58.80 V72.20 A1.80,1.80 0 0 1 40.60,74.00 H33.00 A1.80,1.80 0 0 1 31.20,72.20 V58.80 A1.80,1.80 0 0 1 33.00,57.00 Z"/>
+    <path android:fillColor="#E5322D" android:pathData="M54.00,41.00 H54.00 A1.10,1.10 0 0 1 55.10,42.10 V68.90 A1.10,1.10 0 0 1 54.00,70.00 H54.00 A1.10,1.10 0 0 1 52.90,68.90 V42.10 A1.10,1.10 0 0 1 54.00,41.00 Z"/>
+    <path android:fillColor="#E5322D" android:pathData="M50.20,46.00 H57.80 A1.80,1.80 0 0 1 59.60,47.80 V63.20 A1.80,1.80 0 0 1 57.80,65.00 H50.20 A1.80,1.80 0 0 1 48.40,63.20 V47.80 A1.80,1.80 0 0 1 50.20,46.00 Z"/>
+    <path android:fillColor="#E5322D" android:pathData="M71.20,29.00 H71.20 A1.10,1.10 0 0 1 72.30,30.10 V58.90 A1.10,1.10 0 0 1 71.20,60.00 H71.20 A1.10,1.10 0 0 1 70.10,58.90 V30.10 A1.10,1.10 0 0 1 71.20,29.00 Z"/>
+    <path android:fillColor="#E5322D" android:pathData="M67.40,34.00 H75.00 A1.80,1.80 0 0 1 76.80,35.80 V52.20 A1.80,1.80 0 0 1 75.00,54.00 H67.40 A1.80,1.80 0 0 1 65.60,52.20 V35.80 A1.80,1.80 0 0 1 67.40,34.00 Z"/>
+</vector>
