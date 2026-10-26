@@ -1,0 +1,72 @@
+{
+  "version": "ce8c03ced8b5ef1593604d8d25589df8",
+  "result": {
+    "pages": 6,
+    "data": [
+      {
+        "SECURITY_CODE": "600036",
+        "SECURITY_NAME_ABBR": "招商银行",
+        "PRETAX_BONUS_RMB": 10.03,
+        "BONUS_IT_RATIO": null,
+        "BONUS_RATIO": null,
+        "IT_RATIO": null,
+        "EQUITY_RECORD_DATE": "2026-07-09 00:00:00",
+        "EX_DIVIDEND_DATE": "2026-07-10 00:00:00",
+        "ASSIGN_PROGRESS": "实施分配",
+        "IMPL_PLAN_PROFILE": "10派10.03元(含税)"
+      },
+      {
+        "SECURITY_CODE": "600036",
+        "SECURITY_NAME_ABBR": "招商银行",
+        "PRETAX_BONUS_RMB": 10.13,
+        "BONUS_IT_RATIO": null,
+        "BONUS_RATIO": null,
+        "IT_RATIO": null,
+        "EQUITY_RECORD_DATE": "2026-01-15 00:00:00",
+        "EX_DIVIDEND_DATE": "2026-01-16 00:00:00",
+        "ASSIGN_PROGRESS": "实施分配",
+        "IMPL_PLAN_PROFILE": "10派10.13元(含税,扣税后9.117元)"
+      },
+      {
+        "SECURITY_CODE": "600036",
+        "SECURITY_NAME_ABBR": "招商银行",
+        "PRETAX_BONUS_RMB": 20,
+        "BONUS_IT_RATIO": null,
+        "BONUS_RATIO": null,
+        "IT_RATIO": null,
+        "EQUITY_RECORD_DATE": "2025-07-10 00:00:00",
+        "EX_DIVIDEND_DATE": "2025-07-11 00:00:00",
+        "ASSIGN_PROGRESS": "实施分配",
+        "IMPL_PLAN_PROFILE": "10派20.00元(含税,扣税后18.00元)"
+      },
+      {
+        "SECURITY_CODE": "600036",
+        "SECURITY_NAME_ABBR": "招商银行",
+        "PRETAX_BONUS_RMB": 19.72,
+        "BONUS_IT_RATIO": null,
+        "BONUS_RATIO": null,
+        "IT_RATIO": null,
+        "EQUITY_RECORD_DATE": "2024-07-10 00:00:00",
+        "EX_DIVIDEND_DATE": "2024-07-11 00:00:00",
+        "ASSIGN_PROGRESS": "实施分配",
+        "IMPL_PLAN_PROFILE": "10派19.72元(含税,扣税后17.748元)"
+      },
+      {
+        "SECURITY_CODE": "600036",
+        "SECURITY_NAME_ABBR": "招商银行",
+        "PRETAX_BONUS_RMB": 17.38,
+        "BONUS_IT_RATIO": null,
+        "BONUS_RATIO": null,
+        "IT_RATIO": null,
+        "EQUITY_RECORD_DATE": "2023-07-12 00:00:00",
+        "EX_DIVIDEND_DATE": "2023-07-13 00:00:00",
+        "ASSIGN_PROGRESS": "实施分配",
+        "IMPL_PLAN_PROFILE": "10派17.38元(含税,扣税后15.642元)"
+      }
+    ],
+    "count": 26
+  },
+  "success": true,
+  "message": "ok",
+  "code": 0
+}

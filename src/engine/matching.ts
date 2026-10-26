@@ -16,6 +16,16 @@ export interface FillPlan {
 const px = (v: Li, d: number) => (v / 1000).toFixed(d);
 
 /**
+ * 两次快照间隔超过这个秒数（App 在后台被停、断网、用分时数据补撮合），就不用这段成交量去消耗排队：
+ * 间隔越长，成交量增量里混着其他价位的成交越多，按「成交价等于委托价」算排队会偏乐观。
+ * 「成交价穿过委托价」不受影响，间隔多长都成立。
+ */
+export const MAX_QUEUE_GAP_SEC = 20;
+
+/** 排队位置未知（委托在没有实时行情的时候进入连续竞价）：只按「成交价穿过委托价」成交。 */
+export const UNKNOWN_QUEUE = Number.MAX_SAFE_INTEGER;
+
+/**
  * 同一个快照里，我们自己的多笔委托不能重复吃同一档的量。按快照时间重置。
  */
 export class Liquidity {
@@ -240,8 +250,12 @@ export function stepResting(
     };
   }
 
-  // 3. 成交价等于委托价：消耗排队
-  if (cur.last === price) {
+  // 3. 成交价等于委托价：消耗排队（间隔太长时不消耗，见 MAX_QUEUE_GAP_SEC）
+  if (
+    cur.last === price &&
+    cur.t - prev.t <= MAX_QUEUE_GAP_SEC &&
+    queueAhead !== UNKNOWN_QUEUE
+  ) {
     if (dv <= queueAhead) {
       return { plans: [], queueAhead: queueAhead - dv };
     }
@@ -300,6 +314,8 @@ export function resolveAuction(
   after: Snapshot,
   kind: 'open' | 'close',
   decimals: number,
+  /** 是否观察到了竞价刚结束时的行情（开盘：9:25–9:30 之间的快照）。 */
+  observed = true,
 ): AuctionResult {
   const name = kind === 'open' ? '开盘' : '收盘';
   const p = (v: Li) => px(v, decimals);
@@ -313,7 +329,10 @@ export function resolveAuction(
   const own = ownLevels(side, after)[0];
   const leftover = own && own[0] === auctionPrice && own[1] > 0 ? own[1] : 0;
 
-  if (volume > 0 && (strictly || (equal && !atLimit && leftover === 0))) {
+  if (
+    volume > 0 &&
+    (strictly || (equal && observed && !atLimit && leftover === 0))
+  ) {
     const qty = Math.min(remaining, volume);
     return {
       plan: {
@@ -348,6 +367,19 @@ export function resolveAuction(
       },
       queueAhead: 0,
       note: '',
+    };
+  }
+  if (equal && !observed) {
+    return {
+      plan: null,
+      queueAhead: after.reconstructed
+        ? UNKNOWN_QUEUE
+        : queueAheadAt(side, price, after),
+      note:
+        '委托价等于' +
+        name +
+        '价，但没有观察到竞价刚结束时的行情，判断不了这个价位是否全部成交，保守起见按未成交处理' +
+        (kind === 'open' ? '，排在当前挂单后面' : ''),
     };
   }
   if (equal) {

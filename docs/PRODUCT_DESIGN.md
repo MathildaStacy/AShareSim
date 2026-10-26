@@ -134,7 +134,7 @@ AShareSim 用**真实行情 + 真实规则 + 真实税费**做模拟交易，再
 | --- | --- |
 | App | React Native 0.87 + TypeScript，Android 先行（iOS 结构保留，后补） |
 | 状态 | zustand |
-| 存储 | op-sqlite：`quotes_snapshot`、`kline_day`、`adj_factor`、`corp_action`、`security`（含板块 / ST / 上市日）、`trade_calendar`、`account`、`cash_ledger`、`order`、`fill`、`position_lot`（按批次，红利税先进先出要用）、`settlement`、`fee_profile`、`lesson_progress`、`activity_log`、`ai_thread`、`ai_message`、`ai_memory` |
+| 存储 | op-sqlite：`quotes_snapshot`、`kline_day`、`adj_factor`、`corp_action`、`security`（含板块 / ST）、`trade_calendar`、`account`、`watchlist`、`settings`、`lesson_progress`、`activity_log`、`ai_thread`、`ai_message`、`ai_memory`。账户的委托、成交、持仓批次、交割单、资金流水和费率都在引擎状态里，整行 JSON 存在 `account.state`（2026-10-26 确认），不再拆成 `order` / `fill` / `position_lot` 等表 |
 | 引擎 | 纯 TypeScript、无 UI 依赖：`rules/`（板块、涨跌停、价格笼子、时段）、`fees/`、`matching/`（规则 §6）、`settlement/`；全部用 Jest 单元测试，用真实交割单做测试用例 |
 | 行情 | 腾讯接口为主；分红送配用东方财富数据中心；新浪做交叉核对 |
 | AI | 直连用户配置的服务，Responses / Messages 两种协议，无状态请求（App 自己管理历史和摘要），工具调用循环有轮数上限；上下文组装见 [AI_ASSISTANT.md](AI_ASSISTANT.md) |
@@ -165,3 +165,6 @@ AShareSim 用**真实行情 + 真实规则 + 真实税费**做模拟交易，再
 | 持仓成本口径 | 两个都算。持仓列表默认显示「摊薄成本」（和同花顺、东方财富默认一致，你对照券商 App 时数字对得上），设置里可以切成「买入均价」；持仓详情两个都显示，并解释差别（卖出盈利、分红会让摊薄成本下降，买入均价不变）。口径定义见 [TRADING_RULES.md](TRADING_RULES.md) §5 |
 | 回放模式 | 做，放在 M5 之后（M6）。但有两件事现在就要做：M1 的引擎不读系统时钟，时间和行情都由外部喂进来，回放时不用改引擎；M2 起 App 运行时把自选股的 3 秒快照存到本地，因为腾讯免费接口查不到历史五档盘口，没有自己存的快照就没法按真实规则回放 |
 | 浏览记录算不算「最近操作」 | 算，保持现状（设置里可以把条数调成 0） |
+| 账户状态怎么存 | 引擎状态整行 JSON 存在 `account` 表，有事件时立即保存（2026-10-26） |
+| 快照保留多久 | 默认最近 20 个交易日，设置里可以改成 60 天或永久，验收期间按实测占用再定（2026-10-26） |
+| 后台刷新 | 做。Android 前台服务，交易时段有今天能成交的委托时自动开、只刷新这几只、默认 5 秒；通知显示流量、可一键停止（当天不再自动开）；被杀或断网时下次打开用分时数据补撮合，只按穿价成交。设置里可选「交易时段全程」或关闭。你的手机是小米 15 Pro（HyperOS），需要把省电策略设为「无限制」（2026-10-26） |

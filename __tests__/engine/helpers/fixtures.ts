@@ -121,7 +121,8 @@ export function realSnap(code: string, t: number): Snapshot {
     last: yuanToLi(q.price),
     high: yuanToLi(q.high),
     low: yuanToLi(q.low),
-    volume: q.vol * 100,
+    // 科创板的成交量字段单位是股，其他是手（盘口都是手）
+    volume: q.vol * (q.type === 'GP-A-KCB' ? 1 : 100),
     amount: Math.round(q.amount * 1_000_000),
     bids: q.bids
       .filter(b => b[1] > 0)

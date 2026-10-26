@@ -10,6 +10,7 @@ import { buyFreeze, divTaxRate, fillFee, ZERO_FEE } from './fees';
 import {
   Liquidity,
   queueAheadAt,
+  UNKNOWN_QUEUE,
   resolveAuction,
   stepResting,
   walkBook,
@@ -103,6 +104,15 @@ export class Engine {
 
   holding(code: string) {
     return holdingOf(this.state, code);
+  }
+
+  /**
+   * 只记下快照、不撮合也不推进时间。App 重启后用本地存的最后一个快照做「上一个快照」，
+   * 之后补撮合（分时数据）和实时快照才有比较的基准。
+   */
+  primeSnapshot(snap: Snapshot): void {
+    this.snaps.set(snap.code, snap);
+    this.prevSnaps.set(snap.code, snap);
   }
 
   setCorporateActions(actions: CorporateAction[]): void {
@@ -583,6 +593,7 @@ export class Engine {
     if (
       snap.t >= OPEN_AUCTION_END &&
       snap.t < T(9, 30) &&
+      !snap.reconstructed &&
       !this.openVolume.has(dayKey)
     ) {
       this.openVolume.set(dayKey, snap.volume);
@@ -596,7 +607,12 @@ export class Engine {
         .sort((a, b) => a.id - b.id);
       const phase = phaseAt(snap.t);
       for (const o of orders) {
-        if (o.stage === 'book' && !o.arrived && phase === 'cont') {
+        if (
+          o.stage === 'book' &&
+          !o.arrived &&
+          phase === 'cont' &&
+          !snap.reconstructed
+        ) {
           this.arrive(o, snap, snap.t);
         } else if (
           o.stage === 'book' &&
@@ -668,13 +684,7 @@ export class Engine {
       }
       o.price = price;
       o.queueAhead = queueAheadAt(o.side, price, snap);
-      o.note =
-        '挂单排队' +
-        (o.queueAhead
-          ? '，前面约 ' +
-            o.queueAhead.toLocaleString('zh-CN') +
-            (sec.board === 'etf' ? ' 份' : ' 股')
-          : '');
+      o.note = queueNote(o, sec);
       if (o.side === 'B') {
         this.setFrozen(o, buyFreeze(sec, price, rem(), this.state.fee));
       }
@@ -756,13 +766,7 @@ export class Engine {
     o.queueAhead = r.queueAhead;
     r.plans.forEach(p => this.doFill(o, p, snap.t));
     if (isLive(o)) {
-      o.note =
-        '挂单排队' +
-        (o.queueAhead
-          ? '，前面约 ' +
-            o.queueAhead.toLocaleString('zh-CN') +
-            (sec.board === 'etf' ? ' 份' : ' 股')
-          : '');
+      o.note = queueNote(o, sec);
     }
   }
 
@@ -795,6 +799,7 @@ export class Engine {
       snap,
       kind,
       ruleOf(sec).decimals,
+      (kind === 'close' || this.openVolume.has(dayKey)) && !snap.reconstructed,
     );
     if (r.plan) {
       this.doFill(o, r.plan, kind === 'open' ? OPEN_AUCTION_END : CLOSE);
@@ -1039,4 +1044,18 @@ export class Engine {
       note: extra.note ?? '',
     });
   }
+}
+
+function queueNote(o: Order, sec: Security): string {
+  if (o.queueAhead === UNKNOWN_QUEUE) {
+    return '挂单排队，排队位置未知（进入连续竞价时没有实时行情），只在成交价穿过委托价时成交';
+  }
+  return (
+    '挂单排队' +
+    (o.queueAhead
+      ? '，前面约 ' +
+        o.queueAhead.toLocaleString('zh-CN') +
+        (sec.board === 'etf' ? ' 份' : ' 股')
+      : '')
+  );
 }

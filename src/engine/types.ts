@@ -31,6 +31,11 @@ export interface Snapshot {
   down: Li | null;
   /** 停牌。 */
   suspended?: boolean;
+  /**
+   * 用分时数据补出来的快照（App 被停、断网期间每分钟一个点）：只有最新价和累计量，没有盘口。
+   * 引擎对它只做「成交价穿过委托价」的判断，不排队、不按它的盘口到达，集合竞价按没观察到处理。
+   */
+  reconstructed?: boolean;
 }
 
 export type OrderKind =

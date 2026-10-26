@@ -2,6 +2,7 @@ import {
   cageRange,
   DEFAULT_FEE_PROFILE,
   Liquidity,
+  MAX_QUEUE_GAP_SEC,
   phaseAt,
   resolveAuction,
   stepResting,
@@ -449,5 +450,80 @@ describe('集合竞价（§6.1）', () => {
     const r = resolveAuction('B', li(11), 1000, li(11), 50_000, s, 'open', 2);
     expect(r.plan).toBeNull();
     expect(r.note).toContain('涨停');
+  });
+  test('没观察到竞价刚结束的行情（App 9:25 后才打开）：等于开盘价不成交，高于开盘价照常成交', () => {
+    const late = snap({
+      code: 'sh600036',
+      t: T(10, 30),
+      prev: 10,
+      open: 10.05,
+      last: 10.2,
+      volume: 900_000,
+      bids: [[10.19, 500]],
+      asks: [[10.2, 300]],
+    });
+    const eq = resolveAuction(
+      'B',
+      li(10.05),
+      1000,
+      li(10.05),
+      900_000,
+      late,
+      'open',
+      2,
+      false,
+    );
+    expect(eq.plan).toBeNull();
+    expect(eq.note).toContain('没有观察到');
+    const better = resolveAuction(
+      'B',
+      li(10.1),
+      1000,
+      li(10.05),
+      900_000,
+      late,
+      'open',
+      2,
+      false,
+    );
+    expect(better.plan).toMatchObject({ price: li(10.05), qty: 1000 });
+  });
+});
+
+describe('快照间隔太长（后台被停、用分时补撮合）', () => {
+  const base = { code: 'sh600036', prev: 10, last: 9.99, low: 9.95 };
+  test('间隔超过 MAX_QUEUE_GAP_SEC：不消耗排队', () => {
+    const prev = snap({ ...base, t: T(10, 0), volume: 10_000 });
+    const cur = snap({ ...base, t: T(10, 40), volume: 900_000 });
+    const r = stepResting(
+      'B',
+      li(9.99),
+      100,
+      300,
+      prev,
+      cur,
+      new Liquidity(),
+      2,
+    );
+    expect(r.plans).toEqual([]);
+    expect(r.queueAhead).toBe(300);
+  });
+  test('间隔多长都按「成交价穿过委托价」成交', () => {
+    const prev = snap({ ...base, t: T(10, 0), volume: 10_000 });
+    const cur = snap({ ...base, t: T(10, 40), last: 9.97, volume: 900_000 });
+    const r = stepResting(
+      'B',
+      li(9.99),
+      100,
+      300,
+      prev,
+      cur,
+      new Liquidity(),
+      2,
+    );
+    expect(r.plans).toMatchObject([
+      { price: li(9.99), qty: 100, basis: { rule: 'through' } },
+    ]);
+    expect(MAX_QUEUE_GAP_SEC).toBe(20);
   });
 });
