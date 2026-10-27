@@ -54,7 +54,7 @@ import {
   type OrderForm,
 } from '../../sim/orderForm';
 import { lessonById } from '../../learn/lessons';
-import { feeLabel, feeNote } from '../../sim/feeForm';
+import { feeLabel } from '../../sim/feeForm';
 import { BOARD_NAME } from '../../sim/ruleCard';
 import { ConfirmDialog, type DialogRow } from '../components/Dialog';
 import { OrderRow, PositionList } from '../components/tradeRows';
@@ -536,11 +536,6 @@ export function OrderScreen({ route }: RootScreenProps<'Order'>) {
         ) : (
           <Empty text="没有可撤的委托" />
         )}
-        <Note style={s.note}>
-          券商暂存（未报）的委托随时能撤。已报交易所的委托，9:20–9:25
-          开盘集合竞价后段、9:25–9:30 和 14:57–15:00
-          收盘集合竞价时交易所不接受撤单。
-        </Note>
       </>
     ) : side === 'P' ? (
       <PositionList
@@ -742,7 +737,6 @@ export function OrderScreen({ route }: RootScreenProps<'Order'>) {
             }}
           />
         </View>
-
         <View style={s.bottom}>
           <Pressable
             style={s.feeLine}
@@ -801,7 +795,6 @@ export function OrderScreen({ route }: RootScreenProps<'Order'>) {
                 <FeeItem k="冻结资金（含费用）" v={formatFen(est.freeze)} />
               ) : null}
               <Text style={s.feeNote}>
-                {feeNote(fee, sec?.board ?? 'main')}
                 {tradeSide === 'S' && !etf
                   ? '持有期间分过红的，卖出后下一交易日补扣股息红利税。'
                   : ''}
@@ -1109,7 +1102,6 @@ const s = StyleSheet.create({
   page: { flex: 1, backgroundColor: color.bg },
   pad: { paddingBottom: 90 },
   pressed: { backgroundColor: color.press },
-  note: { margin: 10 },
   ticket: {
     flexDirection: 'row',
     backgroundColor: color.card,

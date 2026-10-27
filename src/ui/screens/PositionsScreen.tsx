@@ -20,7 +20,7 @@ import {
   Button,
   Empty,
   NavBar,
-  Note,
+  Details,
   SectionTitle,
 } from '../components/ui';
 import { fmtPct, fmtQty, fmtSignedFen, trendOf, unitOf } from '../format';
@@ -92,10 +92,6 @@ export function PositionsScreen() {
         <AccountCard />
         <View style={s.gap} />
         <PositionList empty="还没有持仓。去买入第一笔吧。" />
-        <Note style={s.note}>
-          成本列按「{COST_BASIS_NAME[basis]}」显示，点一行看两种口径的差别。可用
-          = 昨天及以前买入、还没挂卖单的数量（T+1）。
-        </Note>
       </ScrollView>
       <AiFab />
     </View>
@@ -231,18 +227,15 @@ export function PositionScreen({ route }: RootScreenProps<'Position'>) {
                 );
               })}
             </View>
-            <Note style={s.note}>
-              摊薄成本 =（买入金额 + 买入费用 − 卖出回款 − 现金红利 +
-              红利税补）÷
-              持仓。卖出赚了钱、收到分红，都会让它下降，甚至变成负数；同花顺、东方财富默认显示这个。
-              {'\n'}买入均价 =
-              买入花的钱（含费用）按移动加权平均摊到每股。卖出只按均价扣掉成本，均价不变；分红不影响它。
-              {'\n'}
-              送转股两者都是股数变多、成本不变，所以按比例下降。清仓后两者都归零重新算。
-              {'\n'}⚠️
-              各家券商对费用是否计入、送转是否调整的口径可能不同，以你的券商 App
-              为准（规则 §5）。
-            </Note>
+            <Details title="成本计算方式">
+              <Text style={s.costHelp}>
+                摊薄成本 =（买入金额 + 买入费用 − 卖出回款 − 现金红利 +
+                红利税补）÷ 持仓。
+                {'\n'}买入均价 = 剩余买入成本（含费用）÷
+                持仓；卖出和分红不改变均价。
+                {'\n'}送转后成本按股数摊薄，清仓后归零。
+              </Text>
+            </Details>
 
             <SectionTitle title="持仓批次" right="先进先出，算红利税用" />
             <View style={s.card}>
@@ -315,10 +308,10 @@ export function PositionScreen({ route }: RootScreenProps<'Position'>) {
 }
 
 const s = StyleSheet.create({
+  costHelp: { fontSize: 12, lineHeight: 20, color: color.ink2 },
   page: { flex: 1, backgroundColor: color.bg },
   pad: { paddingBottom: 90 },
   gap: { height: 8 },
-  note: { margin: 10 },
   card: { backgroundColor: color.card, paddingVertical: 4 },
   kv: {
     flexDirection: 'row',

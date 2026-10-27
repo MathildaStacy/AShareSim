@@ -208,17 +208,13 @@ export function FeeCalcScreen({ route }: RootScreenProps<'FeeCalc'>) {
                   {r.breakEvenPct.toFixed(2)}%）
                 </Text>
               </View>
-              <Text style={s.small}>
-                保本卖出价：按这个价格卖出，回款扣掉卖出费用后不少于买入时花的钱（成交额
-                + 买入费用）。
-              </Text>
+              <Text style={s.small}>保本价已计入买入和卖出费用。</Text>
             </View>
             {r.minThreshold != null && r.amount < r.minThreshold ? (
               <Note tone="warn" style={s.note}>
                 这笔佣金按费率只有 {formatFen(r.buy.byRate)}{' '}
                 元，被最低佣金抬到了 {formatFen(r.buy.fee.commission)}{' '}
-                元。成交额 {formatFen(r.minThreshold)}{' '}
-                元以上才按费率收；小额交易的费用率会高很多。
+                元。成交额 {formatFen(r.minThreshold)} 元以上才按费率收。
               </Note>
             ) : null}
           </>

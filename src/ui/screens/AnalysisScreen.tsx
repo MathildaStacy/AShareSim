@@ -21,6 +21,7 @@ import {
   Empty,
   NavBar,
   Note,
+  Details,
   Segmented,
 } from '../components/ui';
 import { useAiContext, useCore, usePolling, useViewLog } from '../hooks';
@@ -184,8 +185,7 @@ export function AnalysisScreen() {
             </View>
             {a.tooFew ? (
               <Note tone="warn" style={s.note}>
-                样本只有 {a.n} 个交易日（少于 {MIN_SAMPLE}
-                ），下面的指标不具备统计意义，先看懂它们怎么算。
+                样本 {a.n} / {MIN_SAMPLE} 个交易日
               </Note>
             ) : null}
             <View style={s.card}>
@@ -222,12 +222,12 @@ export function AnalysisScreen() {
             </View>
           </>
         )}
-        <Note style={s.note}>
-          数据怎么来的：每天的总资产 = 当天收盘后的资金余额 + 持仓 ×
-          不复权收盘价，从交割单和日 K
-          反推（不复权价才和你的成交价可比；送转股在交割单里记为红股入账）。日收益
-          r = (当日总资产 − 当日转入净额) ÷ 前一日总资产 − 1。
-        </Note>
+        <Details title="收益计算方式">
+          <Text style={s.small}>
+            每日总资产 = 收盘资金余额 + 持仓 × 不复权收盘价。
+            {'\n'}日收益 =（当日总资产 − 当日净转入）÷ 前一日总资产 − 1。
+          </Text>
+        </Details>
       </ScrollView>
       <AiFab />
     </View>

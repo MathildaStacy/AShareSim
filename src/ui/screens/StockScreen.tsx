@@ -25,7 +25,6 @@ import {
   AiFab,
   IconButton,
   NavBar,
-  Note,
   SectionTitle,
   Segmented,
 } from '../components/ui';
@@ -311,7 +310,6 @@ export function StockScreen({ route }: RootScreenProps<'Stock'>) {
             )}
           </View>
         </View>
-
         <Segmented
           items={CHARTS}
           value={chart}
@@ -347,21 +345,16 @@ export function StockScreen({ route }: RootScreenProps<'Stock'>) {
         <Text style={s.chartNote}>
           {chart === 'min'
             ? v.index
-              ? '蓝线是指数点位，柱子是每分钟成交量'
-              : '蓝线是价格，黄线是均价（累计成交额 ÷ 累计成交量），柱子是每分钟成交量'
+              ? '蓝：指数点位 · 柱：成交量'
+              : '蓝：价格 · 黄：均价 · 柱：成交量'
             : minuteK
-            ? '不复权，最近 60 根，每根 ' +
+            ? '不复权 · 60 根 · 每根 ' +
               chart.slice(1) +
-              ' 分钟（第一根 9:45 含开盘集合竞价），交易时段每分钟刷新；MA5 / 10 / 20 是 5 / 10 / 20 根的平均收盘价'
-            : '前复权，最近 60 根；MA5 / 10 / 20 是 5 / 10 / 20 根的平均收盘价'}
+              ' 分钟 · MA5 / 10 / 20'
+            : '前复权 · 60 根 · MA5 / 10 / 20'}
         </Text>
 
-        {v.index ? (
-          <Note style={s.indexNote}>
-            指数不能直接买卖。想买指数，可以买跟踪它的 ETF，例如沪深 300 →
-            510300、创业板指 → 159915、科创 50 → 588000。
-          </Note>
-        ) : (
+        {v.index ? null : (
           <>
             <Segmented
               items={BOOKS}
@@ -737,7 +730,6 @@ const s = StyleSheet.create({
     paddingHorizontal: PAD,
     paddingBottom: 8,
   },
-  indexNote: { margin: 10 },
   card: { backgroundColor: color.card, paddingVertical: 6 },
   bookRow: { flexDirection: 'row', paddingHorizontal: PAD, paddingVertical: 3 },
   bookPressed: { backgroundColor: color.press },

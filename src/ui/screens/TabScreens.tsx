@@ -270,10 +270,7 @@ export function TradeScreen() {
             </Pressable>
           ))}
         </View>
-        <SectionTitle
-          title="持仓"
-          right={'点一行看详情 · ' + COST_BASIS_NAME[basis]}
-        />
+        <SectionTitle title="持仓" right={COST_BASIS_NAME[basis]} />
         <PositionList
           empty={
             state.depositTotal > 0
@@ -298,21 +295,15 @@ export function TradeScreen() {
             }}
           >
             <Note tone="warn" style={s.note}>
-              有挂单时 App 会在后台跟踪行情、按排队规则撮合。小米 HyperOS
-              默认会停掉后台的 App，点这里按步骤设置省电策略（只提示这一次）。
+              后台跟踪未设置，点此设置省电策略 ›
             </Note>
           </Pressable>
         ) : null}
         {live.length ? (
           <Pressable onPress={() => nav.navigate('Orders', { tab: 'today' })}>
-            <Note style={s.note}>
-              有 {live.length} 笔未完成委托，点这里查看当日委托。
-            </Note>
+            <Note style={s.note}>未完成委托 {live.length} 笔 ›</Note>
           </Pressable>
         ) : null}
-        <Note style={s.note}>
-          除了入金是模拟的，下单规则、成交和费用都按真实规则计算。成交偏保守：涨停排队、同价排队都按估计的队列位置处理。
-        </Note>
       </ScrollView>
       <AiFab />
     </View>
@@ -428,7 +419,7 @@ export function MeScreen() {
                 ? (st.fee.calibratedStock ? '股票已校准' : '股票未校准') +
                   ' · ' +
                   (st.fee.calibratedEtf ? 'ETF 已校准' : 'ETF 未校准')
-                : '未校准：开户后抄一条真实交割单'
+                : '未校准'
             }
             onPress={() => nav.navigate('Calibrate')}
           />
@@ -460,7 +451,6 @@ export function MeScreen() {
           />
           <Entry
             title="重置账户"
-            sub="旧账户归档（可查看、导出），新账户从 0 元开始"
             onPress={() => setReset(true)}
           />
         </View>
@@ -472,23 +462,12 @@ export function MeScreen() {
           />
           <Entry
             title="AI 记忆"
-            sub="AI 记住的背景、偏好、计划、约定，可改、可删"
             onPress={() => nav.navigate('AiMemory')}
           />
           <Entry
             title="调试页"
-            sub="数据层、刷新、补撮合、后台跟踪的调试工具"
             onPress={() => nav.navigate('Debug')}
           />
-        </View>
-        <View style={s.card}>
-          <SectionTitle title="关于与免责声明" />
-          <Text style={s.about}>
-            AShareSim 用真实行情、真实 A
-            股规则和真实税费做模拟交易，只有入金是模拟的。行情来自腾讯（ETF
-            排行来自新浪），分红送配来自东方财富。本 App
-            只用于学习和模拟，不构成任何投资建议，不连接任何券商，不能下真实订单。规则和费率以交易所、中国结算和券商的最新公告为准。
-          </Text>
         </View>
       </ScrollView>
       <ResetDialog visible={reset} onClose={() => setReset(false)} />
@@ -552,11 +531,4 @@ const s = StyleSheet.create({
   },
   gIconText: { color: '#FFFFFF', fontSize: 15, fontWeight: '600' },
   gText: { fontSize: 12, color: color.ink, marginTop: 4 },
-  about: {
-    fontSize: 12,
-    lineHeight: 19,
-    color: color.ink2,
-    paddingHorizontal: PAD,
-    paddingBottom: 14,
-  },
 });

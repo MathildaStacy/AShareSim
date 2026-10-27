@@ -204,7 +204,7 @@ test('费率设置：校验、保存，已挂委托不受影响', async () => {
   await r.type('股票佣金率', '1');
   expect(ctxText()).toContain('未保存的修改：股票佣金率 万 2.5 → 万 1');
   expect(ctxText()).toContain('未完成委托 1 笔');
-  expect(r.text()).toContain('已挂的委托仍按提交时的费率');
+  expect(r.text()).toContain('笔委托沿用原费率');
   await r.press('保存');
   expect(core.sim.engine.state.fee.stockRate).toBe(10_000);
   expect(core.sim.engine.state.orders[0].frozen).toBe(frozen);

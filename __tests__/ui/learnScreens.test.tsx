@@ -225,7 +225,7 @@ test('集合竞价演示：开盘价 10.01，小测答对后阶段 0 通关', as
 
 test('阶段页：手动项能勾，自动项不能手动改；阶段 0 显示通关', async () => {
   const s0 = await render('Stage', StageScreen, { no: 0 });
-  expect(s0.text()).toContain('阶段 0 通关');
+  expect(s0.text()).toContain('阶段 0 已通关');
   expect(ctxText()).toContain('还差');
   const s1 = await render('Stage', StageScreen, { no: 1 });
   const item = '把你自己的交割单 CSV 读进 pandas，按月汇总费用';
@@ -260,7 +260,8 @@ test('账户分析：从交割单和日 K 算出指标，样本少时标注', as
   const r = await render('Analysis', AnalysisScreen);
   await wait();
   expect(r.text()).toContain('累计收益');
-  expect(r.text()).toContain('不具备统计意义');
+  expect(r.text()).toContain('样本');
+  expect(r.text()).toContain('收益计算方式');
   await r.press('Beta');
   expect(ctxText()).toContain('展开了「Beta」');
 });

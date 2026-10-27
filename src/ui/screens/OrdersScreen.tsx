@@ -24,7 +24,6 @@ import {
   Button,
   Empty,
   NavBar,
-  Note,
   Segmented,
 } from '../components/ui';
 import { fmtQty, fmtSignedFen, trendOf } from '../format';
@@ -236,12 +235,7 @@ export function OrdersScreen({ route }: RootScreenProps<'Orders'>) {
             disabled={busy || !ledger.length}
           />
         </View>
-        <Pressable
-          onPress={() => nav.navigate('Fees')}
-          accessibilityRole="button"
-        >
-          <Note style={s.note}>{feeState + '。点这里看费率设置 ›'}</Note>
-        </Pressable>
+
         {ledger.length ? (
           <LedgerTable
             rows={ledger}
@@ -423,7 +417,6 @@ export function LedgerTable({
 const s = StyleSheet.create({
   page: { flex: 1, backgroundColor: color.bg },
   pad: { paddingBottom: 90 },
-  note: { marginHorizontal: 10, marginVertical: 8 },
   bar: {
     flexDirection: 'row',
     justifyContent: 'space-between',

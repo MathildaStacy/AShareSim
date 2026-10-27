@@ -55,7 +55,6 @@ import {
   Empty,
   IconButton,
   NavBar,
-  Note,
   SectionTitle,
 } from '../components/ui';
 import { useAiContext, useCore, useViewLog } from '../hooks';
@@ -91,10 +90,6 @@ export function AiServicesScreen() {
         }
       />
       <ScrollView contentContainerStyle={s.pad}>
-        <Note>
-          供应商保存连接和
-          Key，模型分别设置能力与价格。聊天时可随时选择已启用的模型。
-        </Note>
         {providers.map(p => (
           <Pressable
             key={p.id}
@@ -122,10 +117,6 @@ export function AiServicesScreen() {
           tone="learn"
           onPress={() => nav.navigate('AiService', {})}
         />
-        <Text style={s.foot}>
-          API Key 只保存在本机安全存储，不会写入日志、记忆或发给 AI
-          的上下文。模型列表由你的接口实时返回。
-        </Text>
       </ScrollView>
     </View>
   );
@@ -383,7 +374,7 @@ export function AiServiceScreen({ route }: RootScreenProps<'AiService'>) {
           ) : (
             <>
               <Text style={s.intro}>选择供应商</Text>
-              <Text style={s.sub}>预设接口，也支持自定义中转地址。</Text>
+
               {(Object.keys(PROVIDER_PRESETS) as ProviderKind[]).map(kind => {
                 const p = emptyProvider(kind);
                 return (
@@ -478,7 +469,7 @@ export function AiServiceScreen({ route }: RootScreenProps<'AiService'>) {
           ) : null}
           <SwitchRow
             label="缓存参数"
-            sub="兼容中转：接口拒绝缓存参数时会提示并关闭。实际命中以服务用量为准。"
+            sub="不兼容时会自动关闭"
             value={draft.cache === 'auto'}
             onChange={on => patch({ cache: on ? 'auto' : 'off' })}
           />
@@ -497,9 +488,7 @@ export function AiServiceScreen({ route }: RootScreenProps<'AiService'>) {
             {error}
           </Text>
         ) : null}
-        <Text style={s.foot}>
-          从接口读取真实模型列表。勾选后才能在聊天中使用；手动添加的模型会保留。
-        </Text>
+
         {draft.models.length
           ? input('搜索模型', query, setQuery, '搜索模型 ID 或名称')
           : null}
@@ -607,10 +596,6 @@ export function AiServiceScreen({ route }: RootScreenProps<'AiService'>) {
           </View>
         ) : null}
 
-        <Text style={s.foot}>
-          Key 仅保存在本机。测试连接会发送少量
-          token，联网搜索可能另收费。标注的能力必须与接口一致。
-        </Text>
         {original ? (
           <Pressable
             style={s.delete}
@@ -723,9 +708,7 @@ function ModelEditor({
     <AiSheet title="模型能力与价格" visible onClose={onClose}>
       <ScrollView keyboardShouldPersistTaps="handled">
         <Text style={[s.title, s.pad]}>{model.id}</Text>
-        <Note>
-          按模型文档或中转接口的真实能力标注。未知能力保持未知；只有明确支持时才启用。
-        </Note>
+
         {(['chat', 'tools', 'search'] as const).map((k, i) => (
           <ChoiceRow
             key={k}

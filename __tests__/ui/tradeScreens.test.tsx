@@ -166,11 +166,25 @@ test('交易 Tab、持仓、持仓详情', async () => {
   expect(
     (await render('Positions', PositionsScreen, undefined)).text,
   ).toContain('招商银行');
-  const { text } = await render('Position', PositionScreen, {
-    code: 'sh600036',
+  const r = await render('Position', PositionScreen, { code: 'sh600036' });
+  expect(r.text).toContain('摊薄成本');
+  expect(r.text).toContain('买入均价');
+  expect(r.text).not.toContain('摊薄成本 =');
+  expect(r.text).not.toContain('各家券商');
+  const toggle = r.tree.root.findAll(
+    n =>
+      n.props.accessibilityLabel === '成本计算方式' &&
+      typeof n.props.onPress === 'function',
+  )[0];
+  await act(async () => {
+    toggle.props.onPress();
   });
-  expect(text).toContain('摊薄成本');
-  expect(text).toContain('买入均价');
+  expect(JSON.stringify(r.tree.toJSON())).toContain('摊薄成本 =');
+  await act(async () => {
+    toggle.props.onPress();
+  });
+  expect(JSON.stringify(r.tree.toJSON())).not.toContain('摊薄成本 =');
+  expect(ctx.core.sim.engine.state.lots).toHaveLength(1);
 });
 
 test('查询四个分段和两个详情页', async () => {

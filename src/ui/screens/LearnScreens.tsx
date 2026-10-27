@@ -328,7 +328,7 @@ export function StageScreen({ route }: RootScreenProps<'Stage'>) {
         <View style={s.card}>{items(st.pass)}</View>
         {st.no === 0 && stage0Passed(checks) ? (
           <Note tone="learn" style={s.note}>
-            阶段 0 通关。「用真实交割单校准」要等你开户，不算在通关里。
+            阶段 0 已通关
           </Note>
         ) : null}
         <SectionTitle title="用到的工具" />

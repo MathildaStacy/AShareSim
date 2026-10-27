@@ -22,7 +22,6 @@ import {
   Button,
   Empty,
   NavBar,
-  Note,
   SectionTitle,
 } from '../components/ui';
 import { fmtQty } from '../format';
@@ -206,10 +205,7 @@ export function AccountsScreen() {
             })}
           </View>
         )}
-        <Note style={s.note}>
-          重置账户：当前账户归档（只读，可以查看和导出交割单），新账户从 0
-          元开始，费率设置和入金上限沿用。
-        </Note>
+
         <View style={s.btns}>
           <Button title="重置账户" onPress={() => setReset(true)} />
         </View>
@@ -428,7 +424,6 @@ const s = StyleSheet.create({
   page: { flex: 1, backgroundColor: color.bg },
   pad: { paddingBottom: 90 },
   card: { backgroundColor: color.card, marginTop: 8 },
-  note: { marginHorizontal: 10, marginTop: 8 },
   grow: { flex: 1 },
   pressed: { backgroundColor: color.press },
   btns: { paddingHorizontal: 10, marginTop: 10 },

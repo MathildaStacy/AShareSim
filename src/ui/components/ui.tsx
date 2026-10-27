@@ -1,8 +1,8 @@
 /** 通用小组件：导航栏、分段、标签、涨跌幅色块、空状态、AI 悬浮按钮。 */
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { ChevronLeft } from 'lucide-react-native';
-import type { ReactNode } from 'react';
+import { ChevronDown, ChevronLeft } from 'lucide-react-native';
+import { useState, type ReactNode } from 'react';
 import {
   Pressable,
   ScrollView,
@@ -211,6 +211,36 @@ export function Note({
   );
 }
 
+/** 次要说明按需展开，避免在数据和操作旁常驻大段文字。 */
+export function Details({
+  title,
+  children,
+}: {
+  title: string;
+  children: ReactNode;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <View>
+      <Pressable
+        style={s.detailsToggle}
+        onPress={() => setOpen(v => !v)}
+        accessibilityRole="button"
+        accessibilityLabel={title}
+        accessibilityState={{ expanded: open }}
+      >
+        <Text style={s.detailsTitle}>{title}</Text>
+        <ChevronDown
+          size={16}
+          color={color.ink2}
+          style={open ? { transform: [{ rotate: '180deg' }] } : undefined}
+        />
+      </Pressable>
+      {open ? <View style={s.detailsBody}>{children}</View> : null}
+    </View>
+  );
+}
+
 export function Button({
   title,
   onPress,
@@ -359,6 +389,15 @@ const s = StyleSheet.create({
   },
   noteText: { fontSize: 12, lineHeight: 18, color: color.ink2 },
   noteTextLearn: { color: '#0B5552' },
+  detailsToggle: {
+    minHeight: 48,
+    paddingHorizontal: PAD,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  detailsTitle: { fontSize: 12, color: color.ink2 },
+  detailsBody: { paddingHorizontal: PAD, paddingBottom: 12 },
   btn: {
     height: 40,
     paddingHorizontal: 16,

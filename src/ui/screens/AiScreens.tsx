@@ -108,10 +108,6 @@ export function AiThreadsScreen() {
         ) : (
           <Empty text="还没有对话。回到 AI 页直接提问就会新建一个。" />
         )}
-        <Note style={s.note}>
-          每个对话单独保存，别的对话不会自动带进来；问「我们上次聊了什么」时 AI
-          会检索对话的标题、摘要和消息。删除对话不会删除从它产生的记忆。
-        </Note>
       </ScrollView>
       <ConfirmDialog
         visible={!!del}
@@ -237,7 +233,6 @@ export function AiMemoryScreen() {
         <View style={s.card}>
           <ChoiceRow
             label="记忆模式"
-            sub="自动记住：回答下方显示「已记住」，可以撤销。先问我：每次问你要不要记。关闭：AI 不写记忆。"
             items={MODE_ITEMS}
             value={prefs?.memoryMode ?? 'auto'}
             onChange={setMode}
@@ -324,10 +319,6 @@ export function AiMemoryScreen() {
             </View>
           )}
         </View>
-        <Note style={s.note}>
-          记忆每个对话开始时拍一个快照放进请求（改了记忆从下一个对话开始生效，这样缓存不会失效）。AI
-          不记持仓、成交、费率、行情：这些每次都用工具现查。
-        </Note>
       </ScrollView>
       <ConfirmDialog
         visible={!!del}
@@ -425,7 +416,7 @@ export function AiContextScreen() {
           {pv ? (
             <Text style={s.hint}>
               预计 {pv.cached.toLocaleString('zh-CN')} tokens 走缓存：
-              {pv.cacheNote}。token 数是按字数粗估的，以回答下方的真实用量为准。
+              {pv.cacheNote}。
             </Text>
           ) : null}
         </View>

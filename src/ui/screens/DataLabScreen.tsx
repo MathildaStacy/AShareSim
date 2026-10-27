@@ -22,7 +22,7 @@ import {
   type SeriesStats,
 } from '../../learn/datalab';
 import { ledgerCsv, ledgerFileName } from '../../sim/ledgerCsv';
-import { AiFab, Button, NavBar, Note, SectionTitle } from '../components/ui';
+import { AiFab, Button, NavBar, SectionTitle } from '../components/ui';
 import { useAiContext, useCore, usePolling, useViewLog } from '../hooks';
 import { color, num, PAD } from '../theme';
 import { toast } from '../toast';
@@ -258,11 +258,6 @@ export function DataLabScreen() {
     <View style={s.page}>
       <NavBar title="数据练习" sub="阶段 1" back />
       <ScrollView contentContainerStyle={s.pad}>
-        <Note tone="learn" style={s.note}>
-          Python 在电脑上写。App
-          负责两件事：给你干净的数据（CSV，用分享面板存到网盘或发到电脑），以及用同一份数据算出「标准答案」，方便你核对
-          pandas 的结果。
-        </Note>
         <SectionTitle title="数据集" />
         <View style={s.card}>
           {Object.entries(BENCH).map(([c, n]) => {
@@ -349,7 +344,6 @@ export function DataLabScreen() {
             />
           </View>
         </View>
-
         <SectionTitle title="练习 1：指数的收益和风险" />
         <View style={s.card}>
           <Text style={s.desc}>
@@ -385,7 +379,6 @@ export function DataLabScreen() {
             </Text>
           ) : null}
         </View>
-
         <SectionTitle title="练习 2：交割单按月汇总费用" />
         <View style={s.card}>
           <Text style={s.desc}>
@@ -433,7 +426,6 @@ export function DataLabScreen() {
             )
           ) : null}
         </View>
-
         <SectionTitle title="练习 3：截面排名（通关标准）" />
         <View style={s.card}>
           <Text style={s.desc}>
@@ -492,7 +484,6 @@ const s = StyleSheet.create({
   page: { flex: 1, backgroundColor: color.bg },
   pad: { paddingBottom: 90 },
   card: { backgroundColor: color.card, marginTop: 8 },
-  note: { margin: 10, marginBottom: 2 },
   grow: { flex: 1 },
   ds: {
     flexDirection: 'row',

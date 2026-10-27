@@ -117,7 +117,7 @@ export function FeesScreen() {
         ' 笔' +
         (live.length ? '：改费率不影响它们，仍按提交时的费率冻结和计费' : ''),
     ],
-    tip: '佣金是券商收的，可以谈；印花税、过户费是法定的，不能改。默认费率不低于多数券商，模拟只会略差。开户后用真实交割单校准。',
+    tip: '佣金是券商收的，可以谈；印花税、过户费是法定的，不能改。可用真实交割单核对佣金设置。',
   }));
 
   const save = async () => {
@@ -163,58 +163,41 @@ export function FeesScreen() {
             ok={stEtf === 'calibrated'}
           />
         </View>
-        {stStock !== 'calibrated' || stEtf !== 'calibrated' ? (
-          <Note tone="warn" style={s.note}>
-            佣金以你开户券商的为准。你还没开户，默认按股票万 2.5、ETF 万
-            0.5、最低 5
-            元算（不低于多数券商线上开户的费率，模拟只会略差）。开户后去「交割单校准」抄一条真实成交，App
-            反推佣金率和是否免五，一键套用。
-          </Note>
-        ) : null}
         <View style={s.card}>
-          <SectionTitle title="佣金" right="券商收，可以谈" />
-          {field('stockWan', '‱', '万分之几，监管上限万 30')}
-          {field('stockMin', '元', '每笔最少收多少，常见 5 元')}
-          {field('etfWan', '‱', '很多券商 ETF 单独优惠')}
+          <SectionTitle title="佣金" />
+          {field('stockWan', '‱')}
+          {field('stockMin', '元')}
+          {field('etfWan', '‱')}
           {field('etfMin', '元')}
           <SwitchRow
             label="免五"
-            sub="不设 5 元最低佣金：两个最低佣金改成 0.1 元（有的券商不设最低，可以手动填 0）"
+            sub="最低佣金设为 0.1 元"
             value={isMian5(form)}
             onChange={v => setForm(f => toggleMian5(f, v))}
           />
           <SwitchRow
             label="规费另收"
-            sub="经手费、证管费默认含在佣金里；有的券商在交割单上单列"
+            sub="开启后，经手费、证管费不计入佣金"
             value={form.regsSeparate}
             onChange={set('regsSeparate')}
           />
           <SwitchRow
             label="同一委托多笔成交合并计佣"
-            sub="大多数券商按委托合并计算最低 5 元"
             value={form.mergeOrder}
             onChange={set('mergeOrder')}
           />
         </View>
-        {parsed.ok ? (
-          <CheckBar
-            ok
-            text={
-              diff.length
-                ? '未保存的修改：' + diff.join('，')
-                : '和当前费率一样，没有修改'
-            }
-          />
-        ) : (
+        {!parsed.ok ? (
           <CheckBar
             ok={false}
             text={parsed.errors.map(e => e.msg).join('；')}
           />
-        )}
+        ) : diff.length ? (
+          <CheckBar ok text={'未保存的修改：' + diff.join('，')} />
+        ) : null}
         {live.length ? (
           <Note style={s.note}>
-            有 {live.length}{' '}
-            笔未完成委托（含预埋单）：改费率只对之后提交的委托生效，已挂的委托仍按提交时的费率冻结和计费。想按新费率算，撤单重下。
+            已挂的 {live.length} 笔委托沿用原费率，需撤单重下才能使用新费率。
           </Note>
         ) : null}
         <View style={s.btns}>
@@ -235,7 +218,7 @@ export function FeesScreen() {
           </View>
         </View>
         <View style={s.card}>
-          <SectionTitle title="法定费用" right="不能改，随版本更新" />
+          <SectionTitle title="法定费用" />
           <KV
             k="印花税"
             v={'卖出 ' + ratePct(STATUTORY.stamp) + '（ETF 免征）'}
@@ -474,12 +457,7 @@ export function CalibrateScreen() {
         contentContainerStyle={s.pad}
         keyboardShouldPersistTaps="handled"
       >
-        <Note tone="learn" style={s.note}>
-          从你真实券商 App
-          的交割单里抄一条成交（一笔成交一行，多笔成交合并的委托要拆开），App
-          用当前费率重算并逐项比对，不一致时告诉你该改哪一项。这是「费用和真实一致」的验收方法。佣金只精确到分，成交额越大反推出的费率越准（最低
-          5 元时选成交额 2 万元以上的）。
-        </Note>
+        <Note style={s.note}>一次填写一笔成交，多笔成交请拆开填写。</Note>
         <View style={s.card}>
           <FieldRow
             label="证券代码"

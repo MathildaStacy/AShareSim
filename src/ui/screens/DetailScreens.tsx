@@ -442,7 +442,6 @@ export function FillDetailScreen({ route }: RootScreenProps<'FillDetail'>) {
             {(f.divTaxNotes ?? []).join('；')}
           </Note>
         ) : null}
-        <Note style={s.note}>{feeState}</Note>
       </ScrollView>
       <AiFab />
     </View>

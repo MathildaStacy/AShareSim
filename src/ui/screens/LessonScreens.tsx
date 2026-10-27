@@ -10,7 +10,7 @@ import { answerQuiz, redoLesson, useLearn } from '../../app/learn';
 import { LESSONS, lessonById } from '../../learn/lessons';
 import { answerOf, lessonCheckId, lessonStatus } from '../../learn/progress';
 import type { Inline, Lesson, LessonBlock } from '../../learn/types';
-import { AiFab, Button, NavBar, Note, SectionTitle } from '../components/ui';
+import { AiFab, Button, NavBar, SectionTitle } from '../components/ui';
 import { useAiContext, useCore, useViewLog } from '../hooks';
 import type { RootScreenProps, RootStackParamList } from '../navigation/types';
 import { color, num, PAD } from '../theme';
@@ -133,10 +133,6 @@ export function LessonsScreen() {
         back
       />
       <ScrollView contentContainerStyle={s.pad}>
-        <Note tone="learn" style={s.note}>
-          每课一屏讲解、几道小测和「去实践」。数字和交易所规则、App
-          的撮合和费用引擎一致。
-        </Note>
         <View style={s.card}>
           {LESSONS.map((l, i) => {
             const st = lessonStatus(l, answers);
@@ -362,7 +358,6 @@ const s = StyleSheet.create({
   page: { flex: 1, backgroundColor: color.bg },
   pad: { paddingBottom: 90 },
   card: { backgroundColor: color.card, marginTop: 8 },
-  note: { margin: 10, marginBottom: 2 },
   body: { paddingHorizontal: PAD, paddingVertical: 12 },
   bold: { fontWeight: '700', color: color.ink },
   p: { fontSize: 15, lineHeight: 24, color: color.ink, marginVertical: 5 },

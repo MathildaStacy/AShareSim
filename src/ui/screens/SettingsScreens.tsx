@@ -128,7 +128,7 @@ export function SettingsScreen() {
           <SectionTitle title="持仓" />
           <ChoiceRow
             label="持仓列表的成本口径"
-            sub="摊薄成本：卖出盈利、分红会让它下降（同花顺、东方财富默认）。买入均价：只看买入花了多少，卖出不改变它。持仓详情两个都显示"
+            sub="摊薄成本计入卖出盈亏和分红；买入均价只计买入成本"
             items={COST_OPTIONS}
             value={basis}
             onChange={v => {
@@ -158,7 +158,7 @@ export function SettingsScreen() {
           <SectionTitle title="后台跟踪" />
           <ChoiceRow
             label="后台跟踪"
-            sub="有委托时自动：交易日 9:00–15:30 有今天能成交的委托时开前台服务，只刷新这几只。交易时段全程：完整录快照，流量和电量多一些。关闭：回到 App 时用分时数据补撮合，只按成交价穿过委托价成交（更保守）"
+            sub="自动：仅跟踪挂单；全程：交易时段持续记录；关闭：返回 App 时补撮合"
             items={BACKGROUND_MODE_OPTIONS}
             value={rs.backgroundMode}
             onChange={v => applyRs({ backgroundMode: v })}
@@ -202,10 +202,6 @@ export function SettingsScreen() {
             />
           </View>
         </View>
-        <Note style={s.note}>
-          费率在「费率设置」里改；重置账户在「历史账户」里。设置的每次修改都会记进操作日志，AI
-          能看到你最近改了什么。
-        </Note>
       </ScrollView>
       <AiFab />
     </View>
@@ -342,9 +338,7 @@ export function PowerGuideScreen() {
       <NavBar title="后台跟踪与省电" back />
       <ScrollView contentContainerStyle={s.pad}>
         <Note tone="learn" style={s.note}>
-          挂单没成交时，App 在后台每几秒看一次行情，按真实的排队规则撮合。小米
-          HyperOS 杀后台很激进，不设置的话 App
-          一退到后台就会被停。被停了也不会出错：下次打开时用分时数据补撮合，但只能按「成交价穿过委托价」成交，排队成交补不出来，结果更保守。
+          允许后台运行，才能持续跟踪挂单并记录排队成交。
         </Note>
         <View style={s.card}>
           <SectionTitle title="现在的状态" />
@@ -427,12 +421,6 @@ export function PowerGuideScreen() {
             },
           )}
         </View>
-        <Note style={s.note}>
-          后台跟踪只在交易日
-          9:00–15:30、有今天能成交的委托时开（「交易时段全程」模式一直开），默认
-          5
-          秒刷新一次，只请求这几只证券。觉得费电、费流量，可以在通知上点「停止跟踪」（当天不再自动开），或在设置里关掉。
-        </Note>
       </ScrollView>
       <AiFab />
     </View>

@@ -246,12 +246,12 @@ export function EffortPicker({
       <ScrollView style={s.modelList}>
         <Text style={s.explain}>
           {!caps || caps.thinking === null
-            ? '模型的思考能力还没标注。请在供应商里按实际接口能力标注。'
+            ? '尚未标注思考能力'
             : !levels.length
             ? '这个模型不支持调节思考，直接回答。'
             : levels.length === 1
             ? '这个模型始终思考，无法关闭。'
-            : '只显示这个模型可用的档位。强度越高通常越慢，并可能增加输出用量。'}
+            : '强度越高，通常耗时和用量越多。'}
         </Text>
         {levels.map(e => (
           <Pressable
@@ -297,9 +297,7 @@ export function SearchUnavailable({
       <View style={s.explain}>
         <Globe size={24} color={color.ink2} />
         <Text style={s.reason}>{reason}</Text>
-        <Text style={s.sub}>
-          搜索由供应商提供，可能按次额外计费。切换模型后，只有你主动开启搜索才会使用。
-        </Text>
+        <Text style={s.sub}>联网搜索可能单独计费。</Text>
         <Pressable
           style={s.option}
           onPress={onChoose}

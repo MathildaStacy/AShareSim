@@ -29,7 +29,6 @@ import {
   Button,
   Empty,
   NavBar,
-  Note,
   SectionTitle,
   Segmented,
 } from '../components/ui';
@@ -84,8 +83,8 @@ export function TransferScreen({ route }: RootScreenProps<'Transfer'>) {
   }
   const windowText =
     (open
-      ? '现在在转账时间内（交易日 9:00–16:00，各券商略有不同）'
-      : '现在不在转账时间（交易日 9:00–16:00，各券商略有不同）') +
+      ? '现在在转账时间内（交易日 9:00–16:00）'
+      : '现在不在转账时间（交易日 9:00–16:00）') +
     (!open && first && dir === 'in' ? '，新账户的第一笔入金不限时间' : '');
   const checkText = !text.trim()
     ? null
@@ -226,12 +225,6 @@ export function TransferScreen({ route }: RootScreenProps<'Transfer'>) {
             onPress={submit}
           />
         </View>
-        <Note style={s.note}>
-          这是 App 里唯一「模拟」的地方：钱是假的，其他一切按真实规则。
-          {windowText}
-          。想在下一交易日开盘就有钱买，要提前一个交易日转入。卖出股票的钱当天可以再买，下一交易日才能转出（可取
-          T+1）。累计净入金上限可以在「我的 → 设置」里改。
-        </Note>
         <SectionTitle
           title="今天的转账"
           right={
@@ -485,7 +478,6 @@ const s = StyleSheet.create({
   page: { flex: 1, backgroundColor: color.bg },
   pad: { paddingBottom: 90 },
   card: { backgroundColor: color.card, marginTop: 8 },
-  note: { margin: 10 },
   grow: { flex: 1 },
   pressed: { backgroundColor: color.press },
   quick: {

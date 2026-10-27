@@ -80,7 +80,7 @@ import {
   SearchUnavailable,
 } from '../components/AiOptions';
 import { Markdown } from '../components/Markdown';
-import { Button, IconButton, NavBar, Note } from '../components/ui';
+import { Button, IconButton, NavBar } from '../components/ui';
 import { useCore } from '../hooks';
 import type { RootStackParamList } from '../navigation/types';
 import { color, num, PAD } from '../theme';
@@ -407,10 +407,6 @@ export function AiScreen() {
       >
         {svc === null ? (
           <View style={s.setup}>
-            <Note>
-              AI 助手直连你配置的供应商，支持 Messages、Responses 和 Chat
-              Completions。API Key 只存在本机安全存储。先启用一个模型即可开始。
-            </Note>
             <View style={s.setupBtn}>
               <Button
                 title="配置供应商与模型"
@@ -423,13 +419,6 @@ export function AiScreen() {
         {thread?.compactedCount ? (
           <Text style={s.compacted}>
             {'较早的 ' + thread.compactedCount + ' 条消息已压缩成摘要'}
-          </Text>
-        ) : null}
-        {!live.length && svc ? (
-          <Text style={s.hello}>
-            可以问这个页面上的任何东西：「这是什么意思」「这只股票现在值得买吗」「我的持仓该怎么调整」。我会先给出投资建议，再说明判断依据和风险。也可以让我替你操作
-            App，例如「帮我打开沪深300ETF 的买入页，价格 4.85，100
-            份」；会改数据的操作要你点「执行」才生效。
           </Text>
         ) : null}
         {live.map((m, i) => (
@@ -1035,9 +1024,6 @@ function CardView({
               (card.result ? ' → ' + card.result : '')}
         </Text>
       )}
-      <Text style={s.cardFoot}>
-        AI 生成的操作，你点「执行」才生效；会记进操作日志（AI 代操作）
-      </Text>
     </View>
   );
 }
@@ -1158,7 +1144,6 @@ const s = StyleSheet.create({
     color: color.ink3,
     marginVertical: 6,
   },
-  hello: { fontSize: 13, lineHeight: 20, color: color.ink2, padding: 6 },
   divider: { flexDirection: 'row', alignItems: 'center', marginVertical: 10 },
   divLine: {
     flex: 1,
@@ -1249,7 +1234,6 @@ const s = StyleSheet.create({
   cardResult: { fontSize: 13, lineHeight: 19, color: color.ink2, marginTop: 8 },
   ok: { color: color.down },
   bad: { color: color.up },
-  cardFoot: { fontSize: 11, color: color.ink3, marginTop: 6 },
   mem: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1376,7 +1360,6 @@ const s = StyleSheet.create({
     marginTop: 8,
   },
   est: { fontSize: 11, color: color.ink3, marginTop: 4 },
-  adviceHint: { fontSize: 11, color: color.ink2, marginTop: 2 },
   mask: { flex: 1, backgroundColor: 'rgba(0,0,0,0.3)', alignItems: 'flex-end' },
   menu: {
     marginTop: 56,

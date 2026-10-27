@@ -60,7 +60,7 @@ export function rateText(p: FeeProfile, c: FeeClass): string {
   return wanText(x.rate) + '、最低 ' + yuanText(x.minFen) + ' 元';
 }
 
-/** 某一类证券的费率和状态：「佣金万 2.5、最低 5 元（默认费率，还没用真实交割单校准）」。 */
+/** 某一类证券的费率和状态：「佣金万 2.5、最低 5 元（默认费率）」。 */
 export function feeLabel(p: FeeProfile, board: Board): string {
   const c = classOf(board);
   const st = feeState(p, c);
@@ -70,7 +70,6 @@ export function feeLabel(p: FeeProfile, board: Board): string {
     (p.regsSeparate ? '，规费另收' : '') +
     '（' +
     FEE_STATE_NAME[st] +
-    (st === 'calibrated' ? '' : '，还没用真实交割单校准') +
     '）'
   );
 }
@@ -80,7 +79,7 @@ export function feeSummary(p: FeeProfile): string {
   const s = feeState(p, 'stock');
   const e = feeState(p, 'etf');
   if (s === 'default' && e === 'default') {
-    return '默认费率：股票万 2.5、ETF 万 0.5，最低 5 元，还没用真实交割单校准';
+    return '默认费率：股票万 2.5、ETF 万 0.5，最低 5 元';
   }
   return (['stock', 'etf'] as const)
     .map(c => {
@@ -269,14 +268,4 @@ export function feeDiff(a: FeeProfile, b: FeeProfile): string[] {
     b.calibratedEtf ? '已校准' : '未校准',
   );
   return out;
-}
-
-/** 下单页费用明细下面的一句说明。 */
-export function feeNote(p: FeeProfile, board: Board): string {
-  const st = feeState(p, classOf(board));
-  return st === 'calibrated'
-    ? '费率已用真实交割单校准。'
-    : st === 'default'
-    ? '默认费率：你还没用真实交割单校准，佣金按股票万 2.5、ETF 万 0.5、最低 5 元估算（不低于多数券商，模拟只会略差）。'
-    : '自定义费率，还没用真实交割单校准。';
 }

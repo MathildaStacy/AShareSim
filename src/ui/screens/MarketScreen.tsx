@@ -236,17 +236,9 @@ export function MarketScreen() {
                 )}
               </View>
             ))}
-            <Note style={s.noteGap}>
-              {seg === 'etf'
-                ? 'ETF 排行来自新浪（腾讯排行没有 ETF），点进去以后的行情、盘口和撮合仍然用腾讯数据。榜上有债券、货币、黄金、跨境 ETF，它们实盘是 T+0，本 App 暂时都按 T+1 处理。'
-                : '排行来自腾讯' +
-                  (seg === 'aStock'
-                    ? '，包括主板、创业板和科创板（不含北交所）。'
-                    : '。')}
-              {session
-                ? '交易时段每 10 秒刷新。'
-                : '现在不在交易时段，排行不自动刷新。'}
-            </Note>
+            {seg === 'etf' ? (
+              <Note style={s.noteGap}>ETF 当前均按 T+1 模拟交易。</Note>
+            ) : null}
           </>
         )}
       </ScrollView>

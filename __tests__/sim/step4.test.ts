@@ -77,10 +77,10 @@ describe('费率表单', () => {
   test('默认费率的状态和文字', () => {
     expect(feeState(P, 'stock')).toBe('default');
     expect(feeSummary(P)).toBe(
-      '默认费率：股票万 2.5、ETF 万 0.5，最低 5 元，还没用真实交割单校准',
+      '默认费率：股票万 2.5、ETF 万 0.5，最低 5 元',
     );
     expect(feeLabel(P, 'etf')).toBe(
-      '佣金万 0.5、最低 5 元（默认费率，还没用真实交割单校准）',
+      '佣金万 0.5、最低 5 元（默认费率）',
     );
   });
 
