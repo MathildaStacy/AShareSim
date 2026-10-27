@@ -14,7 +14,10 @@ import { classify, isSTName, type Security } from '../../engine/securities';
 import { formatSec } from '../../engine/session';
 import type { Snapshot } from '../../engine/types';
 import { beijingNow } from '../../market/clock';
-import type { Tick } from '../../market/tencent';
+import type { MinuteKPeriod, Tick } from '../../market/tencent';
+import { lessonById } from '../../learn/lessons';
+import { relatedLessons } from '../../learn/progress';
+import type { LessonId } from '../../learn/types';
 import { ruleCard, type RuleItem } from '../../sim/ruleCard';
 import { KlineChart, MinuteChart } from '../charts/Charts';
 import { minuteSeries, patchLastBar, withLivePoint } from '../charts/chartMath';
@@ -49,11 +52,14 @@ import { quoteView, type QuoteView } from '../quoteView';
 import { color, num, PAD, trendColor } from '../theme';
 import { useWatch, watch } from '../watchStore';
 
-type Chart = 'min' | 'day' | 'week';
+type Chart = 'min' | MinuteKPeriod | 'day' | 'week';
 type Book = 'book' | 'ticks';
 
 const CHARTS: [Chart, string][] = [
   ['min', '分时'],
+  ['m15', '15分'],
+  ['m30', '30分'],
+  ['m60', '60分'],
   ['day', '日K'],
   ['week', '周K'],
 ];
@@ -63,6 +69,8 @@ const BOOKS: [Book, string][] = [
 ];
 
 const MINUTE_REFRESH_MS = 30_000;
+/** 分钟 K 线在交易时段每分钟取一次（最后一根还在走）。 */
+const MINUTE_K_REFRESH_MS = 60_000;
 const TICKS_REFRESH_MS = 6_000;
 const TICK_ROWS = 30;
 const K_COUNT = 120;
@@ -108,11 +116,16 @@ export function StockScreen({ route }: RootScreenProps<'Stock'>) {
     [code, type],
     session ? MINUTE_REFRESH_MS : null,
   );
+  const minuteK = chart === 'm15' || chart === 'm30' || chart === 'm60';
   const kline = usePolling(
     async () =>
-      chart === 'min' ? null : core.client.kline(code, type, chart, K_COUNT),
+      chart === 'min'
+        ? null
+        : chart === 'm15' || chart === 'm30' || chart === 'm60'
+        ? core.client.minuteKline(code, type, chart, K_COUNT)
+        : core.client.kline(code, type, chart, K_COUNT),
     [code, type, chart],
-    null,
+    minuteK && session ? MINUTE_K_REFRESH_MS : null,
   );
   const ticks = usePolling(
     async () =>
@@ -131,8 +144,10 @@ export function StockScreen({ route }: RootScreenProps<'Stock'>) {
         )
       : null;
   const bars =
-    kline.data && chart !== 'min'
+    kline.data && (chart === 'day' || chart === 'week')
       ? patchLastBar(kline.data, snap, chart)
+      : kline.data && minuteK
+      ? kline.data
       : null;
 
   const now = beijingNow();
@@ -334,6 +349,10 @@ export function StockScreen({ route }: RootScreenProps<'Stock'>) {
             ? v.index
               ? '蓝线是指数点位，柱子是每分钟成交量'
               : '蓝线是价格，黄线是均价（累计成交额 ÷ 累计成交量），柱子是每分钟成交量'
+            : minuteK
+            ? '不复权，最近 60 根，每根 ' +
+              chart.slice(1) +
+              ' 分钟（第一根 9:45 含开盘集合竞价），交易时段每分钟刷新；MA5 / 10 / 20 是 5 / 10 / 20 根的平均收盘价'
             : '前复权，最近 60 根；MA5 / 10 / 20 是 5 / 10 / 20 根的平均收盘价'}
         </Text>
 
@@ -376,7 +395,13 @@ export function StockScreen({ route }: RootScreenProps<'Stock'>) {
                 error={ticks.error}
               />
             )}
-            {sec ? <RuleCard items={rules} /> : null}
+            {sec ? (
+              <RuleCard
+                items={rules}
+                lessons={relatedLessons(sec.board, sec.st)}
+                onLesson={id => nav.navigate('Lesson', { id })}
+              />
+            ) : null}
             <F10 info={info} etf={sec?.board === 'etf'} />
           </>
         )}
@@ -538,7 +563,15 @@ function Ticks({
   );
 }
 
-function RuleCard({ items }: { items: RuleItem[] }) {
+function RuleCard({
+  items,
+  lessons,
+  onLesson,
+}: {
+  items: RuleItem[];
+  lessons: LessonId[];
+  onLesson: (id: LessonId) => void;
+}) {
   return (
     <View style={s.rule}>
       <Text style={s.ruleH}>这只证券的交易规则</Text>
@@ -556,6 +589,19 @@ function RuleCard({ items }: { items: RuleItem[] }) {
           </Text>
         </View>
       ))}
+      <Text style={s.ruleLessonsH}>相关规则课</Text>
+      <View style={s.ruleLessons}>
+        {lessons.map(id => (
+          <Pressable
+            key={id}
+            onPress={() => onLesson(id)}
+            style={s.ruleLesson}
+            accessibilityRole="button"
+          >
+            <Text style={s.ruleLessonText}>{lessonById(id)?.title ?? id}</Text>
+          </Pressable>
+        ))}
+      </View>
     </View>
   );
 }
@@ -717,6 +763,30 @@ const s = StyleSheet.create({
     borderColor: color.learnLine,
     backgroundColor: color.card,
   },
+  ruleLessonsH: {
+    fontSize: 12,
+    color: color.ink3,
+    paddingHorizontal: 12,
+    paddingTop: 8,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: '#E1EEEC',
+  },
+  ruleLessons: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    padding: 12,
+    paddingTop: 6,
+  },
+  ruleLesson: {
+    borderWidth: 1,
+    borderColor: color.learnLine,
+    backgroundColor: color.learnBg,
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  ruleLessonText: { fontSize: 12, color: color.learn },
   ruleH: {
     fontWeight: '600',
     color: color.learn,

@@ -1,5 +1,6 @@
 import {
   positions,
+  stBuyQty,
   T,
   withdrawable,
   yuanToLi,
@@ -660,5 +661,34 @@ describe('跨日和节假日', () => {
     );
     if (!r.ok) throw new Error(r.msg);
     expect(r.order.sendDate).toBe('2026-10-26');
+  });
+});
+
+describe('风险警示股票单日买入量', () => {
+  test('未结束的委托按委托数量、已结束的按成交数量；只算同一交易日的买入', () => {
+    const e = funded('2026-10-26', 300_000);
+    e.onSnapshot(
+      snap({
+        code: 'sz002024',
+        date: '2026-10-26',
+        t: T(10, 0),
+        prev: 2,
+        last: 2,
+        volume: 1_000_000,
+        bids: [[1.99, 10_000]],
+        asks: [[2.0, 30_000]],
+      }),
+    );
+    // 卖一只有 3 万股：成交 3 万，剩下 7 万挂着
+    const r = e.placeOrder(
+      at('2026-10-26', T(10, 0, 1)),
+      limit('sz002024', 'B', 2.0, 100_000),
+    );
+    if (!r.ok) throw new Error(r.msg);
+    expect(r.order.filled).toBe(30_000);
+    expect(stBuyQty(e.state.orders, 'sz002024', '2026-10-26')).toBe(100_000);
+    e.cancelOrder(at('2026-10-26', T(10, 1)), r.order.id);
+    expect(stBuyQty(e.state.orders, 'sz002024', '2026-10-26')).toBe(30_000);
+    expect(stBuyQty(e.state.orders, 'sz002024', '2026-10-27')).toBe(0);
   });
 });

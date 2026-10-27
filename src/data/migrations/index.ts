@@ -1,8 +1,9 @@
 import type { Db } from '../db';
 import { m0001 } from './0001_init';
+import { m0002 } from './0002_learn';
 
 /** 按顺序排列；下标 + 1 就是存在 PRAGMA user_version 里的版本号。 */
-export const migrations: string[][] = [m0001];
+export const migrations: string[][] = [m0001, m0002];
 
 export const SCHEMA_VERSION = migrations.length;
 

@@ -69,10 +69,11 @@ export const MIAN5_MIN_FEN: Fen = 10;
 /** 法定费率（亿分之一）。 */
 export const STATUTORY = {
   stamp: 50_000, // 印花税 0.05%，仅卖出，ETF 免征
-  transfer: 1_000, // 过户费 0.001%，双向，ETF 免收 ⚠️
+  transfer: 1_000, // 过户费 0.001%，双向；ETF 二级市场买卖不收（中国结算 2026 年收费表只列 A 股等，2026-10-27 核对）
   handlingStock: 3_410, // 经手费 0.00341%
-  handlingEtf: 450, // ⚠️ ETF 经手费率待核实
-  reg: 2_000, // 证管费 0.002%
+  // ETF 经手费 0.004%，沪深相同（上交所收费表、深证上〔2021〕655 号，2026-10-27 核对）；货币 / 债券 ETF 暂免，V1 不区分
+  handlingEtf: 4_000,
+  reg: 2_000, // 证管费 0.002%，只收股票；基金、债券自 2012 年起免收（2026-10-27 核对）
 } as const;
 
 export interface FeeBreakdown {
@@ -132,7 +133,7 @@ export function calcFee(
   const handling = profile.regsSeparate
     ? feeFen(amount, etf ? STATUTORY.handlingEtf : STATUTORY.handlingStock)
     : 0;
-  const reg = profile.regsSeparate ? feeFen(amount, STATUTORY.reg) : 0;
+  const reg = profile.regsSeparate && !etf ? feeFen(amount, STATUTORY.reg) : 0;
   return {
     commission,
     stamp,

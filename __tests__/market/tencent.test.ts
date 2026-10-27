@@ -3,8 +3,10 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { parseBonus } from '../../src/market/eastmoney';
 import {
+  minuteKlineUrl,
   parseKline,
   parseMinute,
+  parseMinuteKline,
   parseQuotes,
   parseSearch,
   parseServerTime,
@@ -164,6 +166,37 @@ describe('分时和 K 线', () => {
       'GP-A-KCB',
     );
     expect(k[k.length - 1].volume).toBeGreaterThan(1_000_000);
+  });
+
+  test('分钟 K 线（15 分钟，2026-10-26 真实数据）', () => {
+    expect(minuteKlineUrl('sz000001', 'm15', 120)).toBe(
+      'https://ifzq.gtimg.cn/appstock/app/kline/mkline?param=sz000001,m15,,120',
+    );
+    const k = parseMinuteKline(
+      json('kline-m15-sz000001.json'),
+      'sz000001',
+      'm15',
+      'GP-A',
+    );
+    expect(k.length).toBe(48);
+    // 一天 16 根：9:45 … 11:30、13:15 … 15:00
+    const day = k.filter(b => b.date.startsWith('2026-10-26'));
+    expect(day.length).toBe(16);
+    expect(day[0]).toMatchObject({ date: '2026-10-26 09:45', open: 11_150 });
+    expect(day[7].date).toBe('2026-10-26 11:30');
+    expect(day[8].date).toBe('2026-10-26 13:15');
+    expect(day[15]).toMatchObject({ date: '2026-10-26 15:00', close: 11_300 });
+    // 手 → 股；16 根加起来等于当天日 K 的 1,323,113 手
+    expect(day.reduce((a, b) => a + b.volume, 0)).toBe(132_311_300);
+    // 科创板的量本来就是股
+    const kcb = parseMinuteKline(
+      json('kline-m15-sh688981.json'),
+      'sh688981',
+      'm15',
+      'GP-A-KCB',
+    ).filter(b => b.date.startsWith('2026-10-26'));
+    expect(kcb.reduce((a, b) => a + b.volume, 0)).toBe(31_278_556);
+    expect(parseMinuteKline({}, 'sz000001', 'm15', 'GP-A')).toEqual([]);
   });
 });
 

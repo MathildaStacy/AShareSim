@@ -264,6 +264,12 @@ export function FeesScreen() {
               onPress={() => nav.navigate('Calibrate')}
             />
           </View>
+          <View style={s.grow}>
+            <Button
+              title="费用计算器"
+              onPress={() => nav.navigate('FeeCalc')}
+            />
+          </View>
         </View>
       </ScrollView>
       <AiFab />

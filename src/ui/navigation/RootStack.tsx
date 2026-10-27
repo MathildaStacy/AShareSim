@@ -27,7 +27,17 @@ import { PositionScreen, PositionsScreen } from '../screens/PositionsScreen';
 import { SearchScreen } from '../screens/SearchScreen';
 import { PowerGuideScreen, SettingsScreen } from '../screens/SettingsScreens';
 import { StockScreen } from '../screens/StockScreen';
-import { LearnScreen, MeScreen, TradeScreen } from '../screens/TabScreens';
+import { AnalysisScreen } from '../screens/AnalysisScreen';
+import { AuctionScreen } from '../screens/AuctionScreen';
+import { DataLabScreen } from '../screens/DataLabScreen';
+import { FeeCalcScreen } from '../screens/FeeCalcScreen';
+import {
+  ComingScreen,
+  LearnScreen,
+  StageScreen,
+} from '../screens/LearnScreens';
+import { LessonScreen, LessonsScreen } from '../screens/LessonScreens';
+import { MeScreen, TradeScreen } from '../screens/TabScreens';
 import { WatchEditScreen } from '../screens/WatchEditScreen';
 import { WatchScreen } from '../screens/WatchScreen';
 import { color } from '../theme';
@@ -130,6 +140,14 @@ export function RootStack() {
       <Stack.Screen name="PowerGuide" component={PowerGuideScreen} />
       <Stack.Screen name="Accounts" component={AccountsScreen} />
       <Stack.Screen name="ArchivedAccount" component={ArchivedAccountScreen} />
+      <Stack.Screen name="Stage" component={StageScreen} />
+      <Stack.Screen name="Lessons" component={LessonsScreen} />
+      <Stack.Screen name="Lesson" component={LessonScreen} />
+      <Stack.Screen name="FeeCalc" component={FeeCalcScreen} />
+      <Stack.Screen name="Auction" component={AuctionScreen} />
+      <Stack.Screen name="Analysis" component={AnalysisScreen} />
+      <Stack.Screen name="DataLab" component={DataLabScreen} />
+      <Stack.Screen name="Coming" component={ComingScreen} />
       <Stack.Screen
         name="Ai"
         component={AiScreen}

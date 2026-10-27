@@ -3,10 +3,11 @@
  */
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import type { AppCore } from '../../app/boot';
 import { exportText } from '../../app/exportFile';
+import { syncLearn } from '../../app/learn';
 import * as repo from '../../data/repos';
 import { isLive } from '../../engine/account';
 import { ruleOf } from '../../engine/securities';
@@ -77,6 +78,16 @@ export function OrdersScreen({ route }: RootScreenProps<'Orders'>) {
 
   useQuoteCodes([...new Set(todayOrders.filter(isLive).map(o => o.code))]);
   useViewLog('orders:' + tab, '查看 查询 · ' + TAB_NAME[tab]);
+  // 看过交割单是路线图阶段 0「集合竞价买 ETF」的最后一步：浏览记下之后检查一次
+  useEffect(() => {
+    if (tab !== 'ledger') {
+      return;
+    }
+    const timer = setTimeout(() => {
+      syncLearn(core).catch(() => undefined);
+    }, 800);
+    return () => clearTimeout(timer);
+  }, [core, tab]);
   useAiContext('Orders:' + tab, () => {
     const lines: string[] = [];
     if (tab === 'today' || tab === 'hist') {

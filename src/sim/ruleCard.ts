@@ -158,6 +158,11 @@ export function ruleCard(input: RuleCardInput): RuleItem[] {
     v:
       rule.maxLimitQty == null
         ? '⚠️ 待核实，暂不校验'
+        : rule.maxMarketQty === rule.maxLimitQty
+        ? (rule.maxLimitQty / 10_000).toLocaleString('zh-CN') +
+          ' 万' +
+          unit +
+          '，限价市价一样'
         : '限价 ' +
           (rule.maxLimitQty / 10_000).toLocaleString('zh-CN') +
           ' 万' +
@@ -171,7 +176,7 @@ export function ruleCard(input: RuleCardInput): RuleItem[] {
   // 价格笼子
   let cage: string;
   if (!rule.cage.enabled) {
-    cage = '⚠️ ETF 是否适用价格笼子待核实，暂不校验';
+    cage = 'ETF 不适用价格笼子，只受涨跌幅限制';
   } else {
     const how =
       rule.cage.ticks > 0

@@ -366,7 +366,7 @@ export function KlineChart({
           成交量
         </SvgText>
         <SvgText x={4} y={H - 2} fontSize={FONT} fill={color.ink3}>
-          {v.bars[0].date}
+          {barLabel(v.bars[0].date)}
         </SvgText>
         <SvgText
           x={w - 4}
@@ -375,13 +375,100 @@ export function KlineChart({
           fill={color.ink3}
           textAnchor="end"
         >
-          {v.bars[v.bars.length - 1].date}
+          {barLabel(v.bars[v.bars.length - 1].date)}
         </SvgText>
       </Svg>
     </View>
   );
 }
 
+/** 分钟 K 的日期带时间（YYYY-MM-DD HH:MM），图上去掉年份。 */
+const barLabel = (d: string) => (d.length > 10 ? d.slice(5) : d);
+
 const styles = StyleSheet.create({
   box: { height: H, backgroundColor: color.card },
 });
+
+export interface LineSeries {
+  name: string;
+  color: string;
+  values: number[];
+  width?: number;
+}
+
+/** 几条百分比折线（账户分析的累计收益）：0 轴、最高最低刻度、起止日期、图例。 */
+export function LinesChart({
+  series,
+  labels,
+  height = 180,
+}: {
+  series: LineSeries[];
+  labels: [string, string];
+  height?: number;
+}) {
+  const [w, onLayout] = useWidth();
+  const all = series.flatMap(sr => sr.values).concat(0);
+  const top = Math.max(...all);
+  const bot = Math.min(...all);
+  const n = Math.max(1, ...series.map(sr => sr.values.length));
+  const ph = height - 30;
+  const X = (i: number) => 4 + ((w - 8) * i) / Math.max(1, n - 1);
+  const Y = (v: number) => 8 + ((ph - 16) * (top - v)) / (top - bot || 1);
+  return (
+    <View style={{ height }} onLayout={onLayout}>
+      {w > 0 ? (
+        <Svg width={w} height={height}>
+          <Line
+            x1={0}
+            x2={w}
+            y1={Y(0)}
+            y2={Y(0)}
+            stroke={color.baseLine}
+            strokeDasharray="3 3"
+          />
+          {series.map(sr => (
+            <Path
+              key={sr.name}
+              d={linePath(
+                sr.values.map((_, i) => X(i)),
+                sr.values.map(Y),
+              )}
+              stroke={sr.color}
+              strokeWidth={sr.width ?? 1.5}
+              fill="none"
+            />
+          ))}
+          <SvgText x={4} y={12} fontSize={FONT} fill={color.ink3}>
+            {top.toFixed(1) + '%'}
+          </SvgText>
+          <SvgText x={4} y={ph - 4} fontSize={FONT} fill={color.ink3}>
+            {bot.toFixed(1) + '%'}
+          </SvgText>
+          <SvgText x={4} y={ph + 12} fontSize={FONT} fill={color.ink3}>
+            {labels[0]}
+          </SvgText>
+          <SvgText
+            x={w - 4}
+            y={ph + 12}
+            fontSize={FONT}
+            fill={color.ink3}
+            textAnchor="end"
+          >
+            {labels[1]}
+          </SvgText>
+          {series.map((sr, i) => (
+            <SvgText
+              key={sr.name}
+              x={4 + i * 92}
+              y={height - 2}
+              fontSize={FONT + 1}
+              fill={sr.color}
+            >
+              {'— ' + sr.name}
+            </SvgText>
+          ))}
+        </Svg>
+      ) : null}
+    </View>
+  );
+}

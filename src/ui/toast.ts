@@ -4,7 +4,7 @@
  */
 import { create } from 'zustand';
 
-export type ToastTone = 'info' | 'up' | 'sell' | 'warn' | 'bad';
+export type ToastTone = 'info' | 'up' | 'sell' | 'warn' | 'bad' | 'learn';
 
 export interface Toast {
   id: number;

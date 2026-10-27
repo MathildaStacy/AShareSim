@@ -175,7 +175,12 @@ export interface ValidateContext {
   available: Fen;
   sellable: number;
   fee: FeeProfile;
+  /** 风险警示股票：这一交易日已经委托买入的数量（已成交 + 未撤的），算 50 万股上限用。 */
+  stBoughtToday?: number;
 }
+
+/** 风险警示股票单日累计买入上限（股）。 */
+export const ST_DAILY_BUY_MAX = 500_000;
 
 /** 提交时的校验（TRADING_RULES.md §3）。价格笼子和涨跌停在报送交易所时再查一次，见 engine。 */
 export function validateOrder(
@@ -221,12 +226,13 @@ export function validateOrder(
         'kinds',
       );
     }
-    // 风险警示股票只能限价委托（沪市风险警示板规则；深市 ⚠️ 待核实，按同样处理，宁可保守）
-    if (sec.st) {
+    // 沪市风险警示股票只能限价委托（沪市交易规则第 4.4.9 条）。深市规则没有这条限制（第 3.3.3、3.3.5 条，
+    // 2026-10-27 核对），深市 ST 可以用市价委托
+    if (sec.st && sec.exchange === 'SH') {
       return fail(
         'block',
         '委托类型',
-        '风险警示（ST）股票只能用限价委托，不能用市价委托。',
+        '沪市风险警示（ST）股票只能用限价委托，不能用市价委托。',
         'kinds',
       );
     }
@@ -338,6 +344,21 @@ export function validateOrder(
       '单笔申报不能超过 ' + maxQty.toLocaleString('zh-CN') + ' ' + unit + '。',
       'unit',
     );
+  }
+
+  // 风险警示股票单日累计买入不超过 50 万股（沪市第 4.4.10 条、深市第 4.5.4 条），已成交和已申报未撤的都算
+  if (req.side === 'B' && sec.st) {
+    const before = ctx.stBoughtToday ?? 0;
+    if (before + q > ST_DAILY_BUY_MAX) {
+      return fail(
+        'block',
+        '风险警示股票买入上限',
+        '风险警示股票每天累计买入不能超过 50 万股（已成交和未撤的委托都算），这只今天已经委托买入 ' +
+          before.toLocaleString('zh-CN') +
+          ' 股。',
+        'st',
+      );
+    }
   }
 
   // 4. 涨跌停和价格笼子（当日要报送交易所的委托）

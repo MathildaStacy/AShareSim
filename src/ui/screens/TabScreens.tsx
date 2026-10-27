@@ -1,6 +1,6 @@
 /**
- * 交易、学习、我的。交易 Tab：账户概览、功能格、持仓（M2 第 3 步）；资金和设置的页面是第 4 步，
- * 「我的」按 PRODUCT_DESIGN §6.3 的顺序排入口；学习在 M3。
+ * 交易、我的。交易 Tab：账户概览、功能格、持仓（M2 第 3 步）；资金和设置的页面是第 4 步，
+ * 「我的」按 PRODUCT_DESIGN §6.3 的顺序排入口。学习 Tab 在 LearnScreens.tsx（M3）。
  */
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -312,40 +312,6 @@ export function TradeScreen() {
         <Note style={s.note}>
           除了入金是模拟的，下单规则、成交和费用都按真实规则计算。成交偏保守：涨停排队、同价排队都按估计的队列位置处理。
         </Note>
-      </ScrollView>
-      <AiFab />
-    </View>
-  );
-}
-
-const LEARN = [
-  ['路线图进度', '阶段 0 / 1 / 2 / 3 / 7 的练习和通关标准'],
-  ['规则课', 'T+1、涨跌停、集合竞价、价格笼子、交易费用等 11 课'],
-  ['费用计算器', '每一笔费用怎么算出来'],
-  ['集合竞价演示', '开盘价怎么按「成交量最大」产生'],
-  ['账户分析', '收益、波动、夏普、回撤……每个指标都有公式'],
-  ['数据中心 · 模拟执行', '本地行情库、周度调仓打卡'],
-];
-
-export function LearnScreen() {
-  useViewLog('learn', '查看 学习');
-  useAiContext('Learn', () => ({
-    name: '学习',
-    lines: ['学习模块在 M3 上线，现在只有入口'],
-  }));
-  return (
-    <View style={s.page}>
-      <NavBar title="学习" />
-      <ScrollView contentContainerStyle={s.pad}>
-        <Note tone="learn" style={s.note}>
-          学习模块在 M3
-          上线。个股详情页里的「本股规则卡」已经可以看每只证券现在适用的规则。
-        </Note>
-        <View style={s.card}>
-          {LEARN.map(([t, sub]) => (
-            <Entry key={t} title={t} sub={sub + '（M3）'} />
-          ))}
-        </View>
       </ScrollView>
       <AiFab />
     </View>

@@ -98,7 +98,7 @@ export function feeLines(
       },
       {
         label: '证管费',
-        formula: amt + ' × ' + ratePct(STATUTORY.reg),
+        formula: etf ? 'ETF 免收' : amt + ' × ' + ratePct(STATUTORY.reg),
         value: fill.fee.reg,
       },
     );
@@ -111,7 +111,7 @@ export function feeLines(
       },
       {
         label: '证管费',
-        formula: ratePct(STATUTORY.reg) + '，已含在佣金里',
+        formula: etf ? 'ETF 免收' : ratePct(STATUTORY.reg) + '，已含在佣金里',
         value: null,
       },
     );

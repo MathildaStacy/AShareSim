@@ -18,6 +18,7 @@ import {
   type RefreshStatus,
 } from '../sim/refresher';
 import { Simulator } from '../sim/simulator';
+import { syncLearn } from './learn';
 import { nativeTracker } from './tracker';
 
 export interface AppCore {
@@ -77,9 +78,13 @@ async function doBoot(): Promise<AppCore> {
   );
   const core: AppCore = { db, client, sim, refresher };
 
-  sim.subscribe(events =>
-    useApp.setState(s => ({ version: s.version + 1, lastEvents: events })),
-  );
+  sim.subscribe(events => {
+    useApp.setState(s => ({ version: s.version + 1, lastEvents: events }));
+    // 有成交时看看路线图的自动项（集合竞价买 ETF）是不是满足了
+    if (events.some(e => e.type === 'fill')) {
+      syncLearn(core).catch(() => undefined);
+    }
+  });
   refresher.onStatus(status =>
     useApp.setState(s => ({ status, tick: s.tick + 1 })),
   );

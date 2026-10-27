@@ -27,7 +27,11 @@ export interface BoardRule {
   /** 卖出：整数倍单位（科创板以 1 股递增，最少 200 股，余额不足时一次卖完）。 */
   sellMin: number;
   sellStep: number;
-  /** 单笔申报上限，null 表示暂不校验。 */
+  /**
+   * 单笔申报上限，null 表示暂不校验。沪深交易规则（2026 年修订）第 3.3.9 条：竞价交易单笔不超过 100 万股（份），
+   * 不分限价、市价；创业板限价 30 万股、市价 15 万股（深市第 3.3.9 条），科创板限价 10 万股、市价 5 万股（沪市第 6.7 条）。
+   * 2026-10-27 核对：以前写的「主板市价 50 万股」没有依据。
+   */
   maxLimitQty: number | null;
   maxMarketQty: number | null;
   cage: CageRule;
@@ -42,7 +46,7 @@ export interface CageRule {
 }
 
 /**
- * 各板块规则（TRADING_RULES.md §1、§3）。标 ⚠️ 的取值还没对照交易所原文确认，做成配置项方便修改。
+ * 各板块规则（TRADING_RULES.md §1、§3）。2026-10-27 对照沪深交易规则（2026 年修订）原文核对过单笔上限和价格笼子。
  */
 export const BOARD_RULES: Record<Board, BoardRule> = {
   main: {
@@ -54,7 +58,7 @@ export const BOARD_RULES: Record<Board, BoardRule> = {
     sellMin: 100,
     sellStep: 100,
     maxLimitQty: 1_000_000,
-    maxMarketQty: 500_000,
+    maxMarketQty: 1_000_000,
     cage: { enabled: true, pct: 2, ticks: 10 },
   },
   cyb: {
@@ -67,7 +71,7 @@ export const BOARD_RULES: Record<Board, BoardRule> = {
     sellStep: 100,
     maxLimitQty: 300_000,
     maxMarketQty: 150_000,
-    // ⚠️ 创业板是否也有「10 个最小价位」兜底，来源说法不一
+    // 深市第 3.3.16 条对股票统一规定 102% 与基准价上十个最小价位取高（2026-10-27 核对），创业板也有兜底
     cage: { enabled: true, pct: 2, ticks: 10 },
   },
   kcb: {
@@ -80,7 +84,7 @@ export const BOARD_RULES: Record<Board, BoardRule> = {
     sellStep: 1,
     maxLimitQty: 100_000,
     maxMarketQty: 50_000,
-    // 科创板只有 2%，没有 10 个价位的兜底
+    // 科创板只有 2%，没有 10 个价位的兜底（沪市第 6.8 条）
     cage: { enabled: true, pct: 2, ticks: 0 },
   },
   etf: {
@@ -91,10 +95,10 @@ export const BOARD_RULES: Record<Board, BoardRule> = {
     buyStep: 100,
     sellMin: 100,
     sellStep: 100,
-    // ⚠️ ETF 单笔上限待核实
-    maxLimitQty: null,
-    maxMarketQty: null,
-    // ⚠️ ETF 是否适用价格笼子待核实，暂不校验
+    // 单笔 100 万份（第 3.3.9 条，创业板、科创板的专项上限只管股票）
+    maxLimitQty: 1_000_000,
+    maxMarketQty: 1_000_000,
+    // 价格笼子只管股票（沪市第 3.3.14 条、深市第 3.3.16 条），ETF 只受涨跌幅限制（2026-10-27 核对）
     cage: { enabled: false, pct: 2, ticks: 10 },
   },
 };

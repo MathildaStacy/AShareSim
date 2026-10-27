@@ -6,9 +6,11 @@ import { beijingNow } from './clock';
 import { bonusUrl, parseBonus, type CorporateActionRow } from './eastmoney';
 import { parseSinaEtfRank, sinaEtfRankUrl } from './sina';
 import {
+  minuteKlineUrl,
   parseKline,
   parseMinute,
   parseMinuteDays,
+  parseMinuteKline,
   parseQuotes,
   parseRank,
   parseSearch,
@@ -20,6 +22,7 @@ import {
   type KBar,
   type KlinePeriod,
   type MinuteDay,
+  type MinuteKPeriod,
   type Quote,
   type RankBoard,
   type RankItem,
@@ -139,6 +142,34 @@ export class MarketClient {
       `https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param=${code},${period},,,${count},${adjust}`,
     );
     return parseKline(JSON.parse(text), code, period, type);
+  }
+
+  /**
+   * 某段日期的日 K（一次最多 2,000 根；数据练习取 2015 年至今要分两段取）。
+   * start / end 是 YYYY-MM-DD，end 为空表示到最新。
+   */
+  async klineRange(
+    code: string,
+    type: string,
+    start: string,
+    end: string,
+    adjust: 'qfq' | '' = 'qfq',
+  ): Promise<KBar[]> {
+    const text = await this.get(
+      `https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param=${code},day,${start},${end},2000,${adjust}`,
+    );
+    return parseKline(JSON.parse(text), code, 'day', type);
+  }
+
+  /** 分钟 K 线（15 / 30 / 60 分钟，不复权）。 */
+  async minuteKline(
+    code: string,
+    type: string,
+    period: MinuteKPeriod,
+    count: number,
+  ): Promise<KBar[]> {
+    const text = await this.get(minuteKlineUrl(code, period, count));
+    return parseMinuteKline(JSON.parse(text), code, period, type);
   }
 
   async search(q: string): Promise<SearchHit[]> {

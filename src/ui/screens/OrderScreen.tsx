@@ -53,6 +53,7 @@ import {
   toRequest,
   type OrderForm,
 } from '../../sim/orderForm';
+import { lessonById } from '../../learn/lessons';
 import { feeLabel, feeNote } from '../../sim/feeForm';
 import { BOARD_NAME } from '../../sim/ruleCard';
 import { ConfirmDialog, type DialogRow } from '../components/Dialog';
@@ -942,10 +943,18 @@ export function OrderScreen({ route }: RootScreenProps<'Order'>) {
         cancelTitle="关闭"
       >
         <Text style={s.blockedText}>{blocked?.msg}</Text>
-        {blocked?.lesson ? (
-          <Note tone="learn" style={s.dlgNote}>
-            相关规则课在 M3 上线（学习 → 规则课）。
-          </Note>
+        {blocked?.lesson && lessonById(blocked.lesson) ? (
+          <View style={s.dlgNote}>
+            <Button
+              title={'看规则课：' + lessonById(blocked.lesson)!.title}
+              tone="learn"
+              small
+              onPress={() => {
+                setConfirm(null);
+                nav.navigate('Lesson', { id: blocked.lesson! });
+              }}
+            />
+          </View>
         ) : null}
       </ConfirmDialog>
       <ConfirmDialog

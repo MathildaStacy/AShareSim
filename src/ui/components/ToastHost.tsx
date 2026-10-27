@@ -13,6 +13,7 @@ const BAR: Record<ToastTone, string> = {
   sell: color.sell,
   warn: color.warn,
   bad: color.up,
+  learn: color.learn,
 };
 
 export function ToastHost() {

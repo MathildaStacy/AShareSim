@@ -254,6 +254,7 @@ export type KlinePeriod = 'day' | 'week' | 'month';
 
 /** 一根 K 线：价格厘，量股。 */
 export interface KBar {
+  /** 日 / 周 / 月 K 是 YYYY-MM-DD；分钟 K 是「YYYY-MM-DD HH:MM」（这根的结束时间）。 */
   date: DateStr;
   open: Li;
   close: Li;
@@ -287,6 +288,75 @@ export function parseKline(
     }
     out.push({
       date,
+      open,
+      close,
+      high,
+      low,
+      volume: Math.round((num(v) ?? 0) * unit),
+    });
+  }
+  return out;
+}
+
+/** 分钟 K 线的周期。最细到 15 分钟（2026-10-27 决定）。 */
+export type MinuteKPeriod = 'm15' | 'm30' | 'm60';
+
+/**
+ * 分钟 K 线接口（`ifzq.gtimg.cn/appstock/app/kline/mkline`，web.ifzq 会 301 到这里）。一次最多 800 根，
+ * 15 分钟线每天 16 根，约 50 个交易日。只有不复权价。
+ */
+export const minuteKlineUrl = (
+  code: string,
+  period: MinuteKPeriod,
+  count: number,
+) =>
+  `https://ifzq.gtimg.cn/appstock/app/kline/mkline?param=${code},${period},,${count}`;
+
+/**
+ * 解析分钟 K 线。每行 [YYYYMMDDHHMM, 开, 收, 高, 低, 量, {}, 换手率]，时间是这根 K 线的结束时间
+ * （第一根 9:45 含开盘集合竞价）。量的单位和日 K 一样（科创板是股，其他是手），2026-10-27 核对过：
+ * 一天 16 根 15 分钟线的量加起来等于日 K 的量，第一根的开盘价等于日 K 开盘价。
+ * date 写成「YYYY-MM-DD HH:MM」，图上的标签和 key 直接用它。
+ */
+export function parseMinuteKline(
+  json: unknown,
+  code: string,
+  period: MinuteKPeriod,
+  type: string,
+): KBar[] {
+  const rows: unknown = (json as any)?.data?.[code]?.[period];
+  if (!Array.isArray(rows)) {
+    return [];
+  }
+  const unit = volumeUnit(type);
+  const out: KBar[] = [];
+  for (const r of rows) {
+    const [ts, o, c, h, l, v] = r as string[];
+    const open = toLi(o);
+    const close = toLi(c);
+    const high = toLi(h);
+    const low = toLi(l);
+    if (
+      typeof ts !== 'string' ||
+      ts.length !== 12 ||
+      open == null ||
+      close == null ||
+      high == null ||
+      low == null
+    ) {
+      continue;
+    }
+    out.push({
+      date:
+        ts.slice(0, 4) +
+        '-' +
+        ts.slice(4, 6) +
+        '-' +
+        ts.slice(6, 8) +
+        ' ' +
+        ts.slice(8, 10) +
+        ':' +
+        ts.slice(10, 12),
       open,
       close,
       high,

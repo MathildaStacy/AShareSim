@@ -222,10 +222,69 @@ describe('下单校验（TRADING_RULES.md §3）', () => {
     expect(validateOrder(sz, szCtx(1_100_511)).ok).toBe(true);
     expect(validateOrder(sz, szCtx(1_100_510)).ok).toBe(false);
   });
-  test('ST 股票不能用市价委托', () => {
+  test('沪市 ST 只能限价委托，深市 ST 可以用市价委托（2026-10-27 核对规则原文）', () => {
+    // 深市规则没有限制风险警示股票的委托方式
     expect(
-      validateOrder(buy('sz002024', null, 100, 'cbest'), ctx('sz002024')),
-    ).toMatchObject({ ok: false, rule: '委托类型' });
+      validateOrder(buy('sz002024', null, 100, 'cbest'), ctx('sz002024')).ok,
+    ).toBe(true);
+    // 沪市交易规则第 4.4.9 条：风险警示股票应当采用限价委托
+    const shSt = {
+      code: 'sh600654',
+      name: 'ST中安',
+      exchange: 'SH' as const,
+      board: 'main' as const,
+      st: true,
+    };
+    expect(
+      validateOrder(
+        { ...buy('sh600654', null, 100, 'b5_ioc'), protect: li(10.2) },
+        ctx('sh600036', { sec: shSt }),
+      ),
+    ).toMatchObject({ ok: false, rule: '委托类型', lesson: 'kinds' });
+  });
+  test('风险警示股票单日累计买入不超过 50 万股', () => {
+    const c = (before: number) =>
+      ctx('sz002024', { stBoughtToday: before, available: 1e12 });
+    expect(validateOrder(buy('sz002024', 10, 500_000), c(0)).ok).toBe(true);
+    expect(validateOrder(buy('sz002024', 10, 100_000), c(400_000)).ok).toBe(
+      true,
+    );
+    expect(validateOrder(buy('sz002024', 10, 100), c(500_000))).toMatchObject({
+      ok: false,
+      rule: '风险警示股票买入上限',
+      lesson: 'st',
+    });
+    // 卖出和非 ST 不受限制
+    expect(
+      validateOrder(
+        buy('sz000001', 10, 600_000),
+        ctx('sz000001', { available: 1e12 }),
+      ).ok,
+    ).toBe(true);
+  });
+  test('单笔上限：主板、ETF 100 万，不分限价市价；创业板 30 / 15 万；科创板 10 / 5 万', () => {
+    const big = { available: 1e13 };
+    expect(
+      validateOrder(
+        buy('sz000001', null, 1_000_000, 'cbest'),
+        ctx('sz000001', big),
+      ).ok,
+    ).toBe(true);
+    expect(
+      validateOrder(buy('sz000001', 10, 1_000_100), ctx('sz000001', big)),
+    ).toMatchObject({ ok: false, rule: '单笔上限' });
+    expect(
+      validateOrder(buy('sz159915', 10, 1_000_100), ctx('sz159915', big)),
+    ).toMatchObject({ ok: false, rule: '单笔上限' });
+    expect(
+      validateOrder(
+        buy('sz300750', null, 150_100, 'cbest'),
+        ctx('sz300750', big),
+      ),
+    ).toMatchObject({ ok: false, rule: '单笔上限' });
+    expect(
+      validateOrder(buy('sz300750', 10, 300_000), ctx('sz300750', big)).ok,
+    ).toBe(true);
   });
   test('盘后固定价格交易的申报时间：沪市 9:30 起、深市 9:15 起', () => {
     const at = (code: string, t: number) =>

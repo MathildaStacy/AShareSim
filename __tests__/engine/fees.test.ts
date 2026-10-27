@@ -58,6 +58,12 @@ describe('费用（TRADING_RULES.md §4）', () => {
     expect(f.handling).toBe(341); // 10 万 × 0.00341%
     expect(f.reg).toBe(200);
   });
+  test('规费另收时 ETF：经手费 0.004%，不收证管费（2026-10-27 核对收费表）', () => {
+    const f = calcFee(etf, 'S', 10_000_000, { ...P, regsSeparate: true });
+    expect(f.handling).toBe(400); // 10 万 × 0.004%
+    expect(f.reg).toBe(0);
+    expect(f.stamp + f.transfer).toBe(0);
+  });
   test('同一委托分两笔成交，最低 5 元只收一次', () => {
     const first = fillFee(stock, 'B', 0, 1_000_000, P);
     const second = fillFee(stock, 'B', 1_000_000, 1_000_000, P);

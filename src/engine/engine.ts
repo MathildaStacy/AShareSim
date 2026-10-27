@@ -454,6 +454,16 @@ export class Engine {
       available: available(s),
       sellable: h.sellable,
       fee: s.fee,
+      stBoughtToday:
+        sec.st && req.side === 'B'
+          ? stBuyQty(
+              s.orders,
+              req.code,
+              route === 'nextDay'
+                ? this.deps.calendar.next(now.date)
+                : now.date,
+            )
+          : 0,
     });
     if ((v.ok || v.level !== 'block') && route === 'continuous' && !snap) {
       v = {
@@ -1120,4 +1130,19 @@ function queueNote(o: Order, sec: Security): string {
         (sec.board === 'etf' ? ' 份' : ' 股')
       : '')
   );
+}
+
+/**
+ * 某只证券在某个交易日已经委托买入的数量：未结束的委托按委托数量算，已结束的按成交数量算（废单、全撤的是 0）。
+ * 风险警示股票单日买入上限用（TRADING_RULES.md §1）。
+ */
+export function stBuyQty(orders: Order[], code: string, day: DateStr): number {
+  let n = 0;
+  for (const o of orders) {
+    if (o.code !== code || o.side !== 'B' || (o.sendDate ?? o.date) !== day) {
+      continue;
+    }
+    n += isLive(o) ? o.qty : o.filled;
+  }
+  return n;
 }

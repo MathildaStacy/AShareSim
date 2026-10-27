@@ -552,3 +552,91 @@ export async function pruneActivity(db: Db, oldestTs: string): Promise<void> {
     [oldestTs],
   );
 }
+
+// ---------- 学习进度（M3） ----------
+
+export interface LearnCheck {
+  id: string;
+  auto: boolean;
+  doneAt: string;
+  basis: string;
+}
+
+export async function learnChecks(db: Db): Promise<LearnCheck[]> {
+  const rows = await db.all<{
+    id: string;
+    auto: number;
+    done_at: string;
+    basis: string;
+  }>('SELECT id, auto, done_at, basis FROM learn_check');
+  return rows.map(r => ({
+    id: r.id,
+    auto: Number(r.auto) === 1,
+    doneAt: r.done_at,
+    basis: r.basis,
+  }));
+}
+
+/** 记一个完成项；已经有了就不改（第一次完成的日期和依据保留）。返回是否新记的。 */
+export async function addLearnCheck(db: Db, c: LearnCheck): Promise<boolean> {
+  const r = await db.run(
+    'INSERT OR IGNORE INTO learn_check (id, auto, done_at, basis) VALUES (?, ?, ?, ?)',
+    [c.id, c.auto ? 1 : 0, c.doneAt, c.basis],
+  );
+  return r.changes > 0;
+}
+
+/** 取消一个手动勾选的项（自动项不能手动取消）。 */
+export async function removeLearnCheck(db: Db, id: string): Promise<void> {
+  await db.run('DELETE FROM learn_check WHERE id = ? AND auto = 0', [id]);
+}
+
+export interface QuizAnswer {
+  lesson: string;
+  q: number;
+  choice: number;
+  correct: boolean;
+  answeredAt: string;
+}
+
+export async function quizAnswers(db: Db): Promise<QuizAnswer[]> {
+  const rows = await db.all<{
+    lesson: string;
+    q: number;
+    choice: number;
+    correct: number;
+    answered_at: string;
+  }>('SELECT lesson, q, choice, correct, answered_at FROM quiz_answer');
+  return rows.map(r => ({
+    lesson: r.lesson,
+    q: Number(r.q),
+    choice: Number(r.choice),
+    correct: Number(r.correct) === 1,
+    answeredAt: r.answered_at,
+  }));
+}
+
+export async function saveQuizAnswer(db: Db, a: QuizAnswer): Promise<void> {
+  await db.run(
+    `INSERT INTO quiz_answer (lesson, q, choice, correct, answered_at) VALUES (?, ?, ?, ?, ?)
+     ON CONFLICT(lesson, q) DO UPDATE SET choice = excluded.choice, correct = excluded.correct,
+       answered_at = excluded.answered_at`,
+    [a.lesson, a.q, a.choice, a.correct ? 1 : 0, a.answeredAt],
+  );
+}
+
+export async function clearQuiz(db: Db, lesson: string): Promise<void> {
+  await db.run('DELETE FROM quiz_answer WHERE lesson = ?', [lesson]);
+}
+
+/** 某个页面最近一次被浏览的时间（判断「成交之后有没有打开过交割单」用）。 */
+export async function lastViewOf(
+  db: Db,
+  page: string,
+): Promise<string | null> {
+  const row = await db.get<{ ts: string }>(
+    "SELECT ts FROM activity_log WHERE kind = 'view' AND ref = ? ORDER BY id DESC LIMIT 1",
+    [JSON.stringify({ page })],
+  );
+  return row?.ts ?? null;
+}

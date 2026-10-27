@@ -83,12 +83,12 @@ describe('本股规则卡', () => {
     expect(c['价格笼子'].v).toContain('卖出价 ≥ 0.99');
   });
 
-  test('创业板 ETF：涨跌幅以接口的涨跌停价为准（±20%），价格笼子待核实，T+0 品种按 T+1', () => {
+  test('创业板 ETF：涨跌幅以接口的涨跌停价为准（±20%），没有价格笼子，T+0 品种按 T+1', () => {
     const c = card('sz159915');
     expect(c['板块'].v).toContain('深市ETF，涨跌幅 ±20%');
     expect(c['今日价格区间'].v).toBe('跌停 2.162 ～ 涨停 3.242');
-    expect(c['价格笼子'].v).toBe('⚠️ ETF 是否适用价格笼子待核实，暂不校验');
-    expect(c['单笔上限'].v).toBe('⚠️ 待核实，暂不校验');
+    expect(c['价格笼子'].v).toBe('ETF 不适用价格笼子，只受涨跌幅限制');
+    expect(c['单笔上限'].v).toBe('100 万份，限价市价一样');
     expect(c['T+1'].v).toContain('实盘是 T+0');
     expect(c['交易费用'].v).toContain('佣金万 0.5');
     expect(c['交易费用'].v).toContain('ETF 免印花税');

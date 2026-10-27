@@ -46,6 +46,17 @@ export type RootStackParamList = {
   PowerGuide: undefined;
   Accounts: undefined;
   ArchivedAccount: { id: number };
+  // M3 学习
+  Stage: { no: number };
+  Lessons: undefined;
+  Lesson: { id: string };
+  /** code：从个股页、费率设置带过来的证券。 */
+  FeeCalc: { code?: string } | undefined;
+  Auction: undefined;
+  Analysis: undefined;
+  DataLab: undefined;
+  /** M5 才做的功能，先放说明页。 */
+  Coming: { key: 'datacenter' | 'exec' };
 };
 
 export type RootScreenProps<K extends keyof RootStackParamList> =
