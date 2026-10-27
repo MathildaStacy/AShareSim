@@ -1,0 +1,967 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AShareSim · AI 助手重新设计（可交互原型）</title>
+<style>
+:root{
+  color-scheme: light;
+  --up:#E5322D; --up-bg:#FDECEC; --down:#0E9F5B; --sell:#2468E0;
+  --learn:#0F7B76; --learn-bg:#E5F3F2; --learn-line:#BFE0DD;
+  --warn:#E07800; --warn-bg:#FFF3E0; --warn-ink:#8A4B00;
+  --th:#7C3AED; --th-bg:#F1EBFE; --se:#0369A1; --se-bg:#E3F1FA;
+  --ink:#1F2329; --ink2:#5C626B; --ink3:#9AA0A8; --line:#ECEDEF; --bg:#F3F4F6;
+  --num:"DIN Alternate","Roboto","Helvetica Neue",Arial,sans-serif;
+  --zh:"PingFang SC","HarmonyOS Sans SC","Noto Sans SC","Microsoft YaHei",system-ui,sans-serif;
+  --mono:ui-monospace,Menlo,Consolas,monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{font-family:var(--zh);color:var(--ink);background:#DADDE2;font-size:14px;line-height:1.45;-webkit-font-smoothing:antialiased}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+input,textarea{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--sell);outline-offset:1px}
+svg{display:block;flex:none}
+.n{font-family:var(--num);font-variant-numeric:tabular-nums}
+.mono{font-family:var(--mono);font-size:11.5px}
+.muted{color:var(--ink3)}
+.stage{display:flex;gap:28px;justify-content:center;align-items:flex-start;padding:24px 16px;min-height:100%}
+.phone{width:390px;height:844px;flex:none;background:var(--bg);border-radius:36px;box-shadow:0 0 0 10px #15171A,0 18px 50px rgba(0,0,0,.35);overflow:hidden;display:flex;flex-direction:column;position:sticky;top:24px}
+.sbar{height:30px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:0 22px;font-size:12px;background:#fff;font-weight:600}
+#app{flex:1;display:flex;flex-direction:column;min-height:0;position:relative}
+.nav{height:46px;flex:none;display:flex;align-items:center;background:#fff;border-bottom:1px solid var(--line);padding:0 6px}
+.nav h1{font-size:16px;font-weight:600;flex:1;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.2}
+.nav .sub{display:block;font-size:11px;color:var(--ink3);font-weight:400}
+.nav .ib{width:40px;height:40px;display:grid;place-items:center;border-radius:20px;color:var(--ink2);font-size:20px}
+.nav .ib:active{background:var(--bg)}
+.nav .tx{padding:0 10px;height:40px;font-size:14px;color:var(--ink2)}
+.nav .tx.pri{color:var(--learn);font-weight:600}
+.scroll{flex:1;overflow-y:auto;min-height:0;scrollbar-width:none}
+.scroll::-webkit-scrollbar{display:none}
+.ctx{flex:none;display:flex;align-items:center;gap:6px;padding:5px 12px;font-size:12px;color:var(--ink2);background:#FAFAFB;border-bottom:1px solid var(--line);white-space:nowrap}
+.ctx .c{background:var(--learn-bg);color:var(--learn);border-radius:10px;padding:1px 8px;font-size:12px}
+.ctx .c.off{background:var(--bg);color:var(--ink3);text-decoration:line-through}
+.ctx .c2{background:var(--bg);color:var(--ink2);border-radius:10px;padding:1px 8px;font-size:12px}
+.msgs{padding:12px 12px 16px;display:flex;flex-direction:column;gap:10px}
+.umsg{align-self:flex-end;max-width:82%;background:#2B2F36;color:#fff;padding:8px 12px;border-radius:14px 14px 4px 14px;white-space:pre-wrap;word-break:break-word;line-height:1.6}
+.uctx{align-self:flex-end;margin-top:-6px;font-size:11px;color:var(--ink3)}
+.amsg{align-self:stretch;background:#fff;border-radius:12px;padding:10px 12px}
+.ahead{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--ink3);margin-bottom:4px}
+.ahead b{color:var(--ink2);font-weight:600}
+.pdot{width:18px;height:18px;border-radius:5px;display:inline-grid;place-items:center;color:#fff;font-size:10px;font-weight:700;flex:none;font-style:normal}
+.pdot.sm{width:16px;height:16px;font-size:9px;border-radius:4px}
+.pdot.lg{width:34px;height:34px;font-size:15px;border-radius:9px}
+details.fold{margin:4px 0 6px;font-size:12.5px}
+details.fold summary{color:var(--ink2);cursor:pointer;list-style:none;display:flex;align-items:center;gap:4px}
+details.fold summary::-webkit-details-marker{display:none}
+details.fold summary::after{content:"›";color:var(--ink3);font-size:15px;line-height:1;transition:transform .15s}
+details.fold[open] summary::after{transform:rotate(90deg)}
+.fb{margin-top:5px;background:#F7F8FA;border-left:2px solid #D5D9DE;padding:6px 9px;color:var(--ink2);line-height:1.65;white-space:pre-wrap}
+.fb.th{border-color:#D9C9FB}
+.srow{display:flex;gap:6px;padding:2px 0;white-space:normal}
+.srow .q{color:var(--se)}
+.srow i{font-style:normal;color:var(--ink3);flex:none}
+.tchips{display:flex;flex-wrap:wrap;gap:5px;margin:2px 0 6px}
+.tchip{font-size:11.5px;padding:1px 8px;border-radius:10px;background:var(--learn-bg);color:var(--learn)}
+.abody{font-size:14px;line-height:1.75;white-space:pre-wrap;word-break:break-word}
+.cite{display:inline-block;min-width:16px;height:16px;line-height:16px;text-align:center;font-size:10px;border-radius:4px;background:var(--se-bg);color:var(--se);margin:0 1px;vertical-align:2px;cursor:pointer;font-family:var(--num)}
+.srcs{margin-top:8px;border-top:1px dashed var(--line);padding-top:6px;display:flex;flex-direction:column;gap:3px}
+.srcs a{display:flex;gap:6px;font-size:12px;color:var(--ink2);text-decoration:none;align-items:center}
+.srcs a span:last-child{color:var(--ink3);margin-left:auto;flex:none;font-size:11px}
+.srcs a span:nth-child(2){overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.usage{margin-top:8px;font-size:10.5px;color:var(--ink3);line-height:1.5;font-family:var(--num);font-variant-numeric:tabular-nums}
+.offer{margin-top:8px;display:flex;gap:6px;flex-wrap:wrap}
+.offer button{border:1px solid var(--se);color:var(--se);border-radius:14px;padding:3px 10px;font-size:12px}
+.live{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--ink2);padding:2px 0}
+.spin{width:14px;height:14px;border:2px solid #D5D9DE;border-top-color:var(--learn);border-radius:50%;animation:sp .8s linear infinite;flex:none}
+@keyframes sp{to{transform:rotate(360deg)}}
+.divl{align-self:stretch;text-align:center;font-size:11px;color:var(--ink3);position:relative;margin:2px 0}
+.divl::before{content:"";position:absolute;left:0;right:0;top:50%;border-top:1px dashed #D5D9DE}
+.divl span{position:relative;background:var(--bg);padding:0 8px}
+.welcome{background:#fff;border-radius:12px;padding:14px;font-size:13px;color:var(--ink2);line-height:1.7}
+.welcome b{display:block;color:var(--ink);font-size:15px;margin-bottom:4px}
+</style>
+<style>
+.qchips{flex:none;display:flex;gap:6px;overflow-x:auto;padding:6px 10px 0;scrollbar-width:none}
+.qchips button{flex:none;border:1px solid var(--line);border-radius:14px;padding:3px 10px;font-size:12px;color:var(--ink2);background:#fff}
+.cwarn{margin:6px 10px 0;padding:6px 10px;border-radius:8px;background:var(--warn-bg);color:var(--warn-ink);font-size:12px;display:flex;gap:8px;align-items:center;line-height:1.5}
+.cwarn button{flex:none;margin-left:auto;color:var(--warn-ink);font-weight:600;font-size:12px}
+.cbox{flex:none;margin:6px 10px 2px;background:#fff;border:1px solid #DDE0E4;border-radius:16px;padding:8px 8px 7px 12px}
+.cbox textarea{width:100%;border:0;outline:0;resize:none;font-size:14.5px;line-height:1.5;max-height:110px;background:transparent;display:block}
+.ctools{display:flex;align-items:center;gap:6px;margin-top:6px}
+.tb{height:28px;padding:0 9px;border-radius:14px;border:1px solid var(--line);font-size:12px;display:inline-flex;align-items:center;gap:4px;color:var(--ink2);white-space:nowrap;background:#fff}
+.tb.model{max-width:142px;color:var(--ink);font-weight:500;padding-left:6px}
+.tb.model span{overflow:hidden;text-overflow:ellipsis}
+.tb.se.on{background:var(--se-bg);border-color:#B9DDF2;color:var(--se)}
+.tb.th.on{background:var(--th-bg);border-color:#D9C9FB;color:var(--th)}
+.tb.dis{color:#B8BDC4;border-style:dashed}
+.send{margin-left:auto;width:32px;height:32px;border-radius:16px;background:var(--ink);color:#fff;display:grid;place-items:center;flex:none}
+.send[disabled]{background:#D5D9DE;cursor:default}
+.send.stop{background:var(--up)}
+.est{flex:none;font-size:11px;color:var(--ink3);padding:2px 18px 8px;font-family:var(--num)}
+.sec{background:#fff;margin-bottom:8px}
+.sec-h{display:flex;align-items:center;justify-content:space-between;padding:12px 14px 6px;font-weight:600;font-size:14px}
+.sec-h small{font-weight:400;color:var(--ink3);font-size:12px}
+.sec-h button{font-weight:400;font-size:12px;color:var(--learn)}
+.row{display:flex;align-items:center;padding:11px 14px;border-bottom:1px solid var(--line);gap:10px}
+.row:last-child{border-bottom:0}
+.row.tap{cursor:pointer}.row.tap:active{background:#F7F8FA}
+.grow{flex:1;min-width:0}
+.chev::after{content:"›";color:var(--ink3);font-size:20px;line-height:1}
+.pcard{padding:12px 14px;border-bottom:1px solid var(--line);display:flex;gap:10px;cursor:pointer}
+.pcard:active{background:#F7F8FA}
+.pcard .t{display:flex;align-items:center;gap:6px;font-weight:600}
+.pcard .u{font-family:var(--mono);font-size:11px;color:var(--ink3);margin-top:1px;word-break:break-all}
+.pcard .m{font-size:12px;color:var(--ink2);margin-top:4px}
+.ptag{font-size:10px;font-weight:400;color:var(--ink2);border:1px solid var(--line);border-radius:3px;padding:0 4px;line-height:15px}
+.addbtn{display:flex;align-items:center;justify-content:center;gap:6px;height:46px;color:var(--learn);font-weight:500;width:100%}
+.note{font-size:12px;color:var(--ink2);background:var(--bg);border-radius:8px;padding:8px 10px;line-height:1.6}
+.note.warn{background:var(--warn-bg);color:var(--warn-ink)}
+.note.ok{background:#E6F6EE;color:#0B6B3E}
+.note.err{background:var(--up-bg);color:#A3201C}
+.pgrid{display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:4px 12px 12px}
+.ptile{background:#fff;border:1px solid var(--line);border-radius:10px;padding:10px;display:flex;gap:9px;align-items:center;text-align:left}
+.ptile:active{background:#F7F8FA}
+.ptile b{display:block;font-size:14px}
+.ptile small{display:block;font-size:11px;color:var(--ink3);line-height:1.4}
+.fld{padding:10px 14px;border-bottom:1px solid var(--line)}
+.fld:last-child{border-bottom:0}
+.fld label{display:block;font-size:12px;color:var(--ink3);margin-bottom:5px}
+.inp{width:100%;height:36px;border:1px solid #DDE0E4;border-radius:7px;padding:0 10px;outline:0;background:#fff;font-size:14px}
+.inp:focus{border-color:var(--learn)}
+.inp.mono{font-size:12.5px}
+.iwrap{display:flex;gap:6px;align-items:center}
+.iwrap .inp{flex:1}
+.eye{width:36px;height:36px;border:1px solid #DDE0E4;border-radius:7px;display:grid;place-items:center;color:var(--ink2)}
+.hint{font-size:11px;color:var(--ink3);margin-top:4px;line-height:1.5;word-break:break-all}
+.seg{display:flex;border:1px solid var(--line);border-radius:7px;overflow:hidden;width:max-content;max-width:100%}
+.seg button{padding:5px 10px;font-size:12px;color:var(--ink2);background:#fff;white-space:nowrap}
+.seg button+button{border-left:1px solid var(--line)}
+.seg button.on{background:var(--learn);color:#fff}
+.seg button[disabled]{color:#C3C7CD;cursor:default}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;height:36px;padding:0 14px;border-radius:7px;background:var(--bg);font-weight:500;font-size:13px;white-space:nowrap}
+.btn.pri{background:var(--learn);color:#fff}
+.btn.ghost{background:#fff;border:1px solid var(--line)}
+.btn.danger{color:var(--up);background:#fff;border:1px solid #F5C6C4}
+.btn.block{display:flex;width:100%}
+.btn[disabled]{opacity:.5;cursor:default}
+.fetchbar{display:flex;gap:8px;align-items:center;padding:4px 14px 10px}
+.fetchbar .s{font-size:12px;color:var(--ink2);flex:1;min-width:0;line-height:1.5}
+.mtool{display:flex;gap:8px;align-items:center;padding:0 14px 8px}
+.mtool .inp{height:32px;font-size:13px}
+.lnk{font-size:12px;color:var(--learn);white-space:nowrap}
+.emrow{display:flex;align-items:center;gap:10px;padding:9px 14px;border-top:1px solid var(--line)}
+.emrow input[type=checkbox]{width:18px;height:18px;accent-color:var(--learn);flex:none}
+.emrow .nm{font-size:13.5px;font-weight:500}
+.emrow .id{font-family:var(--mono);font-size:11px;color:var(--ink3)}
+.emrow.off .nm{color:var(--ink2);font-weight:400}
+.capb{flex:none;font-size:11.5px;color:var(--ink2);border:1px solid var(--line);border-radius:12px;padding:2px 8px}
+.bds{display:flex;flex-wrap:wrap;gap:4px;margin-top:3px}
+.bd{font-style:normal;font-size:10.5px;padding:0 5px;border-radius:3px;line-height:16px;white-space:nowrap}
+.bd.th{background:var(--th-bg);color:var(--th)}
+.bd.se{background:var(--se-bg);color:var(--se)}
+.bd.wa{background:var(--warn-bg);color:var(--warn-ink)}
+.bd.unk{background:var(--warn-bg);color:var(--warn-ink)}
+.bd.plain{background:var(--bg);color:var(--ink2)}
+</style>
+<style>
+.mask{position:absolute;inset:0;background:rgba(0,0,0,.42);z-index:20;display:flex;align-items:flex-end;animation:fi .15s}
+.mask.center{align-items:center;padding:28px}
+@keyframes fi{from{opacity:0}}
+.sheet{background:#fff;border-radius:16px 16px 0 0;width:100%;max-height:86%;display:flex;flex-direction:column;animation:su .2s ease-out}
+@keyframes su{from{transform:translateY(40px)}}
+.sh-h{display:flex;align-items:center;justify-content:space-between;padding:14px 16px 8px}
+.sh-h b{font-size:16px}
+.sh-h button{font-size:13px;color:var(--learn)}
+.sh-b{overflow-y:auto;min-height:0;flex:1;scrollbar-width:none}
+.sh-f{padding:8px 16px 14px;font-size:11.5px;color:var(--ink3);border-top:1px solid var(--line);line-height:1.5}
+.sh-s{padding:0 14px 8px}
+.pfil{display:flex;gap:6px;overflow-x:auto;padding:0 14px 8px;scrollbar-width:none}
+.pfil button{flex:none;font-size:12px;padding:3px 10px;border-radius:13px;background:var(--bg);color:var(--ink2)}
+.pfil button.on{background:var(--ink);color:#fff}
+.psec{display:flex;align-items:center;gap:6px;padding:10px 16px 4px;font-size:12px;color:var(--ink3);font-weight:500}
+.mrow{display:flex;align-items:center;gap:10px;padding:9px 16px;cursor:pointer}
+.mrow:active,.mrow.cur{background:#F5FAF9}
+.mrow .nm{font-size:14px;font-weight:500}
+.mrow .id{font-family:var(--mono);font-size:11px;color:var(--ink3)}
+.mrow .ck{color:var(--learn);font-size:16px;flex:none;width:18px}
+.erow{display:flex;gap:12px;align-items:flex-start;padding:11px 16px;cursor:pointer;border-top:1px solid var(--line)}
+.erow:first-child{border-top:0}
+.erow .rd{width:18px;height:18px;border-radius:9px;border:2px solid #C9CDD2;flex:none;margin-top:2px}
+.erow.on .rd{border:5px solid var(--th)}
+.erow b{font-size:14px;font-weight:500}
+.erow small{display:block;font-size:12px;color:var(--ink3);line-height:1.5}
+.erow.dis{cursor:default}
+.erow.dis b,.erow.dis small{color:#C3C7CD}
+.dlg{background:#fff;border-radius:12px;width:100%;overflow:hidden}
+.dlg .dh{padding:16px 16px 4px;font-weight:600;font-size:16px;text-align:center}
+.dlg .db{padding:6px 18px 14px;font-size:13.5px;color:var(--ink2);line-height:1.6}
+.dlg .df{display:flex;border-top:1px solid var(--line)}
+.dlg .df button{flex:1;height:46px;font-size:15px}
+.dlg .df button+button{border-left:1px solid var(--line)}
+.dlg .df .pri{color:var(--up);font-weight:600}
+.caprow{padding:10px 16px;border-top:1px solid var(--line)}
+.caprow label{display:block;font-size:12px;color:var(--ink3);margin-bottom:6px}
+#toasts{position:absolute;left:0;right:0;top:84px;display:flex;flex-direction:column;align-items:center;gap:6px;z-index:40;pointer-events:none}
+.toast{background:rgba(31,35,41,.92);color:#fff;padding:8px 14px;border-radius:8px;font-size:13px;max-width:330px;animation:fi .18s;line-height:1.5}
+.side{width:440px;flex:none;background:#fff;border-radius:14px;padding:18px 20px 22px;font-size:13px;line-height:1.7;color:var(--ink2)}
+.side h2{font-size:18px;color:var(--ink);margin-bottom:2px}
+.side h3{font-size:14px;color:var(--ink);margin:16px 0 4px}
+.side p,.side li{margin:3px 0}
+.side ol,.side ul{padding-left:18px}
+.side b{color:var(--ink)}
+.side code{font-family:var(--mono);font-size:11.5px;background:var(--bg);padding:0 4px;border-radius:3px}
+.side table{width:100%;border-collapse:collapse;font-size:12px;margin:4px 0}
+.side th,.side td{text-align:left;padding:4px 6px;border-bottom:1px solid var(--line);vertical-align:top}
+.side th{color:var(--ink3);font-weight:400}
+.demo{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+.demo button{border:1px solid var(--line);border-radius:6px;padding:4px 10px;font-size:12px;color:var(--ink)}
+.demo button:hover{border-color:var(--learn);color:var(--learn)}
+@media (max-width:900px){.stage{flex-direction:column;align-items:center}.phone{position:relative;top:0}.side{width:390px}}
+</style>
+</head>
+<body>
+<div class="stage">
+  <div class="phone">
+    <div class="sbar"><span class="n">10:36</span><span style="font-weight:500;color:var(--ink2)">5G ▮▮▮</span></div>
+    <div id="app"></div>
+    <div id="toasts"></div>
+  </div>
+  <div class="side">
+    <h2>AI 助手 v0.4 重新设计</h2>
+    <p class="muted">左边是可以直接点的手机原型。回答是本地模板，不联网；「获取模型列表」返回的是模拟数据，模型名只作演示。</p>
+
+    <h3>改了什么</h3>
+    <ol>
+      <li><b>输入框下面一排：模型 · 搜索 · 思考。</b>三个设置跟着对话走，随时能改，不用进设置页。新对话沿用你上一次的选择。</li>
+      <li><b>「AI 服务」拆成「供应商」和「模型」。</b>供应商 = 协议 + Base URL + API Key。填好后点「获取模型列表」，App 请求 <code>GET /models</code> 列出这个 Key 能用的模型，你勾选哪些出现在选择器里。一个 Key 配一次，就能用它下面所有模型。</li>
+      <li><b>能力标签。</b>每个模型标出思考档位、联网搜索、上下文长度。认识的模型按名字自动识别；中转服务里不认识的标「能力未知」，可以手动标注。不支持工具调用的模型标黄：它读不了行情和持仓，只能聊天。</li>
+      <li><b>不支持的选项是灰的。</b>模型不支持搜索时「搜索」按钮变虚线，点了说明原因并列出能搜索的模型；思考强度只能选这个模型有的档位。</li>
+      <li><b>改设置的代价写清楚。</b>对话里已经发过消息时，换模型、改思考强度、开关搜索都会让缓存从头重建。输入框上方出现黄条，写明要重建多少 tokens，可以一键改回；发出去以后对话里插一条分隔线。</li>
+      <li><b>回答的结构：</b>思考过程（折叠）→ 搜索了什么、看了哪些网页（折叠）→ 读了哪些 App 数据 → 正文带 <span class="cite">1</span> 引用 → 来源列表 → 用量。</li>
+    </ol>
+
+    <h3>联网搜索怎么发</h3>
+    <table>
+      <tr><th>供应商</th><th>方式</th></tr>
+      <tr><td>Anthropic</td><td>服务端工具 <code>web_search</code>，结果和引用随回答返回</td></tr>
+      <tr><td>OpenAI</td><td>Responses 的 <code>web_search</code> 工具</td></tr>
+      <tr><td>通义千问</td><td>请求参数 <code>enable_search: true</code></td></tr>
+      <tr><td>Kimi</td><td>内置函数 <code>$web_search</code>（App 原样回传一次参数）</td></tr>
+      <tr><td>智谱 GLM</td><td>tools 里加 <code>web_search</code></td></tr>
+      <tr><td>OpenRouter</td><td>模型名后加 <code>:online</code></td></tr>
+      <tr><td>DeepSeek</td><td>不支持</td></tr>
+      <tr><td>自定义</td><td>按协议：Anthropic / Responses 用 web_search 工具；Chat Completions 中转发 <code>web_search_options</code>，要你手动标注支持</td></tr>
+    </table>
+    <p>搜索按次额外计费（各家价格不同），用量里单独写次数。</p>
+
+    <h3>思考强度怎么发</h3>
+    <table>
+      <tr><th>协议</th><th>字段</th></tr>
+      <tr><td>Anthropic Messages</td><td><code>thinking: adaptive</code> + <code>output_config.effort</code>；关闭 = 不发 thinking</td></tr>
+      <tr><td>OpenAI Responses</td><td><code>reasoning.effort</code>；关闭 = <code>none</code></td></tr>
+      <tr><td>Chat Completions 兼容</td><td><code>reasoning_effort</code> 或厂商参数（<code>enable_thinking</code>、<code>thinking.type</code>）。只有开关的模型显示「关闭 / 开启」两档；总是思考的模型（deepseek-reasoner、kimi-k2-thinking）不能关</td></tr>
+    </table>
+
+    <h3>和现有设计冲突的地方</h3>
+    <ul>
+      <li>AI_ASSISTANT.md §6.1 写「工具列表固定」「模型和思考强度按服务固定」。现在改成<b>同一段缓存里固定</b>：开搜索会在工具列表里多一个 web_search，工具在请求最前面，所以整段前缀重算。也因此搜索是<b>按对话开关</b>，不是按问题自动开。</li>
+      <li>国产模型和多数中转只有 OpenAI Chat Completions 接口，要新增第三种协议（现在只有 Messages 和 Responses）。</li>
+    </ul>
+
+    <h3>确认后要改的代码</h3>
+    <ul>
+      <li><code>types.ts</code>：<code>AiService</code> 拆成 <code>Provider</code>（协议、地址、鉴权、缓存参数、Key 末 4 位、模型列表）和 <code>ModelEntry</code>（id、启用、能力覆盖、价格）；<code>Effort</code> 加 <code>max</code> / <code>on</code>；<code>Thread</code> 记下模型、思考、搜索。</li>
+      <li><code>protocol.ts</code>：新增 Chat Completions；按供应商拼搜索和思考参数；新增 <code>listModels()</code>（Anthropic 带 <code>x-api-key</code> + <code>anthropic-version</code>，其他用 Bearer）。</li>
+      <li>数据迁移：旧的每个服务变成一个供应商 + 一个已启用的模型。</li>
+      <li>同步改 AI_ASSISTANT.md §6、PRODUCT_DESIGN §6.5 和 <code>prototype.html</code> 的 AI 页。</li>
+    </ul>
+
+    <h3>试一试</h3>
+    <div class="demo">
+      <button onclick="demo('model')">打开模型选择器</button>
+      <button onclick="demo('effort')">思考强度</button>
+      <button onclick="demo('providers')">供应商列表</button>
+      <button onclick="demo('add')">添加供应商</button>
+      <button onclick="demo('edit')">编辑 Anthropic</button>
+      <button onclick="demo('reset')">重置原型</button>
+    </div>
+    <ul style="margin-top:8px">
+      <li>问「招商银行最近有什么新闻？」：先不开搜索，再点回答下面的「开启搜索并重问」。</li>
+      <li>切到 DeepSeek：搜索按钮变虚线；切到 Opus 5.5：思考多一档「最高」。</li>
+      <li>添加供应商时，Key 里带 <code>bad</code> 会返回 401，Base URL 里带 <code>wrong</code> 会返回 404。</li>
+      <li>「自定义」供应商会返回一个能力未知的模型 <code>relay-mix-pro</code>，点「能力」手动标注。</li>
+    </ul>
+  </div>
+</div>
+<script>
+const $ = s => document.querySelector(s);
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const fmt = n => Math.round(n).toLocaleString('zh-CN');
+const kt = n => n >= 1000 ? (n / 1000).toFixed(1) + 'k' : String(Math.round(n));
+const nowStr = () => { const d = new Date(); const p = x => String(x).padStart(2, '0'); return p(d.getMonth() + 1) + '-' + p(d.getDate()) + ' ' + p(d.getHours()) + ':' + p(d.getMinutes()); };
+
+const ICON = {
+  plus: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>',
+  menu: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg>',
+  down: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M6 9l6 6 6-6"/></svg>',
+  globe: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 3 2.5 15 0 18M12 3c-2.5 3-2.5 15 0 18"/></svg>',
+  bulb: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2V16h5v-.1c0-.8.4-1.5 1-2A6 6 0 0 0 12 3z"/></svg>',
+  up: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 19V5M6 11l6-6 6 6"/></svg>',
+  stop: '<svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><rect x="5" y="5" width="14" height="14" rx="2"/></svg>',
+  eye: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>',
+};
+
+const PROTO = { anthropic: 'Anthropic Messages', responses: 'OpenAI Responses', chat: 'OpenAI Chat Completions' };
+const PRESETS = {
+  anthropic: { name: 'Anthropic', proto: 'anthropic', url: 'https://api.anthropic.com', color: '#C96442', ab: 'A', search: 'web_search 服务端工具' },
+  openai: { name: 'OpenAI', proto: 'responses', url: 'https://api.openai.com/v1', color: '#10A37F', ab: 'O', search: 'web_search 工具' },
+  deepseek: { name: 'DeepSeek', proto: 'chat', url: 'https://api.deepseek.com', color: '#4D6BFE', ab: 'D', search: null },
+  dashscope: { name: '通义千问', proto: 'chat', url: 'https://dashscope.aliyuncs.com/compatible-mode/v1', color: '#615CED', ab: '通', search: 'enable_search 参数' },
+  moonshot: { name: 'Kimi', proto: 'chat', url: 'https://api.moonshot.cn/v1', color: '#16191E', ab: 'K', search: '$web_search 内置函数' },
+  zhipu: { name: '智谱 GLM', proto: 'chat', url: 'https://open.bigmodel.cn/api/paas/v4', color: '#3859FF', ab: '智', search: 'web_search 工具' },
+  openrouter: { name: 'OpenRouter', proto: 'chat', url: 'https://openrouter.ai/api/v1', color: '#6467F2', ab: 'R', search: '模型名加 :online' },
+  custom: { name: '自定义', proto: null, url: '', color: '#8A9099', ab: '+', search: null },
+};
+const MODEL_LIST = {
+  anthropic: ['claude-opus-5-5', 'claude-sonnet-5-5', 'claude-haiku-5-5', 'claude-fable-5-1', 'claude-opus-4-1', 'claude-sonnet-4-5', 'claude-haiku-4-5'],
+  openai: ['gpt-5.6', 'gpt-5.6-mini', 'gpt-5.5', 'gpt-5.5-nano', 'gpt-4.1', 'o4-mini', 'text-embedding-3-large', 'gpt-image-1', 'tts-1', 'whisper-1', 'omni-moderation-latest'],
+  deepseek: ['deepseek-chat', 'deepseek-reasoner'],
+  dashscope: ['qwen3-max', 'qwen-plus', 'qwen-flash', 'qwen3-coder-plus', 'qwen-vl-max', 'text-embedding-v4'],
+  moonshot: ['kimi-k2-0905-preview', 'kimi-k2-turbo-preview', 'kimi-k2-thinking', 'moonshot-v1-128k'],
+  zhipu: ['glm-4.6', 'glm-4.5-air', 'glm-4.5-flash', 'embedding-3'],
+  openrouter: ['anthropic/claude-opus-5-5', 'anthropic/claude-sonnet-5-5', 'anthropic/claude-haiku-5-5', 'openai/gpt-5.6', 'openai/gpt-5.6-mini', 'deepseek/deepseek-chat', 'deepseek/deepseek-reasoner', 'qwen/qwen3-max', 'moonshotai/kimi-k2-0905', 'z-ai/glm-4.6', 'google/gemini-3-pro', 'x-ai/grok-4', 'meta-llama/llama-4-maverick', 'mistralai/mistral-large'],
+  custom: ['claude-sonnet-5-5', 'gpt-5.6', 'deepseek-chat', 'qwen3-max', 'relay-mix-pro'],
+};
+
+// 思考档位
+const EFF = {
+  off: ['关闭', '不发送思考参数。最快、最省'],
+  on: ['开启', '这个模型只有开 / 关两档'],
+  low: ['低', '默认。讲解规则、查数据、解释成交'],
+  medium: ['中', '复盘、账户分析这类要多步推理的'],
+  high: ['高', '复杂问题。更慢，输出 tokens 更多'],
+  max: ['最高', '只有部分模型有。很慢，也最贵'],
+};
+const EFF_ORDER = ['off', 'on', 'low', 'medium', 'high', 'max'];
+const T4 = ['off', 'low', 'medium', 'high'], T5 = T4.concat('max'), BIN = ['off', 'on'];
+const KNOWN = [
+  [/embed|tts|whisper|dall-e|image|audio|realtime|moderation|rerank|-vl-/i, { chat: false }],
+  [/^claude-(opus|sonnet)-5/, { tools: true, think: T5, search: true, ctx: '1M', rec: true }],
+  [/^claude-haiku-5/, { tools: true, think: T4, search: true, ctx: '200K', rec: true }],
+  [/^claude-fable/, { tools: true, think: T4, search: true, ctx: '1M' }],
+  [/^claude-/, { tools: true, think: T4, search: true, ctx: '200K' }],
+  [/^gpt-5\.6/, { tools: true, think: T4, search: true, ctx: '400K', rec: true }],
+  [/^gpt-5/, { tools: true, think: T4, search: true, ctx: '400K' }],
+  [/^gpt-4/, { tools: true, think: [], search: true, ctx: '1M' }],
+  [/^o\d/, { tools: true, think: ['low', 'medium', 'high'], search: true, ctx: '200K' }],
+  [/^deepseek-reasoner/, { tools: true, think: 'fixed', search: false, ctx: '128K', rec: true }],
+  [/^deepseek-chat/, { tools: true, think: [], search: false, ctx: '128K', rec: true }],
+  [/^qwen3?-(max|plus|flash)/, { tools: true, think: T4, search: true, ctx: '1M', rec: true }],
+  [/^qwen3-coder/, { tools: true, think: [], search: false, ctx: '1M' }],
+  [/^kimi-k2-thinking/, { tools: true, think: 'fixed', search: true, ctx: '256K', rec: true }],
+  [/^kimi-k2/, { tools: true, think: [], search: true, ctx: '256K', rec: true }],
+  [/^moonshot-v1/, { tools: true, think: [], search: true, ctx: '128K' }],
+  [/^glm-4\.[56]/, { tools: true, think: BIN, search: true, ctx: '128K', rec: true }],
+  [/^gemini/, { tools: true, think: T4, search: true, ctx: '1M' }],
+  [/^grok/, { tools: true, think: T4, search: true, ctx: '256K' }],
+  [/^llama/, { tools: true, think: [], search: true, ctx: '1M' }],
+];
+const bare = id => id.split('/').pop().replace(/:online$/, '');
+function inferCaps(id) {
+  const b = bare(id);
+  for (const [re, c] of KNOWN) if (re.test(b)) return Object.assign({ chat: true, known: true }, c);
+  return { chat: true, known: false, tools: null, think: null, search: null, ctx: null };
+}
+function pretty(id) {
+  const b = bare(id);
+  let m = b.match(/^claude-(opus|sonnet|haiku|fable)-(\d+)-(\d+)$/);
+  if (m) return 'Claude ' + m[1][0].toUpperCase() + m[1].slice(1) + ' ' + m[2] + '.' + m[3];
+  if (/^gpt-/.test(b)) return 'GPT-' + b.slice(4);
+  if (b === 'deepseek-chat') return 'DeepSeek Chat';
+  if (b === 'deepseek-reasoner') return 'DeepSeek Reasoner';
+  return b;
+}
+const short = id => pretty(id).replace(/^Claude /, '');
+function searchHow(p) {
+  if (p.preset !== 'custom') return PRESETS[p.preset].search;
+  return { anthropic: 'web_search 服务端工具', responses: 'web_search 工具', chat: 'web_search_options 参数（要服务支持）' }[p.proto];
+}
+function caps(p, m) {
+  const c = Object.assign(inferCaps(m.id), m.ov || {});
+  if (p.preset === 'openrouter' && c.chat) c.search = true;
+  c.searchOk = !!searchHow(p) && c.search === true;
+  c.opts = Array.isArray(c.think) ? c.think : [];
+  return c;
+}
+
+let S;
+function mkProvider(id, preset, tail, enabled, extra) {
+  const P = PRESETS[preset];
+  return Object.assign({ id, preset, name: P.name, proto: P.proto, url: P.url, keyTail: tail, auth: 'x-api-key', cache: 'auto', fetchedAt: '10-27 15:02',
+    models: MODEL_LIST[preset].map(x => ({ id: x, on: enabled.includes(x), ov: null })) }, extra || {});
+}
+function initState() {
+  S = {
+    providers: [
+      mkProvider('p1', 'anthropic', '7Qa2', ['claude-opus-5-5', 'claude-sonnet-5-5', 'claude-haiku-5-5']),
+      mkProvider('p2', 'deepseek', 'c91F', ['deepseek-chat', 'deepseek-reasoner']),
+      mkProvider('p3', 'dashscope', 'Lm08', ['qwen3-max', 'qwen-plus']),
+    ],
+    cfg: { pid: 'p1', model: 'claude-sonnet-5-5', effort: 'low', search: false },
+    threads: [], tid: 0, seq: 0,
+    stack: ['chat'], sheet: null, draft: '', busy: null, edit: null,
+    recent: ['p1|claude-sonnet-5-5', 'p2|deepseek-chat'],
+    includePage: true, recentN: 10, mq: '', mpf: 'all', toBottom: true,
+  };
+  seedThreads();
+}
+const prov = id => S.providers.find(p => p.id === id);
+const cur = () => S.threads.find(t => t.id === S.tid);
+function modelOf(cfg) { const p = prov(cfg.pid); return (p && p.models.find(m => m.id === cfg.model)) || { id: cfg.model, on: true }; }
+const capsOf = cfg => caps(prov(cfg.pid), modelOf(cfg));
+const sameCfg = (a, b) => a && b && a.pid === b.pid && a.model === b.model && a.effort === b.effort && a.search === b.search;
+function thinkLabel(cfg) {
+  const c = capsOf(cfg);
+  if (c.think === 'fixed') return '总是思考';
+  if (!c.opts.length) return c.think === null ? '思考未知' : '不思考';
+  return '思考 ' + EFF[cfg.effort][0];
+}
+function cfgLabel(cfg) {
+  return short(cfg.model) + ' · ' + thinkLabel(cfg) + (cfg.search ? ' · 搜索' : '');
+}
+</script>
+<script>
+// ---------- token 和缓存估算 ----------
+const tok = s => Math.ceil(String(s).length * 0.8) + 4;
+const BASE = 2650, MEM = 420;
+function histTokens(th) {
+  let n = 0;
+  for (const m of th.msgs) {
+    if (m.r === 'u') n += tok(m.text) + 320;
+    if (m.r === 'a' && !m.live) n += tok(m.text || '') + (m.tools || []).length * 180 + (m.searches || []).length * 900;
+  }
+  return n;
+}
+function estimate() {
+  const th = cur(), cfg = S.cfg;
+  const extra = (S.includePage ? 220 : 0) + S.recentN * 24 + tok(S.draft || '');
+  const prefix = BASE + (cfg.search ? 300 : 0) + MEM + histTokens(th);
+  const input = prefix + extra;
+  if (!th.msgs.length) return { input, read: 0, reason: '新对话：第一次提问写入缓存' };
+  if (sameCfg(th.sent, cfg)) return { input, read: prefix, reason: '' };
+  const s = th.sent, why = [];
+  if (s.pid !== cfg.pid || s.model !== cfg.model) why.push('换了模型');
+  if (s.effort !== cfg.effort) why.push('改了思考强度');
+  if (s.search !== cfg.search) why.push((cfg.search ? '开了' : '关了') + '搜索（工具列表变了）');
+  return { input, read: 0, reason: why.join('、') };
+}
+
+// ---------- 对话 ----------
+function newThreadObj(title) { return { id: ++S.seq, title: title || '', msgs: [], sent: null, updated: nowStr() }; }
+function seedThreads() {
+  const t2 = newThreadObj('佣金是怎么算的'); t2.updated = '10-26 21:14';
+  t2.msgs = [{ r: 'u', text: '佣金是怎么算的', ctx: '费率 · 最近 10 条操作' },
+    { r: 'a', cfg: { pid: 'p2', model: 'deepseek-chat', effort: 'off', search: false }, tools: ['读取 费率设置'], searches: [], text: '佣金 = 成交金额 × 佣金率，不足 5 元按 5 元收（你的设置是万 2.5 免五关闭）。', usage: { input: 3210, read: 0, out: 120, n: 0 } }];
+  t2.sent = { pid: 'p2', model: 'deepseek-chat', effort: 'off', search: false };
+  const t1 = newThreadObj('招商银行现在的估值贵不贵');
+  const cfg = Object.assign({}, S.cfg);
+  t1.msgs = [{ r: 'u', text: '招商银行现在的估值贵不贵？', ctx: '个股 · 招商银行 · 最近 10 条操作' },
+    Object.assign({ r: 'a', cfg }, answerFor('估值贵不贵', cfg), { usage: { input: 3685, read: 0, out: 460, n: 0 } })];
+  t1.sent = cfg;
+  S.threads = [t1, t2];
+  S.tid = t1.id;
+}
+
+const SRC1 = [{ t: '招商银行：2026 年第三季度报告', d: 'cninfo.com.cn' }, { t: '招商银行三季报点评：息差降幅收窄，资产质量平稳', d: 'eastmoney.com' }, { t: '招商银行投资者关系活动记录表', d: 'sse.com.cn' }];
+const SRC2 = [{ t: '银行板块三季报综述', d: 'stcn.com' }, { t: '招商银行（600036）公告列表', d: 'sse.com.cn' }];
+function thinkSecs(cfg, c) { return c.think === 'fixed' ? 9 : { low: 3, on: 6, medium: 7, high: 14, max: 26 }[cfg.effort] || 0; }
+
+function answerFor(q, cfg) {
+  const c = capsOf(cfg);
+  const thinks = c.think === 'fixed' || (c.opts.length && cfg.effort !== 'off');
+  const r = { think: null, searches: [], tools: [], text: '', cites: [], offer: null };
+  let th = '';
+  if (/新闻|最新|公告|财报|季报|消息|研报|发生了什么|为什么(大)?(涨|跌)|政策/.test(q)) {
+    if (cfg.search && c.searchOk) {
+      th = '用户问的是最近的消息。App 的行情接口没有新闻，需要联网搜索：先搜公告和财报，再搜行业综述；最后用 get_quote 对上当前价格。新闻只做背景，不给买卖建议。';
+      r.searches = [{ q: '招商银行 最新公告 2026年10月', src: SRC1 }, { q: '银行板块 三季报 综述', src: SRC2 }];
+      r.cites = SRC1.concat(SRC2);
+      r.tools = ['读取 招商银行 行情'];
+      r.text = '最近的消息（原型示例，内容是编的，不是真实新闻）：\n\n· 10 月下旬发布了三季报，营收和归母净利润同比基本持平[1][2]\n· 业绩说明会上提到净息差降幅在收窄[3]\n· 银行板块三季报整体平稳，分化不大[4]\n\n对照 App 里的行情：现价 40.18 元，今天 +0.65%，市盈率（动）约 6.9 倍。\n\n新闻只是背景，不能单独作为买卖的理由。';
+    } else {
+      th = '用户问新闻，但这次没开联网搜索。App 里只有行情、K 线和 F10 资料，没有新闻和公告。先说明看不到，再给出 App 里能看到的数据。';
+      r.tools = ['读取 招商银行 行情', '读取 招商银行 公司简况'];
+      r.text = (cfg.search ? '当前模型不支持联网搜索，' : '这次没开联网搜索，') + '我只能看到 App 里的行情、K 线和公司资料，看不到今天的新闻和公告。\n\n从行情看：现价 40.18 元，今天 +0.65%，近 20 个交易日在 38.6 – 41.2 元之间。\n\n要查最新消息，' + (cfg.search ? '换一个支持搜索的模型再问。' : '打开输入框下面的「搜索」再问一次。');
+      r.offer = !cfg.search && c.searchOk ? 'search' : (cfg.search ? 'model' : null);
+    }
+  } else if (/废单/.test(q)) {
+    th = '查最近一笔废单：get_orders 找到状态是废单的委托，再用 get_rule 读价格笼子规则，对照当时的卖一价算上限。';
+    r.tools = ['读取 当日委托', '读取 规则：价格笼子'];
+    r.text = '你 10:21 委托买入 招商银行 1,000 股 @ 41.30，成了废单。\n\n原因是价格笼子：连续竞价时，买入价不能高于「卖一价的 102%」和「卖一价 + 10 个价位」中更高的那个。当时卖一 40.18，上限 40.98，你的 41.30 超出范围，交易所直接拒绝，不会排队。\n\n废单不冻结资金，也不收费用。';
+  } else if (/复盘|本周|这周/.test(q)) {
+    th = '复盘本周：get_trades 拉本周成交，get_positions 看持仓变化；按买入理由、持有期、费用占比逐笔看。这类问题适合中等以上思考强度。';
+    r.tools = ['读取 本周成交', '读取 持仓', '读取 费率设置'];
+    r.text = '本周你做了 4 笔交易（2 买 2 卖），已实现盈亏 +312.40 元，费用合计 28.60 元，占成交额 0.06%。\n\n· 做得好的：沪深300ETF 分两次买入，都在开盘后 30 分钟内，价差小\n· 可以改进的：五粮液那笔持有 1 天就卖，扣掉费用只赚 3.2 元，来回费用吃掉了大半收益\n\n要不要把「单笔至少持有 3 个交易日」记成你的约定？';
+  } else if (/估值|贵不贵|市盈率|市净率/.test(q)) {
+    th = '估值问题：读行情拿 PE / PB，读财务看 ROE 和净利润增速；只陈述数据和怎么看，不给结论性的买卖建议。';
+    r.tools = ['读取 招商银行 行情', '读取 招商银行 财务指标'];
+    r.text = '招商银行现在：市盈率（动）约 6.9 倍，市净率 0.98 倍，近 3 年 ROE 在 14% – 16%。\n\n怎么看：银行股一般看市净率。市净率低于 1，说明市场给的价格低于账面净资产，常见原因是担心资产质量和息差下行。和自己的历史比、和同行比，比单看一个数字有用。\n\n这些是数据，不是买卖建议。';
+  } else {
+    th = '先看用户当前页面（个股 · 招商银行）和最近操作，判断问题指的是什么，再决定读哪些数据。';
+    r.tools = ['读取 当前页面'];
+    r.text = '（原型的回答是本地模板）我看到你在招商银行的个股页，最近 10 条操作里有 1 笔废单和 2 笔成交。\n\n可以试试问：「招商银行最近有什么新闻？」「这个估值贵不贵？」「帮我复盘本周交易」。';
+  }
+  if (thinks) r.think = { sec: thinkSecs(cfg, c), text: th };
+  return r;
+}
+
+const wait = ms => new Promise((res, rej) => { const t = setTimeout(res, ms); S.busy.timers.push(t); });
+async function send(text) {
+  text = (text != null ? text : S.draft).trim();
+  if (!text || S.busy) return;
+  const th = cur(), cfg = Object.assign({}, S.cfg), est = estimate();
+  if (th.sent && !sameCfg(th.sent, cfg) && th.msgs.length) th.msgs.push({ r: 'd', text: '换成 ' + cfgLabel(cfg) + '，缓存从这里重建' });
+  th.msgs.push({ r: 'u', text, ctx: ctxLabel() });
+  if (!th.title) th.title = text.slice(0, 20);
+  th.updated = nowStr();
+  S.draft = '';
+  const plan = answerFor(text, cfg);
+  const m = { r: 'a', cfg, live: '准备请求…', tools: [], searches: [] };
+  th.msgs.push(m);
+  S.busy = { m, timers: [] };
+  const k = S.recent.indexOf(cfg.pid + '|' + cfg.model); if (k >= 0) S.recent.splice(k, 1); S.recent.unshift(cfg.pid + '|' + cfg.model);
+  S.toBottom = true; render();
+  try {
+    if (plan.think) { m.live = '思考中…'; refreshChat(); await wait(Math.min(2600, 500 + plan.think.sec * 120)); }
+    for (const s of plan.searches) { m.live = '正在搜索：' + s.q; refreshChat(); await wait(1100); m.searches.push(s); }
+    for (const t of plan.tools) { m.live = '正在' + t; refreshChat(); await wait(550); m.tools.push(t); }
+    m.live = '正在写回答…'; refreshChat(); await wait(500);
+  } catch (e) { return; }
+  Object.assign(m, plan, { live: null });
+  m.usage = { input: est.input, read: est.read, out: tok(plan.text) + (plan.think ? plan.think.sec * 60 : 0), n: plan.searches.length };
+  th.sent = cfg; S.busy = null; S.toBottom = true; render();
+}
+function stopAnswer() {
+  if (!S.busy) return;
+  S.busy.timers.forEach(clearTimeout);
+  const m = S.busy.m; m.live = null; m.text = ''; m.stopped = true; m.think = null;
+  cur().sent = Object.assign({}, m.cfg);
+  S.busy = null; render(); toast('已停止。已经发出的工具调用会补上结果，下次提问不受影响');
+}
+function retryWithSearch(i) {
+  const th = cur(); let q = '';
+  for (let j = i; j >= 0; j--) if (th.msgs[j].r === 'u') { q = th.msgs[j].text; break; }
+  S.cfg.search = true; send(q);
+}
+function ctxLabel() {
+  const a = []; if (S.includePage) a.push('个股 · 招商银行'); if (S.recentN) a.push('最近 ' + S.recentN + ' 条操作');
+  return a.length ? a.join(' · ') : '没附带上下文';
+}
+</script>
+<script>
+// ---------- 渲染：对话 ----------
+function pdot(p, cls) { const P = PRESETS[p.preset]; return '<i class="pdot ' + (cls || '') + '" style="background:' + P.color + '">' + P.ab + '</i>'; }
+function chatHTML() {
+  const th = cur();
+  const chips = ['招商银行最近有什么新闻？', '这个估值贵不贵？', '帮我复盘本周交易', '刚才那笔为什么是废单？'];
+  return '<div class="nav"><button class="ib" onclick="toast(\'原型：这里返回打开 AI 之前的页面\')">‹</button>' +
+    '<h1>' + esc(th.title || '新对话') + '<span class="sub">AI 助手</span></h1>' +
+    '<button class="ib" title="新对话" onclick="newThread()">' + ICON.plus + '</button>' +
+    '<button class="ib" title="菜单" onclick="openSheet(\'menu\')">' + ICON.menu + '</button></div>' +
+    '<div class="ctx"><span>附带</span><button class="c ' + (S.includePage ? '' : 'off') + '" onclick="S.includePage=!S.includePage;refreshChat()">个股 · 招商银行</button>' +
+    '<button class="c2" onclick="cycleRecent()">最近 ' + S.recentN + ' 条操作</button></div>' +
+    '<div class="scroll" id="sc" onscroll="S.scrollTop=this.scrollTop"><div class="msgs" id="msgs"></div></div>' +
+    '<div class="qchips">' + chips.map(q => '<button onclick="send(\'' + q + '\')">' + q + '</button>').join('') + '</div>' +
+    '<div id="cwarn"></div>' +
+    '<div class="cbox"><textarea id="ta" rows="1" placeholder="问点什么，Enter 发送" oninput="onDraft(this)" onkeydown="onKey(event)"></textarea>' +
+    '<div class="ctools" id="ctools"></div></div>' +
+    '<div class="est" id="est"></div>';
+}
+function msgHTML(m, i) {
+  if (m.r === 'd') return '<div class="divl"><span>' + esc(m.text) + '</span></div>';
+  if (m.r === 'u') return '<div class="umsg">' + esc(m.text) + '</div><div class="uctx">附带：' + esc(m.ctx) + '</div>';
+  const p = prov(m.cfg.pid) || S.providers[0];
+  let h = '<div class="amsg"><div class="ahead">' + pdot(p, 'sm') + '<b>' + esc(short(m.cfg.model)) + '</b><span>· ' + esc(thinkLabel(m.cfg)) + (m.cfg.search ? ' · 搜索' : '') + '</span></div>';
+  if (m.think) h += '<details class="fold"><summary>思考了 ' + m.think.sec + ' 秒</summary><div class="fb th">' + esc(m.think.text) + '</div></details>';
+  if (m.searches && m.searches.length) {
+    const n = m.searches.reduce((a, s) => a + s.src.length, 0);
+    h += '<details class="fold"><summary>搜索了 ' + m.searches.length + ' 次 · 看了 ' + n + ' 个网页</summary><div class="fb">' +
+      m.searches.map(s => '<div class="srow"><i>搜索</i><span class="q">' + esc(s.q) + '</span></div>' + s.src.map(x => '<div class="srow"><i>　·</i><span>' + esc(x.t) + ' <span class="muted">' + x.d + '</span></span></div>').join('')).join('') + '</div></details>';
+  }
+  if (m.tools && m.tools.length) h += '<div class="tchips">' + m.tools.map(t => '<span class="tchip">⌁ ' + esc(t) + '</span>').join('') + '</div>';
+  if (m.live) return h + '<div class="live"><span class="spin"></span>' + esc(m.live) + '</div></div>';
+  if (m.stopped) return h + '<div class="abody muted">（已停止）</div></div>';
+  h += '<div class="abody">' + esc(m.text).replace(/\[(\d+)\]/g, (_, n) => '<span class="cite" onclick="toast(\'原型：打开来源 ' + n + '\')">' + n + '</span>') + '</div>';
+  if (m.cites && m.cites.length) h += '<div class="srcs">' + m.cites.map((x, k) => '<a href="javascript:void 0" onclick="toast(\'原型：在浏览器打开 ' + x.d + '\')"><span class="cite">' + (k + 1) + '</span><span>' + esc(x.t) + '</span><span>' + x.d + '</span></a>').join('') + '</div>';
+  if (m.offer === 'search') h += '<div class="offer"><button onclick="retryWithSearch(' + i + ')">开启搜索并重问</button></div>';
+  if (m.offer === 'model') h += '<div class="offer"><button onclick="openSheet(\'model\')">换一个能搜索的模型</button></div>';
+  if (m.usage) {
+    const u = m.usage;
+    h += '<div class="usage">输入 ' + fmt(u.input) + '（缓存读 ' + fmt(u.read) + ' · 写 ' + fmt(u.input - u.read) + '）· 输出 ' + fmt(u.out) + (u.n ? ' · 搜索 ' + u.n + ' 次' : '') + '</div>';
+  }
+  return h + '</div>';
+}
+function fillMsgs() {
+  const th = cur(), el = $('#msgs'), sc = $('#sc');
+  if (!el) return;
+  const keep = S.scrollTop || 0;
+  el.innerHTML = th.msgs.length ? th.msgs.map(msgHTML).join('') :
+    '<div class="welcome"><b>问点什么</b>我能看到你当前的页面和最近的操作，可以读行情、K 线、财务、持仓和委托，解释规则，帮你生成下单操作卡（你点「执行」才生效）。<br><br>打开下面的「搜索」，还能查新闻、公告和研报。</div>';
+  sc.scrollTop = S.toBottom ? sc.scrollHeight : keep;
+  S.scrollTop = sc.scrollTop;
+  S.toBottom = false;
+}
+function fillComposer() {
+  const t = $('#ctools'); if (!t) return;
+  const cfg = S.cfg, p = prov(cfg.pid), c = capsOf(cfg);
+  const se = !c.searchOk ? 'dis' : (cfg.search ? 'on' : '');
+  const thk = c.think === 'fixed' ? 'on' : (!c.opts.length ? 'dis' : (cfg.effort !== 'off' ? 'on' : ''));
+  t.innerHTML = '<button class="tb model" onclick="openSheet(\'model\')">' + pdot(p, 'sm') + '<span>' + esc(short(cfg.model)) + '</span>' + ICON.down + '</button>' +
+    '<button class="tb se ' + se + '" onclick="toggleSearch()">' + ICON.globe + '搜索</button>' +
+    '<button class="tb th ' + thk + '" onclick="openSheet(\'effort\')">' + ICON.bulb + esc(thinkLabel(cfg).replace('思考 ', '')) + '</button>' +
+    (S.busy ? '<button class="send stop" title="停止" onclick="stopAnswer()">' + ICON.stop + '</button>'
+      : '<button class="send" title="发送" ' + (S.draft.trim() ? '' : 'disabled') + ' onclick="send()">' + ICON.up + '</button>');
+  const e = estimate(), th = cur();
+  $('#est').textContent = '约 ' + kt(e.input) + ' tokens · ' + (e.read ? '预计 ' + kt(e.read) + ' 走缓存' : e.reason);
+  let w = '';
+  if (c.tools === false) w += '<div class="cwarn">这个模型不支持工具调用：只能聊天，读不了行情、持仓和委托。</div>';
+  else if (c.tools === null) w += '<div class="cwarn">这个模型的能力还没标注，可能用不了工具。<button onclick="editProvider(\'' + p.id + '\')">去标注</button></div>';
+  if (th.msgs.length && th.sent && !sameCfg(th.sent, cfg) && !S.busy)
+    w += '<div class="cwarn"><span>' + esc(e.reason) + '：下次提问要重建缓存，约 ' + kt(e.input) + ' tokens 按写入价计费</span><button onclick="revertCfg()">改回</button></div>';
+  $('#cwarn').innerHTML = w;
+}
+function refreshChat() { if (topView() === 'chat') { fillMsgs(); fillComposer(); } }
+function onDraft(ta) { S.draft = ta.value; autoGrow(ta); fillComposer(); }
+function onKey(e) { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); send(); } }
+function autoGrow(ta) { ta.style.height = 'auto'; ta.style.height = Math.min(110, ta.scrollHeight) + 'px'; }
+function cycleRecent() { const a = [0, 5, 10, 20]; S.recentN = a[(a.indexOf(S.recentN) + 1) % a.length]; render(); }
+function revertCfg() { S.cfg = Object.assign({}, cur().sent); fillComposer(); toast('已改回 ' + cfgLabel(S.cfg)); }
+function newThread() {
+  if (S.busy) return toast('等这个回答结束再开新对话');
+  const th = cur();
+  if (!th.msgs.length) return toast('已经是新对话');
+  const t = newThreadObj(); S.threads.unshift(t); S.tid = t.id; S.stack = ['chat']; render();
+  toast('新对话沿用 ' + cfgLabel(S.cfg));
+}
+function toggleSearch() {
+  const c = capsOf(S.cfg);
+  if (!c.searchOk) return openSheet('searchInfo');
+  S.cfg.search = !S.cfg.search; fillComposer();
+  toast(S.cfg.search ? '已开启联网搜索：模型会在需要时搜索，按次另外计费' : '已关闭联网搜索');
+}
+
+// ---------- 对话列表 ----------
+function threadsHTML() {
+  return '<div class="nav"><button class="ib" onclick="back()">‹</button><h1>对话</h1><button class="ib" onclick="newThread()">' + ICON.plus + '</button></div>' +
+    '<div class="scroll"><div class="sec" style="margin-top:8px">' + S.threads.map(t => {
+      const last = [...t.msgs].reverse().find(m => m.r === 'a');
+      return '<div class="row tap" onclick="S.tid=' + t.id + ';S.stack=[\'chat\'];S.toBottom=true;render()"><div class="grow"><div style="font-weight:500">' + esc(t.title || '新对话') + '</div>' +
+        '<div class="muted" style="font-size:12px">' + t.updated + ' · ' + t.msgs.filter(m => m.r === 'u').length + ' 个问题' + (last ? ' · ' + esc(cfgLabel(last.cfg)) : '') + '</div></div><span class="chev"></span></div>';
+    }).join('') + '</div></div>';
+}
+</script>
+<script>
+// ---------- 浮层 ----------
+function openSheet(type, extra) { S.sheet = Object.assign({ type }, extra || {}); if (type === 'model') { S.mq = ''; S.mpf = 'all'; } render(); }
+function closeSheet() { S.sheet = null; render(); }
+function maskWrap(inner, center) { return '<div class="mask ' + (center ? 'center' : '') + '" onclick="if(event.target===this)closeSheet()">' + inner + '</div>'; }
+function sheetHTML() {
+  const s = S.sheet; if (!s) return '';
+  if (s.type === 'menu') return maskWrap('<div class="sheet"><div class="sh-b" style="padding:6px 0 10px">' +
+    [['对话', 'go(\'threads\')', S.threads.length + ' 个'], ['供应商与模型', 'go(\'providers\')', S.providers.length + ' 个供应商'],
+     ['AI 记忆', 'toast(\'沿用 v0.3 设计，见 prototype.html\')', '12 条'], ['发给 AI 的上下文', 'toast(\'沿用 v0.3 设计，见 prototype.html\')', '']]
+      .map(([t, f, r]) => '<div class="row tap" onclick="S.sheet=null;' + f + ';render()"><span class="grow">' + t + '</span><span class="muted" style="font-size:12px">' + r + '</span><span class="chev"></span></div>').join('') +
+    '</div></div>');
+  if (s.type === 'model') return maskWrap('<div class="sheet" style="height:80%"><div class="sh-h"><b>选择模型</b><button onclick="S.sheet=null;go(\'providers\')">管理供应商 ›</button></div>' +
+    '<div class="sh-s"><input class="inp" id="mq" placeholder="搜索模型名或供应商" autocomplete="off" oninput="S.mq=this.value;fillModelList()"></div>' +
+    '<div class="pfil">' + [['all', '全部']].concat(S.providers.map(p => [p.id, p.name])).map(([id, n]) => '<button class="' + (S.mpf === id ? 'on' : '') + '" onclick="S.mpf=\'' + id + '\';render()">' + esc(n) + '</button>').join('') + '</div>' +
+    '<div class="sh-b" id="mlist"></div>' +
+    '<div class="sh-f">' + (cur().msgs.length ? '这个对话已经发过消息，换模型后下次提问会重建缓存。' : '只列出已启用的模型。要用更多模型，到「管理供应商」里勾选。') + '</div></div>');
+  if (s.type === 'effort') {
+    const c = capsOf(S.cfg), m = short(S.cfg.model);
+    let body;
+    if (c.think === 'fixed') body = '<div class="note" style="margin:0 16px 14px">' + esc(m) + ' 总是先思考再回答，不能关，也不能调强度。要更快，换一个可以关闭思考的模型。</div>';
+    else if (!c.opts.length) body = '<div class="note" style="margin:0 16px 14px">' + esc(m) + (c.think === null ? ' 的思考能力还没标注。到「供应商与模型」里标注后才能调。' : ' 不支持思考，直接回答。') + '</div>';
+    else body = EFF_ORDER.filter(k => k !== 'on' || c.opts.includes('on')).filter(k => !(k !== 'off' && k !== 'on' && c.opts.includes('on'))).map(k => {
+      const ok = c.opts.includes(k);
+      return '<div class="erow ' + (S.cfg.effort === k ? 'on ' : '') + (ok ? '' : 'dis') + '" ' + (ok ? 'onclick="setEffort(\'' + k + '\')"' : '') + '><span class="rd"></span><div><b>' + EFF[k][0] + '</b><small>' + (ok ? EFF[k][1] : '这个模型没有这一档') + '</small></div></div>';
+    }).join('');
+    return maskWrap('<div class="sheet"><div class="sh-h"><b>思考强度</b><span class="muted" style="font-size:12px">' + esc(m) + '</span></div><div class="sh-b">' + body + '</div>' +
+      '<div class="sh-f">强度越高，回答越慢，输出的 tokens 越多。' + (cur().msgs.length ? '这个对话已经发过消息，改了以后下次提问会重建缓存。' : '') + '</div></div>');
+  }
+  if (s.type === 'searchInfo') {
+    const p = prov(S.cfg.pid), c = capsOf(S.cfg), how = searchHow(p);
+    const why = !how ? p.name + ' 的接口没有联网搜索功能。' : (c.search === null ? short(S.cfg.model) + ' 的搜索能力还没标注。' : short(S.cfg.model) + ' 不支持联网搜索。');
+    const alts = [];
+    S.providers.forEach(q => q.models.forEach(m => { if (m.on && caps(q, m).searchOk) alts.push([q, m]); }));
+    return maskWrap('<div class="sheet"><div class="sh-h"><b>联网搜索不可用</b><button onclick="closeSheet()">关闭</button></div><div class="sh-b">' +
+      '<div class="note" style="margin:0 16px 8px">' + esc(why) + '不开搜索时，AI 只能看到 App 里的行情、K 线、财务和你的账户，看不到新闻和公告。</div>' +
+      (alts.length ? '<div class="psec">这些模型支持搜索</div>' + alts.slice(0, 6).map(([q, m]) => '<div class="mrow" onclick="pickModel(\'' + q.id + '\',\'' + m.id + '\',true)">' + pdot(q) + '<div class="grow"><div class="nm">' + esc(pretty(m.id)) + '</div><div class="id">' + esc(q.name) + ' · ' + esc(searchHow(q)) + '</div></div></div>').join('') : '') +
+      '</div><div class="sh-f">选一个就会切换模型并开启搜索。</div></div>');
+  }
+  if (s.type === 'caps') return capsSheetHTML(s);
+  if (s.type === 'confirm') return maskWrap('<div class="dlg"><div class="dh">' + esc(s.title) + '</div><div class="db">' + esc(s.text) + '</div><div class="df"><button onclick="closeSheet()">取消</button><button class="pri" onclick="' + s.ok + '">' + esc(s.okText) + '</button></div></div>', true);
+  return '';
+}
+function fillModelList() {
+  const el = $('#mlist'); if (!el) return;
+  const q = S.mq.trim().toLowerCase();
+  const rowOf = (p, m, withP) => {
+    const c = caps(p, m), isCur = S.cfg.pid === p.id && S.cfg.model === m.id;
+    return '<div class="mrow ' + (isCur ? 'cur' : '') + '" onclick="pickModel(\'' + p.id + '\',\'' + m.id + '\')"><div class="grow"><div class="nm">' + esc(pretty(m.id)) + '</div><div class="id">' + (withP ? esc(p.name) + ' · ' : '') + esc(m.id) + '</div>' +
+      '<div class="bds">' + badgesHTML(c) + '</div></div><span class="ck">' + (isCur ? '✓' : '') + '</span></div>';
+  };
+  let h = '';
+  if (!q && S.mpf === 'all') {
+    const rec = S.recent.map(k => k.split('|')).map(([pid, id]) => [prov(pid), id]).filter(([p, id]) => p && p.models.some(m => m.id === id && m.on)).slice(0, 3);
+    if (rec.length) h += '<div class="psec">最近用过</div>' + rec.map(([p, id]) => rowOf(p, p.models.find(m => m.id === id), true)).join('');
+  }
+  S.providers.filter(p => S.mpf === 'all' || p.id === S.mpf).forEach(p => {
+    const ms = p.models.filter(m => m.on && (!q || m.id.toLowerCase().includes(q) || pretty(m.id).toLowerCase().includes(q) || p.name.toLowerCase().includes(q)));
+    if (!ms.length) return;
+    h += '<div class="psec">' + pdot(p, 'sm') + esc(p.name) + ' <span class="ptag">' + PROTO[p.proto] + '</span></div>' + ms.map(m => rowOf(p, m)).join('');
+  });
+  el.innerHTML = h || '<div class="note" style="margin:8px 16px">没有匹配的已启用模型。到「管理供应商」里获取模型列表并勾选。</div>';
+}
+function badgesHTML(c) {
+  if (c.chat === false) return '<i class="bd plain">非对话模型</i>';
+  if (!c.known && !c.tools && c.think == null && c.search == null) return '<i class="bd unk">能力未知</i>';
+  let h = '';
+  if (c.think === 'fixed') h += '<i class="bd th">总是思考</i>';
+  else if (c.opts.includes('on')) h += '<i class="bd th">思考 开/关</i>';
+  else if (c.opts.length) h += '<i class="bd th">思考 ' + c.opts.filter(x => x !== 'off').length + ' 档</i>';
+  if (c.searchOk) h += '<i class="bd se">搜索</i>';
+  if (c.tools === false) h += '<i class="bd wa">不能用工具</i>';
+  if (c.tools == null) h += '<i class="bd unk">工具未知</i>';
+  if (c.ctx) h += '<i class="bd plain">' + c.ctx + '</i>';
+  return h;
+}
+function pickModel(pid, id, withSearch) {
+  const prev = Object.assign({}, S.cfg);
+  S.cfg.pid = pid; S.cfg.model = id;
+  const c = capsOf(S.cfg), notes = [];
+  if (c.opts.length && !c.opts.includes(S.cfg.effort)) {
+    const want = prev.effort;
+    const ne = want === 'off' ? (c.opts.includes('off') ? 'off' : c.opts[0]) : (c.opts.includes('on') ? 'on' : (c.opts.includes(want) ? want : (c.opts.includes('low') ? 'low' : c.opts[c.opts.length - 1])));
+    S.cfg.effort = ne; notes.push('思考改为「' + EFF[ne][0] + '」');
+  }
+  if (withSearch) S.cfg.search = true;
+  else if (S.cfg.search && !c.searchOk) { S.cfg.search = false; notes.push('它不支持搜索，已关闭搜索'); }
+  S.sheet = null; render();
+  toast('已切换到 ' + short(id) + (notes.length ? '：' + notes.join('，') : ''));
+}
+function setEffort(k) { S.cfg.effort = k; S.sheet = null; render(); }
+</script>
+<script>
+// ---------- 供应商 ----------
+function providersHTML() {
+  return '<div class="nav"><button class="ib" onclick="back()">‹</button><h1>供应商与模型</h1><span style="width:40px"></span></div><div class="scroll">' +
+    '<div class="sec" style="margin-top:8px"><div class="sec-h">已添加<small>点一个修改，或重新获取模型列表</small></div>' +
+    S.providers.map(p => {
+      const on = p.models.filter(m => m.on).length;
+      return '<div class="pcard" onclick="editProvider(\'' + p.id + '\')">' + pdot(p, 'lg') + '<div class="grow"><div class="t">' + esc(p.name) + ' <span class="ptag">' + PROTO[p.proto] + '</span></div>' +
+        '<div class="u">' + esc(p.url) + '</div><div class="m">Key 末 4 位 <span class="n">' + esc(p.keyTail) + '</span> · 启用 ' + on + ' / ' + p.models.length + ' 个模型' + (searchHow(p) ? ' · 可搜索' : '') + '</div>' +
+        '<div class="m muted">模型列表 ' + (p.fetchedAt ? p.fetchedAt + ' 更新' : '手动添加') + '</div></div><span class="chev" style="align-self:center"></span></div>';
+    }).join('') + '<button class="addbtn" onclick="go(\'presets\')">' + ICON.plus + '添加供应商</button></div>' +
+    '<div class="note" style="margin:0 12px 12px">API Key 只存在本机 Android Keystore，只发给对应的 Base URL。<br>新对话沿用你上一次用的模型、思考强度和搜索开关；在对话里随时可以改。</div></div>';
+}
+function presetsHTML() {
+  return '<div class="nav"><button class="ib" onclick="back()">‹</button><h1>添加供应商</h1><span style="width:40px"></span></div><div class="scroll">' +
+    '<div class="sec-h" style="font-weight:400;font-size:12px;color:var(--ink3)">选一个预设，地址和协议会自动填好；中转服务选「自定义」</div><div class="pgrid">' +
+    Object.keys(PRESETS).map(k => {
+      const P = PRESETS[k];
+      return '<button class="ptile" onclick="newProvider(\'' + k + '\')"><i class="pdot lg" style="background:' + P.color + '">' + P.ab + '</i><div><b>' + P.name + '</b><small>' +
+        (P.proto ? PROTO[P.proto].replace('OpenAI ', '') : '任意兼容接口') + '<br>' + (k === 'custom' ? '搜索看协议' : P.search ? '支持联网搜索' : '不支持联网搜索') + '</small></div></button>';
+    }).join('') + '</div></div>';
+}
+function editProvider(pid) {
+  const p = prov(pid);
+  S.edit = { isNew: false, pid, preset: p.preset, name: p.name, proto: p.proto, url: p.url, key: '', keyTail: p.keyTail, auth: p.auth, cache: p.cache,
+    models: p.models.map(m => Object.assign({}, m)), fetch: p.fetchedAt ? { st: 'ok', at: p.fetchedAt, n: p.models.length, added: 0 } : { st: 'idle' },
+    filter: '', chatOnly: true, showKey: false, test: null };
+  S.sheet = null; go('edit');
+}
+function newProvider(k) {
+  const P = PRESETS[k];
+  S.edit = { isNew: true, preset: k, name: k === 'custom' ? '' : P.name, proto: P.proto || 'chat', url: P.url, key: '', keyTail: '', auth: 'x-api-key', cache: 'auto',
+    models: [], fetch: { st: 'idle' }, filter: '', chatOnly: true, showKey: false, test: null };
+  S.stack[S.stack.length - 1] = 'edit'; render();
+}
+const root = u => u.trim().replace(/\/+$/, '');
+function endpoints(e) {
+  const r = root(e.url) || '{Base URL}';
+  if (e.proto === 'anthropic') { const v = /\/v1$/.test(r) ? r : r + '/v1'; return { models: v + '/models', chat: v + '/messages' }; }
+  return { models: r + '/models', chat: r + (e.proto === 'responses' ? '/responses' : '/chat/completions') };
+}
+function editHTML() {
+  const e = S.edit, ep = endpoints(e), seg = (val, opts, f, dis) => '<div class="seg">' + opts.map(([v, t]) => '<button class="' + (val === v ? 'on' : '') + '" ' + (dis ? 'disabled' : '') + ' onclick="' + f + '(\'' + v + '\')">' + t + '</button>').join('') + '</div>';
+  let h = '<div class="nav"><button class="tx" onclick="back()">取消</button><h1>' + (e.isNew ? '添加 ' : '编辑 ') + esc(PRESETS[e.preset].name) + '</h1><button class="tx pri" onclick="saveEdit()">保存</button></div><div class="scroll">';
+  h += '<div class="sec" style="margin-top:8px">' +
+    '<div class="fld"><label>名称</label><input class="inp" value="' + esc(e.name) + '" placeholder="例如「Claude 中转」" oninput="S.edit.name=this.value"></div>' +
+    '<div class="fld"><label>协议</label>' + seg(e.proto, [['anthropic', 'Anthropic'], ['responses', 'Responses'], ['chat', 'Chat Completions']], 'setProto', e.preset !== 'custom') +
+    '<div class="hint">' + (e.preset === 'custom' ? '中转服务一般是 Chat Completions；转发 Claude 的服务也可能是 Anthropic 协议' : '预设供应商的协议是固定的') + '</div></div>' +
+    '<div class="fld"><label>Base URL</label><input class="inp mono" value="' + esc(e.url) + '" placeholder="https://…" oninput="S.edit.url=this.value;$(\'#ephint\').innerHTML=epHint()"><div class="hint" id="ephint">' + epHint() + '</div></div>' +
+    '<div class="fld"><label>API Key</label><div class="iwrap"><input class="inp mono" id="keyin" type="' + (e.showKey ? 'text' : 'password') + '" autocomplete="off" value="' + esc(e.key) + '" placeholder="' + (e.keyTail ? '已保存，末 4 位 ' + e.keyTail + '（不改就留空）' : 'sk-…') + '" oninput="S.edit.key=this.value"><button class="eye" onclick="S.edit.showKey=!S.edit.showKey;render()">' + ICON.eye + '</button></div>' +
+    '<div class="hint">只存在本机 Android Keystore，只发给上面这个地址</div></div>' +
+    (e.proto === 'anthropic' ? '<div class="fld"><label>鉴权头</label>' + seg(e.auth, [['x-api-key', 'x-api-key（官方）'], ['bearer', 'Authorization: Bearer']], 'setAuth') + '<div class="hint">不少中转服务要 Bearer</div></div>' : '') +
+    '</div>';
+  // 模型
+  const f = e.fetch, on = e.models.filter(m => m.on).length;
+  h += '<div class="sec"><div class="sec-h">模型' + (e.models.length ? '<small>已启用 ' + on + ' / ' + e.models.length + '</small>' : '') + '</div>' +
+    '<div class="fetchbar"><button class="btn ' + (e.models.length ? 'ghost' : 'pri') + '" ' + (f.st === 'loading' ? 'disabled' : '') + ' onclick="fetchModels()">' + (f.st === 'loading' ? '<span class="spin"></span>获取中' : e.models.length ? '重新获取' : '获取模型列表') + '</button><div class="s">' +
+    (f.st === 'idle' ? '用上面的 Key 请求 <span class="mono">GET ' + esc(ep.models) + '</span>，列出能用的模型' :
+     f.st === 'loading' ? '正在请求 <span class="mono">' + esc(ep.models) + '</span>' :
+     f.st === 'ok' ? '<span style="color:var(--down)">✓</span> ' + f.at + ' 获取到 ' + f.n + ' 个' + (f.added ? '，新增 ' + f.added + ' 个' : '') : '') + '</div></div>' +
+    (f.st === 'err' ? '<div class="note err" style="margin:0 14px 10px">' + esc(f.msg) + '</div>' : '');
+  if (e.models.length) {
+    h += '<div class="mtool"><input class="inp" placeholder="搜索模型" value="' + esc(e.filter) + '" oninput="S.edit.filter=this.value;fillEditModels()">' +
+      '<button class="lnk" onclick="bulk(\'rec\')">只启用推荐</button><button class="lnk" onclick="bulk(\'none\')">全不选</button></div><div id="emlist"></div>';
+  }
+  h += '<div class="mtool" style="padding-top:8px;border-top:1px solid var(--line)"><input class="inp mono" id="madd" placeholder="手动添加模型名，例如 claude-sonnet-5-5" onkeydown="if(event.key===\'Enter\')addModel()"><button class="btn ghost" style="height:32px" onclick="addModel()">添加</button></div>' +
+    '<div class="hint" style="padding:0 14px 12px">服务没有 /models 接口，或者列表里没有你要的模型时用</div></div>';
+  // 高级 + 测试
+  h += '<div class="sec"><div class="fld"><label>缓存参数</label>' + seg(e.cache, [['auto', '自动'], ['off', '关闭']], 'setCache') + '<div class="hint">测试连接时服务不认缓存字段，会自动改成关闭</div></div>' +
+    '<div class="fld"><label>联网搜索的发送方式</label><div style="font-size:13px">' + esc(searchHow(e) || '这个供应商不支持') + '</div></div></div>';
+  h += '<div style="padding:4px 12px 16px;display:flex;flex-direction:column;gap:8px">' +
+    (e.test ? '<div class="note ' + (e.test.ok ? 'ok' : 'err') + '">' + esc(e.test.text) + '</div>' : '') +
+    '<button class="btn ghost block" ' + (e.test && e.test.loading ? 'disabled' : '') + ' onclick="testConn()">' + (e.test && e.test.loading ? '<span class="spin"></span>测试中' : '测试连接') + '</button>' +
+    (e.isNew ? '' : '<button class="btn danger block" onclick="openSheet(\'confirm\',{title:\'删除 ' + esc(e.name) + '？\',text:\'会删除这个供应商和保存的 Key。已有对话保留，但不能再用它的模型继续提问。\',ok:\'delProvider()\',okText:\'删除\'})">删除供应商</button>') +
+    '</div></div>';
+  return h;
+}
+function epHint() { const ep = endpoints(S.edit); return '对话请求发到 <span class="mono">' + esc(ep.chat) + '</span>'; }
+function setProto(v) { S.edit.proto = v; render(); }
+function setAuth(v) { S.edit.auth = v; render(); }
+function setCache(v) { S.edit.cache = v; render(); }
+function fillEditModels() {
+  const e = S.edit, el = $('#emlist'); if (!el) return;
+  const q = e.filter.trim().toLowerCase();
+  let hidden = 0;
+  const rows = e.models.map((m, i) => {
+    const c = caps(e, m);
+    if (e.chatOnly && c.chat === false) { hidden++; return ''; }
+    if (q && !m.id.toLowerCase().includes(q) && !pretty(m.id).toLowerCase().includes(q)) return '';
+    return '<div class="emrow ' + (m.on ? '' : 'off') + '"><input type="checkbox" ' + (m.on ? 'checked' : '') + ' ' + (c.chat === false ? 'disabled' : '') + ' onchange="S.edit.models[' + i + '].on=this.checked;render()">' +
+      '<div class="grow"><div class="nm">' + esc(pretty(m.id)) + (inferCaps(m.id).rec ? ' <i class="bd plain">推荐</i>' : '') + '</div><div class="id">' + esc(m.id) + '</div><div class="bds">' + badgesHTML(c) + '</div></div>' +
+      (c.chat === false ? '' : '<button class="capb" onclick="openSheet(\'caps\',{i:' + i + '})">能力</button>') + '</div>';
+  }).join('');
+  el.innerHTML = rows + (hidden ? '<div class="emrow" style="justify-content:center"><button class="lnk" onclick="S.edit.chatOnly=false;fillEditModels()">还有 ' + hidden + ' 个非对话模型（向量、语音、图片）已隐藏，显示</button></div>' : '');
+}
+function bulk(k) { S.edit.models.forEach(m => { m.on = k === 'rec' && !!inferCaps(m.id).rec; }); render(); }
+function addModel() {
+  const v = $('#madd').value.trim();
+  if (!v) return;
+  if (!/^[\w.\-\/:]+$/.test(v)) return toast('模型名只能有字母、数字和 . - _ / :，不能有空格');
+  if (S.edit.models.some(m => m.id === v)) return toast('已经有这个模型了');
+  S.edit.models.push({ id: v, on: true, ov: null }); render();
+  toast(inferCaps(v).known ? '已添加，能力按模型名自动识别' : '已添加。不认识这个模型，点「能力」标注一下');
+}
+function keyCheck(e) {
+  const url = root(e.url);
+  if (!/^https?:\/\/[^\s\/]+\.[^\s]+/.test(url) && !/^https?:\/\/localhost/.test(url)) return 'Base URL 格式不对，要以 https:// 开头';
+  if (!e.key.trim() && !e.keyTail) return '先填 API Key：获取模型列表和测试连接都要鉴权';
+  if (/bad/i.test(e.key)) return '401：Key 无效或已过期。检查 Key 有没有复制完整' + (e.proto === 'anthropic' && e.auth === 'x-api-key' ? '；中转服务可以试试把鉴权头改成 Bearer' : '');
+  if (/wrong/i.test(url)) return '404：这个地址没有 /models 接口。确认 Base URL（很多服务要带 /v1）；也可以在下面手动添加模型名';
+  return null;
+}
+function fetchModels() {
+  const e = S.edit;
+  const pre = keyCheck(e);
+  if (pre && !/^(401|404)/.test(pre)) { e.fetch = { st: 'err', msg: pre }; return render(); }
+  e.fetch = { st: 'loading' }; render();
+  setTimeout(() => {
+    if (S.edit !== e) return;
+    if (pre) { e.fetch = { st: 'err', msg: pre }; return render(); }
+    const ids = MODEL_LIST[e.preset], first = !e.models.length;
+    let added = 0;
+    ids.forEach(id => { if (!e.models.some(m => m.id === id)) { added++; e.models.push({ id, on: first && !!inferCaps(id).rec, ov: null }); } });
+    if (first && !e.models.some(m => m.on)) e.models.filter(m => inferCaps(m.id).chat !== false).slice(0, 3).forEach(m => { m.on = true; });
+    e.fetch = { st: 'ok', at: nowStr(), n: ids.length, added: first ? 0 : added };
+    render();
+    toast(first ? '获取到 ' + ids.length + ' 个模型，已勾选推荐的' : added ? '新增 ' + added + ' 个模型（默认不启用）' : '模型列表没有变化');
+  }, 1000);
+}
+function testConn() {
+  const e = S.edit, pre = keyCheck(e);
+  if (pre && !/^(401|404)/.test(pre)) { e.test = { ok: false, text: pre }; return render(); }
+  const m = e.models.find(x => x.on);
+  if (!m) { e.test = { ok: false, text: '先启用至少一个模型，测试会用它发一次最小请求' }; return render(); }
+  e.test = { loading: true }; render();
+  setTimeout(() => {
+    if (S.edit !== e) return;
+    if (pre) e.test = { ok: false, text: pre.replace('/models 接口', '对话接口') };
+    else {
+      const relay = e.preset === 'custom' && e.proto === 'chat';
+      if (relay) e.cache = 'off';
+      e.test = { ok: true, text: '连接正常：用 ' + m.id + ' 发了一次最小请求，0.8 秒返回。' + (relay ? '服务不认缓存字段，已把「缓存参数」改成关闭。' : '缓存参数可用。') + (caps(e, m).opts.length ? '思考参数可用。' : '') };
+    }
+    render();
+  }, 900);
+}
+function saveEdit() {
+  const e = S.edit, name = e.name.trim(), pre = keyCheck(e);
+  if (!name) return toast('起个名字，例如「Claude 中转」');
+  if (pre && !/^(401|404)/.test(pre)) return toast(pre);
+  if (!e.models.some(m => m.on)) return toast('至少启用一个模型');
+  const p = { id: e.isNew ? 'p' + Date.now() : e.pid, preset: e.preset, name, proto: e.proto, url: root(e.url), keyTail: e.key.trim() ? e.key.trim().slice(-4) : e.keyTail,
+    auth: e.auth, cache: e.cache, fetchedAt: e.fetch.st === 'ok' ? e.fetch.at : null, models: e.models };
+  const i = S.providers.findIndex(x => x.id === p.id);
+  if (i >= 0) S.providers[i] = p; else S.providers.push(p);
+  fixCfg();
+  S.edit = null; back(); toast('已保存 ' + name);
+}
+function delProvider() {
+  const id = S.edit.pid;
+  if (S.providers.length === 1) { S.sheet = null; render(); return toast('至少保留一个供应商'); }
+  S.providers = S.providers.filter(p => p.id !== id);
+  fixCfg(); S.sheet = null; S.edit = null; back(); toast('已删除');
+}
+function fixCfg() {
+  const p = prov(S.cfg.pid);
+  if (p && p.models.some(m => m.id === S.cfg.model && m.on)) return;
+  const q = S.providers.find(x => x.models.some(m => m.on));
+  S.cfg.pid = q.id; S.cfg.model = q.models.find(m => m.on).id;
+  if (!capsOf(S.cfg).searchOk) S.cfg.search = false;
+  toast('当前模型已停用，改用 ' + short(S.cfg.model));
+}
+function capsSheetHTML(s) {
+  const e = S.edit, m = e.models[s.i], c = caps(e, m), ov = m.ov || {};
+  const seg = (key, val, opts) => '<div class="seg">' + opts.map(([v, t]) => '<button class="' + (JSON.stringify(val) === JSON.stringify(v) ? 'on' : '') + '" onclick="setCap(' + s.i + ',\'' + key + '\',' + esc(JSON.stringify(v)) + ')">' + t + '</button>').join('') + '</div>';
+  return maskWrap('<div class="sheet"><div class="sh-h"><b>' + esc(m.id) + '</b><button onclick="closeSheet()">完成</button></div><div class="sh-b">' +
+    '<div class="note" style="margin:0 16px 10px">' + (inferCaps(m.id).known ? '已按模型名自动识别；和实际不一样时可以改。' : '不认识这个模型名，请按服务商文档标注。标错了最多是请求报错，App 会提示。') + '</div>' +
+    '<div class="caprow"><label>工具调用（读行情、持仓、生成操作卡都要用）</label>' + seg('tools', c.tools, [[true, '支持'], [false, '不支持']]) + '</div>' +
+    '<div class="caprow"><label>思考</label>' + seg('think', c.think, [[[], '不支持'], [BIN, '开 / 关'], [T4, '分档 低中高'], ['fixed', '总是思考']]) + '</div>' +
+    '<div class="caprow"><label>联网搜索' + (searchHow(e) ? '（' + esc(searchHow(e)) + '）' : '') + '</label>' + (searchHow(e) ? seg('search', c.search, [[true, '支持'], [false, '不支持']]) : '<div style="font-size:13px;color:var(--ink3)">这个供应商不支持</div>') + '</div>' +
+    (Object.keys(ov).length ? '<div class="caprow"><button class="lnk" onclick="S.edit.models[' + s.i + '].ov=null;render()">恢复自动识别</button></div>' : '') +
+    '</div></div>');
+}
+function setCap(i, k, v) { const m = S.edit.models[i]; m.ov = Object.assign({}, m.ov || {}, { [k]: v }); render(); }
+
+// ---------- 导航 ----------
+const topView = () => S.stack[S.stack.length - 1];
+function go(v) { S.stack.push(v); render(); }
+function back() { if (S.stack.length > 1) S.stack.pop(); if (topView() === 'chat') S.toBottom = true; render(); }
+function toast(t) { const el = document.createElement('div'); el.className = 'toast'; el.textContent = t; $('#toasts').appendChild(el); setTimeout(() => el.remove(), 2600); }
+function render() {
+  const v = topView();
+  const html = { chat: chatHTML, threads: threadsHTML, providers: providersHTML, presets: presetsHTML, edit: editHTML }[v]();
+  $('#app').innerHTML = html + sheetHTML();
+  if (v === 'chat') { const ta = $('#ta'); ta.value = S.draft; autoGrow(ta); fillMsgs(); fillComposer(); }
+  if (v === 'edit') fillEditModels();
+  if (S.sheet && S.sheet.type === 'model') { const q = $('#mq'); q.value = S.mq; fillModelList(); if (!S.mq) q.blur(); }
+}
+function demo(k) {
+  if (S.busy) stopAnswer();
+  S.sheet = null;
+  if (k === 'reset') { initState(); render(); return toast('已重置'); }
+  if (k === 'model' || k === 'effort') { S.stack = ['chat']; openSheet(k); }
+  if (k === 'providers') { S.stack = ['chat', 'providers']; render(); }
+  if (k === 'add') { S.stack = ['chat', 'providers', 'presets']; render(); }
+  if (k === 'edit') { S.stack = ['chat', 'providers']; editProvider('p1'); }
+}
+initState(); render();
+</script>
+</body>
+</html>

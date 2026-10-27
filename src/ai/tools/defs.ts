@@ -59,7 +59,7 @@ export const NAV_ROUTES: Record<string, { label: string; params: string }> = {
   Analysis: { label: '账户分析', params: '' },
   DataLab: { label: '数据练习', params: '' },
   AiMemory: { label: 'AI 记忆', params: '' },
-  AiServices: { label: 'AI 服务', params: '' },
+  AiServices: { label: '供应商与模型', params: '' },
 };
 
 export const TOOL_DEFS: ToolDef[] = [

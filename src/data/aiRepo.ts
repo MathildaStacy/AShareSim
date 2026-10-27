@@ -23,6 +23,8 @@ interface ThreadRow {
   compacted_count: number;
   last_page: string | null;
   memory_snapshot: string | null;
+  config: string | null;
+  last_config: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -34,6 +36,8 @@ const toThread = (r: ThreadRow): Thread => ({
   compactedCount: Number(r.compacted_count),
   lastPage: r.last_page,
   memorySnapshot: r.memory_snapshot,
+  config: r.config ? JSON.parse(r.config) : null,
+  lastConfig: r.last_config ? JSON.parse(r.last_config) : null,
   createdAt: r.created_at,
   updatedAt: r.updated_at,
 });
@@ -76,7 +80,13 @@ export async function updateThread(
   patch: Partial<
     Pick<
       Thread,
-      'title' | 'summary' | 'compactedCount' | 'lastPage' | 'memorySnapshot'
+      | 'title'
+      | 'summary'
+      | 'compactedCount'
+      | 'lastPage'
+      | 'memorySnapshot'
+      | 'config'
+      | 'lastConfig'
     >
   >,
   now: string,
@@ -87,12 +97,18 @@ export async function updateThread(
     compactedCount: 'compacted_count',
     lastPage: 'last_page',
     memorySnapshot: 'memory_snapshot',
+    config: 'config',
+    lastConfig: 'last_config',
   };
   const sets: string[] = [];
   const vals: (string | number | null)[] = [];
   for (const [k, v] of Object.entries(patch)) {
     sets.push(cols[k] + ' = ?');
-    vals.push(v as string | number | null);
+    vals.push(
+      (k === 'config' || k === 'lastConfig') && v != null
+        ? JSON.stringify(v)
+        : (v as string | number | null),
+    );
   }
   sets.push('updated_at = ?');
   vals.push(now, id);

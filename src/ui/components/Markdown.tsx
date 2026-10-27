@@ -25,11 +25,14 @@ function Inline({
         ) : x.t === 'link' ? (
           <Text
             key={i}
-            style={s.link}
+            style={[s.link, x.href.startsWith('source:') && s.citation]}
             onPress={() => onLink(x.href)}
             accessibilityRole="link"
+            accessibilityLabel={
+              x.href.startsWith('source:') ? '来源 ' + x.text : undefined
+            }
           >
-            {x.text}
+            {x.href.startsWith('source:') ? '[' + x.text + ']' : x.text}
           </Text>
         ) : (
           <Text key={i}>{x.text}</Text>
@@ -119,6 +122,13 @@ const s = StyleSheet.create({
     backgroundColor: color.bg,
   },
   link: { color: color.learn, textDecorationLine: 'underline' },
+  citation: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: color.learn,
+    backgroundColor: color.learnBg,
+    textDecorationLine: 'none',
+  },
   li: { flexDirection: 'row' },
   marker: {
     minWidth: 24,

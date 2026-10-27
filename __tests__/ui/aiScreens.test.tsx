@@ -1,3 +1,9 @@
+import { loadThread, selectConfig } from '../../src/ai/chat';
+import {
+  emptyProvider,
+  loadProviders,
+  saveProviders,
+} from '../../src/ai/services';
 /// <reference types="node" />
 /**
  * AI 界面（M4）的冒烟测试：在内存库上渲染 AI 对话、对话列表、AI 记忆、AI 服务、编辑服务、上下文页；
@@ -80,6 +86,15 @@ async function setup() {
   return core;
 }
 
+const rendered: ReactTestRenderer.ReactTestRenderer[] = [];
+afterEach(async () => {
+  await act(async () => {
+    for (const t of rendered.splice(0)) {
+      t.unmount();
+    }
+  });
+});
+
 async function render<K extends keyof RootStackParamList>(
   name: K,
   component: React.ComponentType<any>,
@@ -94,7 +109,14 @@ async function render<K extends keyof RootStackParamList>(
           insets: { top: 0, left: 0, right: 0, bottom: 0 },
         }}
       >
-        <NavigationContainer>
+        <NavigationContainer
+          onUnhandledAction={action => {
+            // 单屏测试没有上一级，保存后的返回由 Android 端到端覆盖。
+            if (action.type !== 'GO_BACK') {
+              throw new Error('未处理导航：' + action.type);
+            }
+          }}
+        >
           <Stack.Navigator screenOptions={{ headerShown: false }}>
             <Stack.Screen
               name={name}
@@ -109,7 +131,13 @@ async function render<K extends keyof RootStackParamList>(
   await act(async () => {
     await new Promise(r => setTimeout(r, 30));
   });
-  const text = () => JSON.stringify(tree.toJSON());
+  rendered.push(tree);
+  const text = () =>
+    JSON.stringify(tree.toJSON(), (key, value) =>
+      key === 'props'
+        ? { accessibilityLabel: value.accessibilityLabel, value: value.value }
+        : value,
+    );
   const type = async (label: string, v: string) => {
     const [n] = tree.root.findAll(
       x => x.props.accessibilityLabel === label && x.props.onChangeText,
@@ -149,24 +177,23 @@ beforeAll(async () => {
 
 test('没配服务时，AI 页提示去配置', async () => {
   const r = await render('Ai', AiScreen);
-  expect(r.text()).toContain('去配置 AI 服务');
-  expect(r.text()).toContain('AI 提供投资建议与分析，模拟交易需你确认');
+  expect(r.text()).toContain('配置供应商与模型');
   expect(r.text()).not.toContain('AI 不荐股');
 });
 
-test('添加服务：校验、Key 存 Keystore，页面上下文只写「已填」', async () => {
+test('添加供应商和模型：Key 保存在安全存储，设置和日志不含 Key', async () => {
   const r = await render('AiService', AiServiceScreen, {});
-  await r.press('保存');
-  expect(r.text()).toContain('起个名字');
-  await r.type('名称', '测试中转');
+  await r.press('添加 自定义');
+  await r.press('保存供应商');
+  expect(r.text()).toContain('请填写供应商名称');
+  await r.type('供应商名称', '测试中转');
   await r.type('Base URL', 'https://relay.example.com');
   await r.type('API Key', 'sk-ui-secret-123456');
-  await r.type('模型', 'claude-sonnet-5-5');
-  await r.press('鉴权头 Bearer');
-  expect(ctxText()).toContain('API Key：已填（未保存）');
-  expect(ctxText()).toContain('表单校验：通过');
-  expect(ctxText()).not.toContain('sk-ui-secret');
-  await r.press('保存');
+  await r.press('协议 Anthropic Messages');
+  await r.press('鉴权方式 Bearer');
+  await r.type('手动添加模型', 'claude-sonnet-5-5');
+  await r.press('添加模型');
+  await r.press('保存供应商');
   const list = await loadServices(core.db);
   expect(list).toHaveLength(1);
   expect(list[0]).toMatchObject({
@@ -175,16 +202,14 @@ test('添加服务：校验、Key 存 Keystore，页面上下文只写「已填�
     keyTail: '3456',
   });
   expect(await keychainStore.get(list[0].id)).toBe('sk-ui-secret-123456');
-  expect((await loadPrefs(core.db)).activeService).toBe(list[0].id);
-  // Key 不在设置表里
   const rows = await core.db.all<{ value: string }>(
     'SELECT value FROM settings',
   );
   expect(JSON.stringify(rows)).not.toContain('sk-ui-secret');
   const acts = await repo.recentActivity(core.db, 5, core.sim.accountId);
-  expect(acts[0].text).toContain('添加 AI 服务 测试中转');
+  expect(acts[0].text).toContain('添加供应商 测试中转');
   const services = await render('AiServices', AiServicesScreen);
-  expect(services.text()).toContain('使用中');
+  expect(services.text()).toContain('1 个已启用模型');
 });
 
 test('提问：回答、用到的工具、操作卡、执行；上下文条和用量', async () => {
@@ -347,4 +372,178 @@ test('查询过程默认折叠、展开后可追溯，错误直接可见；向�
   await act(async () => {
     r.tree.unmount();
   });
+});
+
+test('供应商模型列表来自接口；401 / 404 反馈，未知模型可标注，草稿不提前覆盖配置', async () => {
+  const before = await loadProviders(core.db);
+  let status = 401;
+  setAiDeps({
+    fetch: async (_url, init) => {
+      expect(init.method).toBe('GET');
+      return {
+        status,
+        text: async () =>
+          JSON.stringify(
+            status === 200
+              ? {
+                  data: [
+                    { id: 'relay-mix-pro' },
+                    { id: 'text-embedding-3-small' },
+                  ],
+                }
+              : { error: { message: 'mock failure' } },
+          ),
+      };
+    },
+  });
+  const r = await render('AiService', AiServiceScreen, {});
+  await r.press('添加 自定义');
+  await r.type('供应商名称', '新中转');
+  await r.type('Base URL', 'https://relay.example.com/v1');
+  await r.type('API Key', 'sk-never-in-context');
+  await r.press('获取模型列表');
+  expect(r.text()).toContain('HTTP 401');
+  status = 404;
+  await r.press('获取模型列表');
+  expect(r.text()).toContain('HTTP 404');
+  status = 200;
+  await r.press('获取模型列表');
+  expect(r.text()).toContain('relay-mix-pro');
+  expect(r.text()).toContain('能力未知');
+  await r.press('启用模型 relay-mix-pro');
+  await r.press('模型能力 relay-mix-pro');
+  await r.press('App 工具调用 支持');
+  await r.press('联网搜索 支持');
+  await r.press('思考参数格式 开关 / 供应商参数');
+  await r.press('可用档位 关闭');
+  await r.press('可用档位 开启');
+  await r.type('上下文长度', '64000');
+  await r.press('应用模型设置');
+  expect(await loadProviders(core.db)).toEqual(before);
+  expect(ctxText()).not.toContain('sk-never-in-context');
+  await r.press('保存供应商');
+  const after = await loadProviders(core.db),
+    p = after.find(x => x.name === '新中转')!;
+  expect(p.models.find(m => m.id === 'relay-mix-pro')).toMatchObject({
+    enabled: true,
+    overrides: {
+      tools: true,
+      search: true,
+      thinking: ['off', 'on'],
+      context: 64000,
+    },
+  });
+  expect(p.models.find(m => m.id === 'text-embedding-3-small')?.enabled).toBe(
+    false,
+  );
+  setAiDeps({ fetch: fetchMock });
+});
+
+test('聊天模型、搜索、思考跟随对话；虚线搜索可引导选择可用模型', async () => {
+  const ps = await loadProviders(core.db),
+    p = emptyProvider('deepseek');
+  p.models = [{ id: 'deepseek-reasoner', enabled: true, price: null }];
+  p.keyTail = '0000';
+  await keychainStore.set(p.id, 'mock-test-key');
+  await saveProviders(core.db, [...ps, p]);
+  newThread();
+  await selectConfig(core, {
+    providerId: p.id,
+    model: 'deepseek-reasoner',
+    effort: 'off',
+    search: true,
+  });
+  const r = await render('Ai', AiScreen); // 打开 AI 会接最近对话，随后显式选择新对话
+  await act(async () => {
+    newThread();
+    await selectConfig(core, {
+      providerId: p.id,
+      model: 'deepseek-reasoner',
+      effort: 'off',
+      search: false,
+    });
+  });
+  await r.press('思考强度');
+  expect(r.text()).toContain('这个模型始终思考，无法关闭');
+  await r.press('关闭');
+  await r.press('联网搜索');
+  expect(r.text()).toContain('DeepSeek 的接口不支持联网搜索');
+  await r.press('查看能搜索的模型');
+  expect(r.text()).toContain('选择能搜索的模型');
+  await r.press('关闭');
+  await r.press('选择模型');
+  await r.press('测试中转 claude-sonnet-5-5');
+  expect(useChat.getState().config?.model).toBe('claude-sonnet-5-5');
+  await r.press('思考强度');
+  expect(r.text()).toContain('最高');
+  expect(
+    r.tree.root.findAll(x => x.props.accessibilityLabel === '思考 关闭'),
+  ).toHaveLength(0);
+  await r.press('思考 最高');
+  expect(useChat.getState().config?.effort).toBe('max');
+  await act(async () => {
+    await loadThread(core, null);
+  });
+});
+
+test('来源和正文编号可点击；隐藏思考保留可展开内容，历史费用使用回答时的价格', async () => {
+  const { Linking } = require('react-native');
+  const open = jest.spyOn(Linking, 'openURL').mockResolvedValue(undefined);
+  const r = await render('Ai', AiScreen);
+  await act(async () => {
+    useChat.setState({
+      messages: [
+        {
+          id: 9999,
+          threadId: useChat.getState().threadId ?? 1,
+          role: 'assistant',
+          parts: [{ t: 'text', text: '建议持有。' }],
+          raw: null,
+          compacted: false,
+          createdAt: '',
+          ui: {
+            thinking: '公开思考摘要',
+            price: {
+              input: 1000,
+              cacheRead: 100,
+              cacheWrite: 1250,
+              output: 2000,
+            },
+            usage: {
+              input: 100,
+              cacheRead: 0,
+              cacheWrite: 0,
+              output: 100,
+              cacheReported: true,
+            },
+            search: {
+              queries: ['公告查询'],
+              sources: [
+                { url: 'https://www.cmbchina.com/', title: '实际返回的公告' },
+              ],
+              citations: [{ end: 5, source: 0 }],
+              calls: 1,
+            },
+          },
+        },
+      ],
+    });
+  });
+  expect(r.text()).toContain('实际返回的公告');
+  expect(r.text()).not.toContain('公开思考摘要');
+  expect(r.text()).toContain('$0.0003');
+  await r.press('思考过程');
+  expect(r.text()).toContain('公开思考摘要');
+  const citation = r.tree.root.findAll(
+    n =>
+      n.props.accessibilityRole === 'link' &&
+      typeof n.props.onPress === 'function' &&
+      n.props.accessibilityLabel === '来源 1',
+  )[0];
+  expect(citation).toBeDefined();
+  await act(async () => {
+    citation.props.onPress();
+  });
+  expect(open).toHaveBeenCalledWith('https://www.cmbchina.com/');
+  open.mockRestore();
 });

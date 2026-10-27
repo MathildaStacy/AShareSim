@@ -466,7 +466,7 @@ export function MeScreen() {
         </View>
         <View style={s.card}>
           <Entry
-            title="AI 服务"
+            title="供应商与模型"
             sub={aiSvc ?? '还没有配置：添加服务（Base URL、API Key、模型）'}
             onPress={() => nav.navigate('AiServices')}
           />

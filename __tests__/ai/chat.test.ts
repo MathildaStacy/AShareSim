@@ -1,3 +1,11 @@
+import { loadProviders, saveProviders } from '../../src/ai/services';
+import {
+  activeService,
+  currentConfig,
+  loadThread,
+  preview,
+  selectConfig,
+} from '../../src/ai/chat';
 /// <reference types="node" />
 /**
  * 对话运行时（AI_ASSISTANT.md §1、§4、§6、§8）：在内存库 + 真实行情样本上，用脚本化的「模型」跑完整流程：
@@ -710,5 +718,92 @@ describe('流式对话', () => {
     await answer;
     expect(calls).toBe(2);
     expect(toolRows(useChat.getState().messages)).toHaveLength(1);
+  });
+});
+
+describe('每个对话的模型 / 思考 / 搜索', () => {
+  test('切换、改回与新对话默认值；重启读取各自配置，缓存警告不修改历史', async () => {
+    const core = await setup();
+    const ps = await loadProviders(core.db);
+    ps[0].models.push({ id: 'claude-opus-5-5', enabled: true, price: null });
+    await saveProviders(core.db, ps);
+    replies = [{ json: textReply('第一轮建议') }];
+    await ask(core, { question: '第一轮', page: PAGE });
+    const firstId = useChat.getState().threadId!,
+      before = await aiRepo.messages(core.db, firstId);
+    const first = await currentConfig(core);
+    const next = {
+      providerId: 's1',
+      model: 'claude-opus-5-5',
+      effort: 'max' as const,
+      search: true,
+    };
+    await selectConfig(core, next);
+    expect((await activeService(core))?.model).toBe('claude-opus-5-5');
+    const changed = await preview(core, PAGE);
+    expect(changed.rebuild).toMatchObject({
+      previous: first,
+      reason: '更换模型、调整思考强度、开启搜索',
+    });
+    expect(changed.cached).toBe(0);
+    expect(changed.rebuild!.tokens).toBeGreaterThan(0);
+    expect(await aiRepo.messages(core.db, firstId)).toEqual(before);
+    await selectConfig(core, first!);
+    expect((await preview(core, PAGE)).rebuild).toBeNull();
+    await selectConfig(core, next);
+    newThread();
+    expect(await currentConfig(core)).toEqual(next);
+    replies = [{ json: textReply('第二段建议') }];
+    await ask(core, { question: '第二段', page: null });
+    const secondId = useChat.getState().threadId!;
+    expect(secondId).not.toBe(firstId);
+    await loadThread(core, firstId);
+    expect(await currentConfig(core)).toEqual(next);
+    // 已保存但尚未发问的配置也属于原对话。
+    await selectConfig(core, first!);
+    await loadThread(core, secondId);
+    expect(await currentConfig(core)).toEqual(next);
+    await loadThread(core, firstId);
+    expect(await currentConfig(core)).toEqual(first);
+    replies = [{ json: textReply('切换后的建议') }];
+    await selectConfig(core, next);
+    await ask(core, { question: '继续', page: null });
+    const users = (await aiRepo.messages(core.db, firstId)).filter(
+      m => m.role === 'user',
+    );
+    expect(users.at(-1)?.ui?.divider).toContain('开启搜索');
+    expect((await preview(core, PAGE)).rebuild).toBeNull();
+  });
+
+  test('新闻搜索默认不自动打开，只给主动重问入口；关闭 App 工具的模型不执行写入', async () => {
+    const core = await setup(),
+      ps = await loadProviders(core.db);
+    ps[0].models[0].overrides = { tools: false };
+    await saveProviders(core.db, ps);
+    replies = [
+      { json: toolReply('transfer', { dir: 'in', amount: 1000 }) },
+      { json: textReply('需要新闻搜索') },
+    ];
+    await ask(core, { question: '招商银行最近有什么新闻？', page: null });
+    expect(sent[0].body.tools).toEqual([]);
+    expect(sent[0].body.tools.some((t: any) => t.name === 'web_search')).toBe(
+      false,
+    );
+    expect(useChat.getState().messages.at(-1)?.ui?.searchOffer).toBe(
+      '招商银行最近有什么新闻？',
+    );
+    expect(
+      useChat.getState().messages.some(m => m.ui?.tools?.some(t => t.card)),
+    ).toBe(false);
+    await selectConfig(core, {
+      providerId: 's1',
+      model: SVC.model,
+      effort: 'low',
+      search: true,
+    });
+    replies = [{ json: textReply('已经开启搜索') }];
+    await ask(core, { question: '招商银行最近有什么新闻？', page: null });
+    expect(sent.at(-1)!.body.tools[0].type).toBe('web_search_20250305');
+    expect(useChat.getState().messages.at(-1)?.ui?.searchOffer).toBeUndefined();
   });
 });

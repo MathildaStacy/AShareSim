@@ -5,7 +5,8 @@ import {
   ProtocolError,
   type ParsedResponse,
 } from './protocol';
-import type { Protocol } from './types';
+import type { ModelProgress, Protocol } from './types';
+import { evidenceOf } from './evidence';
 
 export class ModelStream {
   private buffer = '';
@@ -16,11 +17,31 @@ export class ModelStream {
   private args = new Map<number, string>();
   private stopped = new Set<number>();
   private complete = false;
+  private lastText = '';
+  private lastProgress = '';
+
+  private text(value: string): void {
+    if (value && value !== this.lastText) {
+      this.lastText = value;
+      this.onText?.(value);
+    }
+  }
+  private progress(value: ModelProgress): void {
+    if (!value.thinking && !value.search) {
+      return;
+    }
+    const key = JSON.stringify(value);
+    if (key !== this.lastProgress) {
+      this.lastProgress = key;
+      this.onProgress?.(value);
+    }
+  }
 
   constructor(
     private protocol: Protocol,
     private model: string,
     private onText?: (text: string) => void,
+    private onProgress?: (progress: ModelProgress) => void,
   ) {}
 
   feed(chunk: string): void {
@@ -80,6 +101,21 @@ export class ModelStream {
 
   private publish(): void {
     const items = this.ordered();
+    if (this.protocol === 'chat') {
+      if (this.response?.choices?.[0]?.message?.content) {
+        this.text(this.response.choices[0].message.content);
+      }
+      if (this.response) {
+        this.progress(evidenceOf('chat', this.response));
+      }
+      return;
+    }
+    this.progress(
+      evidenceOf(
+        this.protocol,
+        this.protocol === 'anthropic' ? { content: items } : { output: items },
+      ),
+    );
     const text =
       this.protocol === 'anthropic'
         ? items
@@ -101,7 +137,7 @@ export class ModelStream {
             )
             .join('\n');
     if (text) {
-      this.onText?.(text);
+      this.text(text);
     }
   }
 
@@ -113,6 +149,8 @@ export class ModelStream {
     }
     if (this.protocol === 'anthropic') {
       this.anthropic(e);
+    } else if (this.protocol === 'chat') {
+      this.chat(e);
     } else {
       this.openai(e);
     }
@@ -143,6 +181,10 @@ export class ModelStream {
           this.publish();
         } else if (d.type === 'thinking_delta') {
           block.thinking = (block.thinking ?? '') + d.thinking;
+          this.publish();
+        } else if (d.type === 'citations_delta') {
+          block.citations = [...(block.citations ?? []), d.citation];
+          this.publish();
         } else if (d.type === 'signature_delta') {
           block.signature = (block.signature ?? '') + d.signature;
         }
@@ -158,6 +200,7 @@ export class ModelStream {
           }
         }
         this.stopped.add(e.index);
+        this.publish();
         break;
       }
       case 'message_delta':
@@ -185,6 +228,33 @@ export class ModelStream {
   private openai(e: any): void {
     const index = e.output_index;
     switch (e.type) {
+      case 'response.reasoning_summary_part.added':
+        if (this.items.has(index)) {
+          (this.items.get(index).summary ??= [])[e.summary_index] = e.part;
+        }
+        break;
+      case 'response.reasoning_summary_text.delta': {
+        const item = this.items.get(index);
+        if (item) {
+          const summary = (item.summary ??= []);
+          const p = (summary[e.summary_index] ??= {
+            type: 'summary_text',
+            text: '',
+          });
+          p.text += e.delta;
+          this.publish();
+        }
+        break;
+      }
+      case 'response.output_text.annotation.added': {
+        const msg = this.message(index, e.item_id),
+          p = msg.content[e.content_index];
+        if (p) {
+          (p.annotations ??= []).push(e.annotation);
+          this.publish();
+        }
+        break;
+      }
       case 'response.created':
       case 'response.in_progress':
         this.response = e.response;
@@ -237,6 +307,79 @@ export class ModelStream {
         this.complete = true;
         break;
     }
+  }
+
+  private chat(e: any): void {
+    if (e.error) {
+      throw new ProtocolError(errorMessageOf(e, '模型流式响应出错'));
+    }
+    if (!Array.isArray(e.choices)) {
+      return;
+    }
+    if (!this.response) {
+      this.response = {
+        model: e.model,
+        choices: [
+          { message: { role: 'assistant', content: '' }, finish_reason: null },
+        ],
+        usage: null,
+      };
+    }
+    if (e.model) {
+      this.response.model = e.model;
+    }
+    if (e.usage) {
+      this.response.usage = e.usage;
+    }
+    if (e.web_search) {
+      this.response.web_search = e.web_search;
+    }
+    if (e.search_info) {
+      this.response.search_info = e.search_info;
+    }
+    const c = e.choices.find((x: any) => x.index === 0) ?? e.choices[0];
+    if (!c) {
+      this.publish();
+      return;
+    }
+    const d = c.delta ?? {},
+      m = this.response.choices[0].message;
+    for (const k of ['content', 'reasoning_content', 'reasoning']) {
+      if (typeof d[k] === 'string') {
+        m[k] = (m[k] ?? '') + d[k];
+      }
+    }
+    if (d.annotations) {
+      m.annotations = [...(m.annotations ?? []), ...d.annotations];
+    }
+    for (const t of d.tool_calls ?? []) {
+      let call = this.items.get(t.index);
+      if (!call) {
+        call = {
+          id: t.id,
+          type: 'function',
+          function: { name: '', arguments: '' },
+        };
+        this.items.set(t.index, call);
+      }
+      if (t.id) {
+        call.id = t.id;
+      }
+      if (t.function?.name) {
+        call.function.name += t.function.name;
+      }
+      if (t.function?.arguments) {
+        call.function.arguments += t.function.arguments;
+      }
+    }
+    if (this.items.size) {
+      m.tool_calls = this.ordered();
+    }
+    if (c.finish_reason) {
+      this.response.choices[0].finish_reason = c.finish_reason;
+      this.complete = true;
+    }
+    this.publish();
   }
 
   private message(index: number, id: string): any {

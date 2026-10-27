@@ -13,7 +13,7 @@ import {
   type BuiltRequest,
   type ParsedResponse,
 } from './protocol';
-import type { AiService } from './types';
+import type { AiService, ModelProgress } from './types';
 import { ModelStream } from './stream';
 
 export type FetchLike = (
@@ -30,7 +30,16 @@ export type FetchLike = (
 
 export const defaultFetch: FetchLike = (url, init) => {
   const { onChunk, ...request } = init;
-  return onChunk ? xhrFetch(url, init) : fetch(url, request as RequestInit);
+  if (onChunk) {
+    return xhrFetch(url, init);
+  }
+  const { body, ...withoutBody } = request;
+  return fetch(
+    url,
+    (init.method === 'GET'
+      ? withoutBody
+      : { ...withoutBody, body }) as RequestInit,
+  );
 };
 
 const xhrFetch: FetchLike = (url, init) =>
@@ -131,7 +140,7 @@ export function compatOf(message: string): 'cache' | 'effort' | null {
   return null;
 }
 
-function httpError(status: number, message: string): AiError {
+export function httpError(status: number, message: string): AiError {
   const short = message.slice(0, 300);
   if (status === 401 || status === 403) {
     return new AiError(
@@ -183,6 +192,7 @@ export async function callModel(
     fetchImpl?: FetchLike;
     timeoutMs?: number;
     onText?: (text: string) => void;
+    onProgress?: (progress: ModelProgress) => void;
   } = {},
 ): Promise<CallResult> {
   const fetchImpl = opts.fetchImpl ?? defaultFetch;
@@ -199,7 +209,12 @@ export async function callModel(
   }
   const stream =
     req.body.stream === true
-      ? new ModelStream(service.protocol, service.model, opts.onText)
+      ? new ModelStream(
+          service.protocol,
+          service.model,
+          opts.onText,
+          opts.onProgress,
+        )
       : null;
   let receivedChunks = false;
   const started = Date.now();
@@ -265,16 +280,18 @@ export async function callModel(
     );
   }
   try {
+    const parsed =
+      json != null
+        ? parseResponse(service.protocol, service.model, json)
+        : (() => {
+            if (!receivedChunks) {
+              stream!.feed(text);
+            }
+            return stream!.finish();
+          })();
+    parsed.raw.providerId = service.id;
     return {
-      parsed:
-        json != null
-          ? parseResponse(service.protocol, service.model, json)
-          : (() => {
-              if (!receivedChunks) {
-                stream!.feed(text);
-              }
-              return stream!.finish();
-            })(),
+      parsed,
       latencyMs: Date.now() - started,
     };
   } catch (e) {

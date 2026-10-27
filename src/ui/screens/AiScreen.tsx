@@ -3,13 +3,24 @@
  * 记忆变更、用量和费用）、快捷问题、输入框（预计 token 和走缓存的部分）。
  * AI 页自己不登记页面上下文：打开时记下来源页面，每次提问重新计算它的上下文。
  */
-import { useNavigation } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { Check, ChevronDown, ChevronUp, Menu, X } from 'lucide-react-native';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import {
+  ArrowUp,
+  Brain,
+  Check,
+  ChevronDown,
+  ChevronUp,
+  Globe,
+  Menu,
+  Square,
+  X,
+} from 'lucide-react-native';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
+  Linking,
   Modal,
   Platform,
   Pressable,
@@ -33,11 +44,22 @@ import {
   runCard,
   stop,
   useChat,
+  currentConfig,
+  selectConfig,
+  type Preview,
 } from '../../ai/chat';
 import { capturePage } from '../../ai/context';
 import { costOf, estimateTokens, fmtUsd } from '../../ai/prompt';
 import { quickQuestions } from '../../ai/quick';
-import { loadPrefs } from '../../ai/services';
+import { loadPrefs, loadProviders } from '../../ai/services';
+import {
+  EFFORT_NAME,
+  normaliseConfig,
+  prettyModel,
+  resolvedService,
+  searchAvailability,
+} from '../../ai/models';
+import { citedText } from '../../ai/evidence';
 import {
   MEMORY_KIND_NAME,
   type ActionCard,
@@ -46,10 +68,17 @@ import {
   type StoredMessage,
   type ToolUi,
   type Usage,
+  type AiProvider,
+  type ModelEntry,
 } from '../../ai/types';
 import * as aiRepo from '../../data/aiRepo';
 import * as repo from '../../data/repos';
 import { CheckBar } from '../components/form';
+import {
+  EffortPicker,
+  ModelPicker,
+  SearchUnavailable,
+} from '../components/AiOptions';
 import { Markdown } from '../components/Markdown';
 import { Button, IconButton, NavBar, Note } from '../components/ui';
 import { useCore } from '../hooks';
@@ -63,7 +92,10 @@ const TAB_ROUTES = new Set(['Watch', 'Market', 'Trade', 'Learn', 'Me']);
 const fmtInt = (n: number) => n.toLocaleString('zh-CN');
 
 /** 一次回答的用量：「输入 1,200 · 缓存读 8,300 · 写 400 · 输出 350 tokens · 约 $0.004（不用缓存 $0.012）」。 */
-export function usageText(u: Usage, svc: AiService | null): string {
+export function usageText(
+  u: Usage,
+  svc: Pick<AiService, 'price'> | null,
+): string {
   const parts = [
     '输入 ' + fmtInt(u.input),
     u.cacheReported
@@ -80,6 +112,9 @@ export function usageText(u: Usage, svc: AiService | null): string {
           : ''),
     );
   }
+  if (u.searchRequests != null) {
+    parts.push('搜索 ' + u.searchRequests + ' 次（另计费）');
+  }
   return parts.join(' · ');
 }
 
@@ -88,12 +123,24 @@ export function AiScreen() {
   const nav = useNavigation<Nav>();
   const insets = useSafeAreaInsets();
   const [source] = useState(() => capturePage());
-  const { messages, thread, busy, pendingNav } = useChat();
+  const { messages, thread, busy, pendingNav, config } = useChat();
   const [text, setText] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [menu, setMenu] = useState(false);
   const [svc, setSvc] = useState<AiService | null | undefined>(undefined);
   const [memCount, setMemCount] = useState(0);
+  const [providers, setProviders] = useState<AiProvider[]>([]);
+  const [sheet, setSheet] = useState<
+    'model' | 'effort' | 'search' | 'searchModels' | null
+  >(null);
+  const [searchQuestion, setSearchQuestion] = useState<string | null>(null);
+  const [rebuild, setRebuild] = useState<Preview['rebuild']>(null);
+  const [focusVersion, setFocusVersion] = useState(0);
+  useFocusEffect(
+    useCallback(() => {
+      setFocusVersion(v => v + 1);
+    }, []),
+  );
   const [actCount, setActCount] = useState(0);
   const [quick, setQuick] = useState<string[]>([]);
   const [est, setEst] = useState<{
@@ -124,6 +171,8 @@ export function AiScreen() {
     (async () => {
       const prefs = await loadPrefs(core.db);
       const s = await activeService(core, prefs);
+      const ps = await loadProviders(core.db);
+      const cfg = await currentConfig(core);
       const mems = await aiRepo.memories(core.db);
       const acts = await repo.recentActivity(core.db, 20, core.sim.accountId);
       const p = await preview(
@@ -135,6 +184,11 @@ export function AiScreen() {
         return;
       }
       setSvc(s);
+      setProviders(ps);
+      setRebuild(p.rebuild);
+      if (!config && cfg) {
+        useChat.setState({ config: cfg });
+      }
       setMemCount(mems.length);
       setActCount(Math.min(prefs.recentN, acts.length));
       setQuick(quickQuestions(acts, prefs.includePage ? page : null));
@@ -145,7 +199,7 @@ export function AiScreen() {
     };
     // page 每次渲染都重新算，只在回答前后刷新
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [core, answerKey, source]);
+  }, [core, answerKey, source, config, thread?.id, focusVersion]);
 
   // navigate 工具：回答结束后关掉 AI 页，打开目标页面
   useEffect(() => {
@@ -184,9 +238,92 @@ export function AiScreen() {
       nav.navigate('Lesson', { id: m[2] });
     } else if (m?.[1] === 'stock') {
       nav.navigate('Stock', { code: m[2] });
+    } else if (/^https?:\/\//i.test(href)) {
+      Linking.openURL(href).catch(() => setError('无法打开这个来源链接'));
     }
   };
 
+  const provider = providers.find(p => p.id === config?.providerId);
+  const model = provider?.models.find(m => m.id === config?.model);
+  const availability =
+    provider && model
+      ? searchAvailability(provider, model)
+      : { ok: false, reason: '请先选择并配置模型' };
+  const choose = async (p: AiProvider, m: ModelEntry) => {
+    const forSearch = sheet === 'searchModels';
+    const next = normaliseConfig(
+      {
+        providerId: p.id,
+        model: m.id,
+        effort: config?.effort ?? 'low',
+        search: forSearch ? true : config?.search ?? false,
+      },
+      providers,
+    );
+    await selectConfig(core, next);
+    setSheet(null);
+    if (searchQuestion && forSearch) {
+      const q = searchQuestion;
+      setSearchQuestion(null);
+      send(q);
+    }
+  };
+  const toggleSearch = () => {
+    if (!config || busy) {
+      return;
+    }
+    if (!availability.ok) {
+      setSheet('search');
+      return;
+    }
+    selectConfig(core, { ...config, search: !config.search }).catch(e =>
+      setError(String(e)),
+    );
+  };
+  const retrySearch = async (q: string) => {
+    if (busy || !config) {
+      return;
+    }
+    if (!availability.ok) {
+      setSearchQuestion(q);
+      setSheet('search');
+      return;
+    }
+    await selectConfig(core, { ...config, search: true });
+    send(q);
+  };
+
+  const messageService = (m: StoredMessage) => {
+    if (m.ui?.config) {
+      return resolvedService(providers, m.ui.config);
+    }
+    const historicalProvider = providers.find(
+      candidate =>
+        m.ui?.service?.startsWith(candidate.name + ' · ') &&
+        candidate.models.some(entry => entry.id === m.raw?.model),
+    );
+    const historicalModel = historicalProvider?.models.find(
+      x => x.id === m.raw?.model,
+    );
+    return historicalProvider && historicalModel
+      ? resolvedService(
+          [
+            {
+              ...historicalProvider,
+              models: [{ ...historicalModel, enabled: true }],
+            },
+          ],
+          {
+            providerId: historicalProvider.id,
+            model: historicalModel.id,
+            effort: 'low',
+            search: false,
+          },
+        )
+      : m.id === -1
+      ? svc ?? null
+      : null;
+  };
   const live = useMemo(() => messages.filter(m => !m.compacted), [messages]);
   const tail = live[live.length - 1];
   const scrollVersion = [
@@ -208,7 +345,7 @@ export function AiScreen() {
         title={thread?.title ?? 'AI 助手'}
         sub={
           svc
-            ? svc.name + ' · ' + svc.model
+            ? '投资分析 · 当前页面随问随查'
             : svc === null
             ? '还没有配置服务'
             : ''
@@ -271,15 +408,14 @@ export function AiScreen() {
         {svc === null ? (
           <View style={s.setup}>
             <Note>
-              AI 助手直连你自己配置的服务（Anthropic Messages 或 OpenAI
-              Responses，官方或中转都行），API Key 只存在本机 Android
-              Keystore。先添加一个服务。
+              AI 助手直连你配置的供应商，支持 Messages、Responses 和 Chat
+              Completions。API Key 只存在本机安全存储。先启用一个模型即可开始。
             </Note>
             <View style={s.setupBtn}>
               <Button
-                title="去配置 AI 服务"
+                title="配置供应商与模型"
                 tone="learn"
-                onPress={() => nav.navigate('AiService', {})}
+                onPress={() => nav.navigate('AiServices')}
               />
             </View>
           </View>
@@ -310,9 +446,11 @@ export function AiScreen() {
                 ? answerUsage(live, firstOfAnswer(live, i))
                 : null
             }
-            svc={svc ?? null}
+            svc={messageService(m)}
             accountId={core.sim.accountId}
             onLink={onLink}
+            onSearch={q => retrySearch(q).catch(e => setError(String(e)))}
+            searchBusy={!!busy}
             onCard={(toolId, act) =>
               act === 'run'
                 ? runCard(core, m.id, toolId)
@@ -352,6 +490,34 @@ export function AiScreen() {
         </Pressable>
       ) : null}
       <View style={[s.bottom, { paddingBottom: Math.max(insets.bottom, 8) }]}>
+        {rebuild && !busy ? (
+          <View style={s.cacheWarning}>
+            <Text style={s.cacheText}>
+              {rebuild.reason +
+                '：下次预计重建约 ' +
+                fmtInt(rebuild.tokens) +
+                ' tokens 的缓存'}
+            </Text>
+            <Pressable
+              style={s.revert}
+              onPress={() =>
+                selectConfig(core, rebuild.previous).catch(e =>
+                  setError(String(e)),
+                )
+              }
+              accessibilityRole="button"
+            >
+              <Text style={s.revertText}>改回</Text>
+            </Pressable>
+          </View>
+        ) : null}
+        {svc?.capabilities?.tools === false ? (
+          <Text style={s.notice}>
+            当前模型无法读取 App 行情与持仓，只能聊天
+          </Text>
+        ) : svc?.capabilities?.tools === null ? (
+          <Text style={s.notice}>工具能力未知，可在供应商里标注</Text>
+        ) : null}
         {quick.length && !busy ? (
           <ScrollView
             horizontal
@@ -375,24 +541,79 @@ export function AiScreen() {
           <TextInput
             value={text}
             onChangeText={setText}
-            placeholder={svc ? '问 AI，或让它替你操作 App' : '先配置 AI 服务'}
+            placeholder={
+              svc ? '问 AI，或让它替你操作 App' : '先配置供应商与模型'
+            }
             placeholderTextColor={color.ink3}
             style={s.input}
             multiline
             editable={!!svc}
             accessibilityLabel="问 AI"
           />
-          {busy ? (
-            <Button small title="停止" onPress={stop} />
-          ) : (
-            <Button
-              small
-              title="发送"
-              tone="learn"
-              disabled={!text.trim() || !svc}
-              onPress={() => send(text)}
-            />
-          )}
+          <View style={s.toolbar}>
+            <Pressable
+              style={[s.modelControl, s.control]}
+              onPress={() => setSheet('model')}
+              disabled={!!busy}
+              accessibilityLabel="选择模型"
+              accessibilityRole="button"
+            >
+              <Text style={s.controlText} numberOfLines={1}>
+                {svc ? prettyModel(svc.model) : '选择模型'}
+              </Text>
+              <ChevronDown size={13} color={color.ink2} />
+            </Pressable>
+            <Pressable
+              style={[
+                s.control,
+                config?.search && s.controlOn,
+                !availability.ok && s.controlDashed,
+              ]}
+              onPress={toggleSearch}
+              disabled={!!busy || !svc}
+              accessibilityRole="button"
+              accessibilityLabel="联网搜索"
+              accessibilityState={{ selected: config?.search ?? false }}
+            >
+              <Globe
+                size={15}
+                color={config?.search ? color.learn : color.ink2}
+              />
+              <Text style={[s.controlText, config?.search && s.linkText]}>
+                搜索
+              </Text>
+            </Pressable>
+            <Pressable
+              style={s.control}
+              onPress={() => setSheet('effort')}
+              disabled={!!busy || !svc}
+              accessibilityRole="button"
+              accessibilityLabel="思考强度"
+            >
+              <Brain size={15} color={color.ink2} />
+              <Text style={s.controlText}>
+                {config && config.effort !== 'off'
+                  ? '思考·' + EFFORT_NAME[config.effort]
+                  : '思考'}
+              </Text>
+            </Pressable>
+            <Pressable
+              style={[
+                s.send,
+                (!svc || (!text.trim() && !busy)) && s.sendDisabled,
+              ]}
+              onPress={busy ? stop : () => send(text)}
+              disabled={!busy && (!text.trim() || !svc)}
+              accessibilityRole="button"
+              accessibilityLabel={busy ? '停止' : '发送'}
+            >
+              {busy ? (
+                <Square size={17} color="#FFFFFF" fill="#FFFFFF" />
+              ) : (
+                <ArrowUp size={22} color="#FFFFFF" />
+              )}
+            </Pressable>
+          </View>
         </View>
         {est && svc && !busy ? (
           <Text style={[s.est, num]} numberOfLines={2}>
@@ -400,13 +621,9 @@ export function AiScreen() {
               fmtInt(est.total + qTokens) +
               ' tokens，预计 ' +
               fmtInt(est.cached) +
-              ' 走缓存 · ' +
-              est.note}
+              ' 可读缓存'}
           </Text>
         ) : null}
-        <Text style={s.adviceHint}>
-          AI 提供投资建议与分析，模拟交易需你确认
-        </Text>
       </View>
       <AiMenu
         visible={menu}
@@ -422,6 +639,47 @@ export function AiScreen() {
             nav.navigate(r);
           }
         }}
+      />
+      <ModelPicker
+        visible={sheet === 'model' || sheet === 'searchModels'}
+        searchOnly={sheet === 'searchModels'}
+        providers={providers}
+        config={config}
+        onClose={() => {
+          setSheet(null);
+          setSearchQuestion(null);
+        }}
+        onSelect={(p, m) => choose(p, m).catch(e => setError(String(e)))}
+        onManage={() => {
+          setSheet(null);
+          nav.navigate('AiServices');
+        }}
+      />
+      <EffortPicker
+        visible={sheet === 'effort'}
+        caps={svc?.capabilities ?? null}
+        config={config}
+        onClose={() => setSheet(null)}
+        onSelect={effort => {
+          if (config) {
+            selectConfig(core, { ...config, effort })
+              .then(() => setSheet(null))
+              .catch(e => setError(String(e)));
+          }
+        }}
+        onManage={() => {
+          setSheet(null);
+          nav.navigate('AiService', { id: provider?.id });
+        }}
+      />
+      <SearchUnavailable
+        visible={sheet === 'search'}
+        reason={availability.reason}
+        onClose={() => {
+          setSheet(null);
+          setSearchQuestion(null);
+        }}
+        onChoose={() => setSheet('searchModels')}
       />
     </KeyboardAvoidingView>
   );
@@ -445,6 +703,8 @@ function MessageView({
   onCard,
   onMemory,
   onNav,
+  onSearch,
+  searchBusy,
 }: {
   m: StoredMessage;
   last: boolean;
@@ -455,8 +715,12 @@ function MessageView({
   onCard: (toolId: string, act: 'run' | 'cancel') => void;
   onMemory: (toolId: string, act: 'confirm' | 'decline' | 'undo') => void;
   onNav: (n: NonNullable<ToolUi['nav']>) => void;
+  onSearch: (q: string) => void;
+  searchBusy: boolean;
 }) {
   const [showQueries, setShowQueries] = useState(false);
+  const [showThinking, setShowThinking] = useState(false),
+    [showSearch, setShowSearch] = useState(false);
   if (m.role === 'user') {
     const ui = m.ui ?? {};
     return (
@@ -546,25 +810,149 @@ function MessageView({
             </View>
           ))}
         {usage ? (
-          <Text style={[s.usage, num]}>{usageText(usage, svc)}</Text>
+          <Text style={[s.usage, num]}>
+            {usageText(
+              usage,
+              m.ui?.price !== undefined ? { price: m.ui.price } : svc,
+            )}
+          </Text>
         ) : null}
       </View>
     );
   }
-  const text = m.parts
-    .map(p => (p.t === 'text' ? p.text : ''))
-    .join('\n')
-    .trim();
-  if (!text && !m.ui?.notice && !m.ui?.error && !usage) {
+  const text = m.parts.map(p => (p.t === 'text' ? p.text : '')).join('\n');
+  if (
+    !text &&
+    !m.ui?.thinking &&
+    !m.ui?.search &&
+    !m.ui?.notice &&
+    !m.ui?.error &&
+    !usage
+  ) {
     return null;
   }
   return (
     <View style={s.aiBlock}>
-      {text ? <Markdown text={text} onLink={onLink} /> : null}
+      {m.ui?.config ? (
+        <Text style={s.answerHead}>
+          {prettyModel(m.ui.config.model) +
+            ' · 思考' +
+            EFFORT_NAME[m.ui.config.effort] +
+            (m.ui.config.search ? ' · 搜索' : '')}
+        </Text>
+      ) : null}
+      {m.ui?.thinking ? (
+        <>
+          <Pressable
+            style={s.toolSummary}
+            onPress={() => setShowThinking(v => !v)}
+            accessibilityRole="button"
+            accessibilityLabel="思考过程"
+            accessibilityState={{ expanded: showThinking }}
+          >
+            <Brain size={15} color={color.ink2} />
+            <Text style={s.toolSummaryText}>
+              {m.id === -1 ? '正在思考' : '思考摘要'}
+            </Text>
+            <ChevronDown size={14} color={color.ink2} />
+          </Pressable>
+          {showThinking ? (
+            <Text style={s.thinking} selectable>
+              {m.ui.thinking}
+            </Text>
+          ) : null}
+        </>
+      ) : null}
+      {m.ui?.search ? (
+        <>
+          <Pressable
+            style={s.toolSummary}
+            onPress={() => setShowSearch(v => !v)}
+            accessibilityRole="button"
+            accessibilityLabel="搜索详情"
+            accessibilityState={{ expanded: showSearch }}
+          >
+            <Globe size={15} color={color.learn} />
+            <Text style={s.toolSummaryText}>
+              {(m.ui.search.queries.length
+                ? '搜索 ' + m.ui.search.queries.length + ' 个查询 · '
+                : '') +
+                m.ui.search.sources.length +
+                ' 个网页'}
+            </Text>
+            <ChevronDown size={14} color={color.ink2} />
+          </Pressable>
+          {showSearch ? (
+            <View>
+              <Text style={s.thinking}>
+                {m.ui.search.queries.length
+                  ? m.ui.search.queries.map(q => '搜索：' + q).join('\n')
+                  : '供应商未返回搜索词'}
+              </Text>
+              {m.ui.search.sources.map((src, i) => (
+                <Pressable
+                  key={src.url}
+                  style={s.source}
+                  onPress={() => onLink(src.url)}
+                  accessibilityRole="link"
+                >
+                  <Text style={s.linkText}>{i + 1 + '. ' + src.title}</Text>
+                </Pressable>
+              ))}
+            </View>
+          ) : null}
+        </>
+      ) : null}
+      {text ? (
+        <Markdown
+          text={citedText(text, m.ui?.search)}
+          onLink={href => {
+            const match = /^source:(\d+)$/.exec(href);
+            const src = match ? m.ui?.search?.sources[Number(match[1])] : null;
+            onLink(src?.url ?? href);
+          }}
+        />
+      ) : null}
+      {text && m.ui?.search?.sources.length ? (
+        <View style={s.sources}>
+          <Text style={s.sourceTitle}>来源</Text>
+          {m.ui.search.sources.map((src, i) => (
+            <Pressable
+              key={src.url}
+              onPress={() => onLink(src.url)}
+              style={s.source}
+              accessibilityRole="link"
+            >
+              <Text style={s.sourceText}>
+                {'[' + (i + 1) + '] ' + src.title}
+              </Text>
+              <Text style={s.sourceUrl} numberOfLines={1}>
+                {src.url.replace(/^https?:\/\//, '')}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
+      ) : null}
+      {m.ui?.searchOffer ? (
+        <Pressable
+          style={s.searchOffer}
+          disabled={searchBusy}
+          onPress={() => onSearch(m.ui!.searchOffer!)}
+          accessibilityRole="button"
+        >
+          <Globe size={15} color={color.learn} />
+          <Text style={s.linkText}>开启搜索并重问</Text>
+        </Pressable>
+      ) : null}
       {m.ui?.notice ? <Text style={s.notice}>{m.ui.notice}</Text> : null}
       {m.ui?.error ? <Text style={s.error}>{m.ui.error}</Text> : null}
       {usage ? (
-        <Text style={[s.usage, num]}>{usageText(usage, svc)}</Text>
+        <Text style={[s.usage, num]}>
+          {usageText(
+            usage,
+            m.ui?.price !== undefined ? { price: m.ui.price } : svc,
+          )}
+        </Text>
       ) : null}
     </View>
   );
@@ -707,7 +1095,7 @@ const MENU: [MenuKey, string, string][] = [
   ['new', '新对话', '别的对话不会自动带进来；AI 可以按需检索'],
   ['AiThreads', '对话列表', '切换、删除对话'],
   ['AiMemory', 'AI 记忆', '记忆模式；按类别查看、修改、删除'],
-  ['AiServices', 'AI 服务', 'Base URL、API Key、模型、价格'],
+  ['AiServices', '供应商与模型', '连接、Key、模型能力与价格'],
   ['AiContext', '发给 AI 的上下文', '每部分原文、token 和缓存断点'],
 ];
 
@@ -777,11 +1165,17 @@ const s = StyleSheet.create({
     height: StyleSheet.hairlineWidth,
     backgroundColor: color.ink3,
   },
-  divText: { fontSize: 12, color: color.ink3, marginHorizontal: 8 },
+  divText: {
+    fontSize: 12,
+    color: color.ink2,
+    marginHorizontal: 8,
+    flexShrink: 1,
+    textAlign: 'center',
+  },
   userWrap: { alignItems: 'flex-end', marginVertical: 6 },
   userBubble: {
     maxWidth: '85%',
-    backgroundColor: color.learn,
+    backgroundColor: '#26313C',
     borderRadius: 12,
     borderBottomRightRadius: 3,
     paddingHorizontal: 12,
@@ -885,18 +1279,101 @@ const s = StyleSheet.create({
     justifyContent: 'center',
   },
   chipText: { fontSize: 13, color: color.learn },
-  inputRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 8 },
-  input: {
-    flex: 1,
-    minHeight: 40,
-    maxHeight: 120,
+  inputRow: {
     borderWidth: 1,
-    borderColor: color.line,
-    borderRadius: 8,
+    borderColor: '#DCE2E5',
+    borderRadius: 16,
+    padding: 6,
+    backgroundColor: '#FFFFFF',
+  },
+  input: {
+    minHeight: 48,
+    maxHeight: 96,
     paddingHorizontal: 10,
     paddingVertical: 8,
     fontSize: 15,
     color: color.ink,
+  },
+  toolbar: { flexDirection: 'row', alignItems: 'center', gap: 2 },
+  control: {
+    minHeight: 48,
+    paddingHorizontal: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    borderRadius: 10,
+  },
+  modelControl: { flex: 1, justifyContent: 'flex-start', minWidth: 40 },
+  controlText: { fontSize: 12, color: color.ink2, flexShrink: 1 },
+  controlOn: { backgroundColor: color.learnBg },
+  controlDashed: {
+    borderWidth: 1,
+    borderColor: '#B7C0C5',
+    borderStyle: 'dashed',
+  },
+  linkText: { fontSize: 12, color: color.learn },
+  send: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: color.learn,
+  },
+  sendDisabled: { backgroundColor: '#B6C8C7' },
+  cacheWarning: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: color.warnBg,
+    borderRadius: 10,
+    paddingLeft: 10,
+    marginBottom: 6,
+  },
+  cacheText: { fontSize: 11, lineHeight: 17, color: color.warnInk, flex: 1 },
+  revert: {
+    minHeight: 48,
+    minWidth: 48,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  revertText: { fontSize: 12, fontWeight: '600', color: color.warnInk },
+  answerHead: {
+    fontSize: 11,
+    color: color.ink2,
+    marginBottom: 6,
+    fontWeight: '500',
+  },
+  thinking: {
+    fontSize: 12,
+    lineHeight: 19,
+    color: color.ink2,
+    backgroundColor: color.bg,
+    padding: 10,
+    borderRadius: 8,
+    marginBottom: 8,
+  },
+  sources: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderColor: color.line,
+    marginTop: 8,
+    paddingTop: 10,
+  },
+  sourceTitle: { fontSize: 11, color: color.ink2, fontWeight: '600' },
+  source: { minHeight: 48, justifyContent: 'center', paddingVertical: 7 },
+  sourceText: { fontSize: 12, color: color.learn, lineHeight: 18 },
+  sourceUrl: { fontSize: 10, color: color.ink2, lineHeight: 16 },
+  searchOffer: {
+    minHeight: 48,
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+    paddingHorizontal: 12,
+    borderRadius: 9,
+    backgroundColor: color.learnBg,
+    marginTop: 8,
   },
   est: { fontSize: 11, color: color.ink3, marginTop: 4 },
   adviceHint: { fontSize: 11, color: color.ink2, marginTop: 2 },

@@ -13,7 +13,16 @@ import {
   type Effort,
   type Price,
   type Protocol,
+  type AiProvider,
+  type ConversationConfig,
+  type ProviderKind,
 } from './types';
+import {
+  capabilitiesOf,
+  normaliseConfig,
+  PROVIDER_PRESETS,
+  resolvedService,
+} from './models';
 
 // ---------- Key ----------
 
@@ -47,7 +56,23 @@ export const keychainStore: KeyStore = {
 // ---------- 配置 ----------
 
 export async function loadServices(db: Db): Promise<AiService[]> {
-  return repo.getSetting<AiService[]>(db, 'aiServices', []);
+  const providers = await loadProviders(db);
+  const prefs = await loadPrefs(db);
+  return providers.flatMap(p =>
+    p.models
+      .filter(m => m.enabled)
+      .flatMap(m => {
+        const cfg = normaliseConfig(
+          prefs.lastConfig?.providerId === p.id &&
+            prefs.lastConfig.model === m.id
+            ? prefs.lastConfig
+            : { providerId: p.id, model: m.id, effort: 'low', search: false },
+          providers,
+        );
+        const service = resolvedService(providers, cfg);
+        return service ? [service] : [];
+      }),
+  );
 }
 
 export async function saveServices(
@@ -55,6 +80,152 @@ export async function saveServices(
   services: AiService[],
 ): Promise<void> {
   await repo.setSetting(db, 'aiServices', services);
+  const grouped = new Map<string, AiProvider>();
+  for (const s of services) {
+    const p = grouped.get(s.id) ?? {
+      id: s.id,
+      kind: s.providerKind ?? 'custom',
+      name: s.name,
+      protocol: s.protocol,
+      baseUrl: s.baseUrl,
+      auth: s.auth,
+      cache: s.cache,
+      keyTail: s.keyTail,
+      models: [],
+    };
+    p.models.push({
+      id: s.model,
+      enabled: true,
+      price: s.price,
+      ...(s.capabilities ? { overrides: s.capabilities } : {}),
+    });
+    grouped.set(s.id, p);
+  }
+  const providers = [...grouped.values()];
+  await saveProviders(db, providers);
+  const prefs = await loadPrefs(db);
+  const selected =
+    services.find(s => s.id === prefs.activeService) ?? services[0];
+  if (selected && !resolvedService(providers, prefs.lastConfig)) {
+    await savePrefs(db, {
+      ...prefs,
+      lastConfig: normaliseConfig(
+        {
+          providerId: selected.id,
+          model: selected.model,
+          effort: selected.effort,
+          search: selected.search ?? false,
+        },
+        providers,
+      ),
+    });
+  }
+}
+
+/** v0.3 每个服务迁成一个供应商和已启用模型，沿用 id，安全存储里的 Key 不移动、不重写。 */
+export async function loadProviders(db: Db): Promise<AiProvider[]> {
+  const saved = await repo.getSetting<AiProvider[] | null>(
+    db,
+    'aiProviders',
+    null,
+  );
+  if (saved != null) {
+    return saved;
+  }
+  return db.transaction(async tx => {
+    const existing = await repo.getSetting<AiProvider[] | null>(
+      tx,
+      'aiProviders',
+      null,
+    );
+    if (existing != null) {
+      return existing;
+    }
+    const legacy = await repo.getSetting<AiService[]>(tx, 'aiServices', []);
+    const providers: AiProvider[] = legacy.map(s => ({
+      id: s.id,
+      kind: 'custom',
+      name: s.name,
+      protocol: s.protocol,
+      baseUrl: s.baseUrl,
+      auth: s.auth,
+      cache: s.cache,
+      keyTail: s.keyTail,
+      models: [{ id: s.model, enabled: true, price: s.price }],
+    }));
+    await repo.setSetting(tx, 'aiProviders', providers);
+    const prefs = await loadPrefs(tx);
+    const last = legacy.find(s => s.id === prefs.activeService) ?? legacy[0];
+    if (last && !prefs.lastConfig) {
+      await savePrefs(tx, {
+        ...prefs,
+        lastConfig: normaliseConfig(
+          {
+            providerId: last.id,
+            model: last.model,
+            effort: last.effort,
+            search: false,
+          },
+          providers,
+        ),
+      });
+    }
+    return providers;
+  });
+}
+
+export const saveProviders = (db: Db, providers: AiProvider[]) =>
+  repo.setSetting(db, 'aiProviders', providers);
+
+export async function defaultConversationConfig(
+  db: Db,
+): Promise<ConversationConfig | null> {
+  const providers = await loadProviders(db);
+  const prefs = await loadPrefs(db);
+  if (resolvedService(providers, prefs.lastConfig)) {
+    return normaliseConfig(prefs.lastConfig!, providers);
+  }
+  const sorted = [...providers].sort(
+    (a, b) =>
+      Number(b.id === prefs.activeService) -
+      Number(a.id === prefs.activeService),
+  );
+  for (const p of sorted) {
+    const m = p.models.find(x => x.enabled && capabilitiesOf(p, x).chat);
+    if (m) {
+      return normaliseConfig(
+        { providerId: p.id, model: m.id, effort: 'low', search: false },
+        providers,
+      );
+    }
+  }
+  return null;
+}
+
+export function emptyProvider(kind: ProviderKind): AiProvider {
+  const preset = PROVIDER_PRESETS[kind];
+  return {
+    id: newServiceId(),
+    kind,
+    name: kind === 'custom' ? '' : preset.name,
+    protocol: preset.protocol,
+    baseUrl: preset.baseUrl,
+    auth: kind === 'anthropic' ? 'x-api-key' : 'bearer',
+    cache: 'auto',
+    keyTail: '',
+    models: [],
+  };
+}
+
+export async function setProviderCache(
+  db: Db,
+  id: string,
+  cache: AiProvider['cache'],
+): Promise<void> {
+  await saveProviders(
+    db,
+    (await loadProviders(db)).map(p => (p.id === id ? { ...p, cache } : p)),
+  );
 }
 
 export async function loadPrefs(db: Db): Promise<AiPrefs> {
@@ -110,6 +281,7 @@ export const SERVICE_FIELD_NAME: Record<ServiceField, string> = {
 export const DEFAULT_BASE_URL: Record<Protocol, string> = {
   anthropic: 'https://api.anthropic.com',
   openai: 'https://api.openai.com/v1',
+  chat: 'https://api.openai.com/v1',
 };
 
 export function emptyForm(protocol: Protocol = 'anthropic'): ServiceForm {

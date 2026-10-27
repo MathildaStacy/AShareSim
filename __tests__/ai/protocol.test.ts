@@ -259,7 +259,7 @@ describe('OpenAI Responses 请求', () => {
     expect(body.store).toBe(false);
     expect(body.prompt_cache_key).toBe('asharesim-test');
     expect(body.include).toEqual(['reasoning.encrypted_content']);
-    expect(body.reasoning).toEqual({ effort: 'low' });
+    expect(body.reasoning).toEqual({ effort: 'low', summary:'auto' });
     expect(body.instructions).toBe('SYS\n\n<memory>…</memory>');
     const input = body.input as any[];
     expect(input[0]).toEqual({

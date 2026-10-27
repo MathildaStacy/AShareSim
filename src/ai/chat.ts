@@ -34,8 +34,11 @@ import {
   installId,
   keychainStore,
   loadPrefs,
-  loadServices,
-  saveServices,
+  loadProviders,
+  saveProviders,
+  savePrefs,
+  defaultConversationConfig,
+  setProviderCache,
   type KeyStore,
 } from './services';
 import { executeCard as execCard } from './tools/actions';
@@ -51,7 +54,18 @@ import type {
   Thread,
   ToolUi,
   Usage,
+  ConversationConfig,
+  ModelProgress,
 } from './types';
+import {
+  configChanges,
+  normaliseConfig,
+  resolvedService,
+  sameConfig,
+  needsFreshInformation,
+} from './models';
+import { SEARCH_TOOL, kimiSearch } from './search';
+import { combineSearch } from './evidence';
 
 /** 一个问题里最多几轮工具调用（§7）。 */
 export const MAX_TOOL_ROUNDS = 6;
@@ -72,6 +86,7 @@ export function setAiDeps(d: Partial<Deps>): void {
 }
 
 export const aiKeys = () => deps.keys;
+export const aiTransport = () => deps.fetch;
 
 // ---------- 状态 ----------
 
@@ -96,6 +111,7 @@ interface ChatState {
   lastReq: LastRequest | null;
   /** 打开 AI 页时记下的来源页面（上下文页也用它）。 */
   source: Provider | null;
+  config: ConversationConfig | null;
 }
 
 export const useChat = create<ChatState>(() => ({
@@ -106,6 +122,7 @@ export const useChat = create<ChatState>(() => ({
   pendingNav: null,
   lastReq: null,
   source: null,
+  config: null,
 }));
 
 let abort: AbortController | null = null;
@@ -115,14 +132,61 @@ export async function loadThread(
   id: number | null,
 ): Promise<void> {
   if (id == null) {
-    useChat.setState({ threadId: null, thread: null, messages: [] });
+    useChat.setState({
+      threadId: null,
+      thread: null,
+      messages: [],
+      config: await defaultConversationConfig(core.db),
+    });
     return;
   }
   const [thread, messages] = await Promise.all([
     aiRepo.thread(core.db, id),
     aiRepo.messages(core.db, id),
   ]);
-  useChat.setState({ threadId: thread ? id : null, thread, messages });
+  const providers = await loadProviders(core.db);
+  // 旧会话优先根据实际回复的模型认领配置；沿用供应商 id，因此 Key 无需移动。
+  let config = thread?.config;
+  if (thread && !config) {
+    const last = [...messages]
+      .reverse()
+      .find(m => m.role === 'assistant' && m.raw);
+    const provider = providers.find(
+      p =>
+        p.models.some(m => m.id === last?.raw?.model) &&
+        (last?.raw?.providerId
+          ? p.id === last.raw.providerId
+          : p.protocol === last?.raw?.protocol),
+    );
+    config =
+      provider && last?.raw
+        ? normaliseConfig(
+            {
+              providerId: provider.id,
+              model: last.raw.model,
+              effort: 'low',
+              search: false,
+            },
+            providers,
+          )
+        : await defaultConversationConfig(core.db);
+    if (config) {
+      await aiRepo.updateThread(
+        core.db,
+        id,
+        { config, lastConfig: messages.length ? config : null },
+        thread.updatedAt,
+      );
+      thread.config = config;
+      thread.lastConfig = messages.length ? config : null;
+    }
+  }
+  useChat.setState({
+    threadId: thread ? id : null,
+    thread,
+    messages,
+    config: config ? normaliseConfig(config, providers) : null,
+  });
 }
 
 /** 打开 AI 页：没选对话时接着最近的一个。 */
@@ -136,7 +200,48 @@ export async function openLatest(core: AppCore): Promise<void> {
 }
 
 export function newThread(): void {
-  useChat.setState({ threadId: null, thread: null, messages: [] });
+  useChat.setState({
+    threadId: null,
+    thread: null,
+    messages: [],
+    config: null,
+  });
+}
+
+/** 每段对话拥有自己的配置；最新选择作为下一段新对话的默认值。 */
+export async function selectConfig(
+  core: AppCore,
+  next: ConversationConfig,
+): Promise<void> {
+  if (useChat.getState().busy) {
+    return;
+  }
+  const providers = await loadProviders(core.db),
+    cfg = normaliseConfig(next, providers);
+  if (!resolvedService(providers, cfg)) {
+    throw new Error('模型已停用或删除，请重新选择');
+  }
+  const { threadId } = useChat.getState();
+  if (threadId != null) {
+    await aiRepo.updateThread(core.db, threadId, { config: cfg }, beijingIso());
+  }
+  await savePrefs(core.db, {
+    ...(await loadPrefs(core.db)),
+    lastConfig: cfg,
+    activeService: cfg.providerId,
+  });
+  useChat.setState(state => ({
+    config: cfg,
+    thread: state.thread ? { ...state.thread, config: cfg } : null,
+  }));
+}
+
+export async function currentConfig(
+  core: AppCore,
+): Promise<ConversationConfig | null> {
+  return (
+    useChat.getState().config ?? (await defaultConversationConfig(core.db))
+  );
 }
 
 export function stop(): void {
@@ -145,15 +250,26 @@ export function stop(): void {
 
 export async function activeService(
   core: AppCore,
-  prefs?: AiPrefs,
+  _prefs?: AiPrefs,
 ): Promise<AiService | null> {
-  const p = prefs ?? (await loadPrefs(core.db));
-  const list = await loadServices(core.db);
-  return list.find(s => s.id === p.activeService) ?? list[0] ?? null;
+  const providers = await loadProviders(core.db),
+    cfg = await currentConfig(core);
+  return cfg
+    ? resolvedService(providers, normaliseConfig(cfg, providers))
+    : null;
 }
 
 const svcKeyOf = (s: AiService) =>
-  s.id + '|' + s.model + '|' + s.effort + '|' + s.cache;
+  [
+    s.id,
+    s.protocol,
+    s.baseUrl,
+    s.model,
+    s.effort,
+    s.search,
+    s.cache,
+    JSON.stringify(s.capabilities),
+  ].join('|');
 
 // ---------- 提问 ----------
 
@@ -238,13 +354,24 @@ export async function ask(core: AppCore, input: AskInput): Promise<void> {
     return;
   }
   const prefs = await loadPrefs(core.db);
+  const config = await currentConfig(core);
   let svc = await activeService(core, prefs);
   if (!svc) {
-    throw new AiError('auth', '还没有配置 AI 服务：我的 → AI 服务 → 添加服务');
+    throw new AiError(
+      'auth',
+      '请先在「供应商与模型」中配置 Key 并启用一个对话模型',
+    );
   }
   const key = await deps.keys.get(svc.id);
   if (!key) {
     throw new AiError('auth', '「' + svc.name + '」还没有保存 API Key');
+  }
+  if (config) {
+    await savePrefs(core.db, {
+      ...prefs,
+      lastConfig: config,
+      activeService: config.providerId,
+    });
   }
   const now = beijingIso();
   // 对话
@@ -281,10 +408,12 @@ export async function ask(core: AppCore, input: AskInput): Promise<void> {
   });
   const pageName = input.page?.ctx.name ?? null;
   const divider =
-    existing.length &&
-    pageName &&
-    thread.lastPage &&
-    pageName !== thread.lastPage
+    thread.lastConfig && config && !sameConfig(thread.lastConfig, config)
+      ? configChanges(thread.lastConfig, config) + '，从这里使用新设置'
+      : existing.length &&
+        pageName &&
+        thread.lastPage &&
+        pageName !== thread.lastPage
       ? '你现在在：' + pageName
       : undefined;
   await aiRepo.addMessage(
@@ -308,6 +437,14 @@ export async function ask(core: AppCore, input: AskInput): Promise<void> {
   if (pageName) {
     await aiRepo.updateThread(core.db, threadId, { lastPage: pageName }, now);
   }
+  if (config) {
+    await aiRepo.updateThread(
+      core.db,
+      threadId,
+      { config, lastConfig: config },
+      now,
+    );
+  }
   await loadThread(core, threadId);
 
   abort = new AbortController();
@@ -319,13 +456,17 @@ export async function ask(core: AppCore, input: AskInput): Promise<void> {
   const navs: ToolUi['nav'][] = [];
   useChat.setState({ busy: '思考中…', pendingNav: null });
   let partialText = '';
+  let progress: ModelProgress = {};
+  let searchHistory: ModelProgress['search'];
+  let paintedText = '';
   let lastPaint = 0;
-  const onText = (text: string) => {
-    partialText = text;
-    if (Date.now() - lastPaint < 40) {
+  const paint = () => {
+    const text = partialText;
+    if (Date.now() - lastPaint < 40 && (paintedText || !text)) {
       return;
     }
     lastPaint = Date.now();
+    paintedText = text;
     useChat.setState(state =>
       state.threadId !== threadId
         ? state
@@ -339,7 +480,12 @@ export async function ask(core: AppCore, input: AskInput): Promise<void> {
                 role: 'assistant',
                 parts: [{ t: 'text', text }],
                 raw: null,
-                ui: null,
+                ui: {
+                  ...progress,
+                  config: config ?? undefined,
+                  service: svc!.name + ' · ' + svc!.model,
+                  price: svc!.price,
+                },
                 compacted: false,
                 createdAt: now,
               },
@@ -347,10 +493,20 @@ export async function ask(core: AppCore, input: AskInput): Promise<void> {
           },
     );
   };
+  const onText = (text: string) => {
+    partialText = text;
+    paint();
+  };
+  const onProgress = (next: ModelProgress) => {
+    progress = { ...next, search: combineSearch(searchHistory, next.search) };
+    paint();
+  };
   try {
     for (let round = 0; ; round++) {
       partialText = '';
+      paintedText = '';
       lastPaint = 0;
+      progress = {};
       const res = await request(
         core,
         svc,
@@ -360,9 +516,11 @@ export async function ask(core: AppCore, input: AskInput): Promise<void> {
         undefined,
         undefined,
         onText,
+        onProgress,
       );
       svc = res.svc;
       const parsed = res.call.parsed;
+      const search = combineSearch(searchHistory, parsed.search);
       const incompleteCalls =
         parsed.stop !== 'tool' && parsed.parts.some(p => p.t === 'call');
       const calls =
@@ -383,7 +541,19 @@ export async function ask(core: AppCore, input: AskInput): Promise<void> {
           ui: {
             usage: parsed.usage,
             service: svc.name + ' · ' + svc.model,
-            notice: res.notice,
+            price: svc.price,
+            config: config ?? undefined,
+            thinking: parsed.thinking,
+            search,
+            searchOffer:
+              !svc.search && !calls.length && needsFreshInformation(question)
+                ? question
+                : undefined,
+            notice:
+              res.notice ??
+              (svc.search && !search && needsFreshInformation(question)
+                ? '已允许搜索，但供应商未返回检索记录和来源，无法核验是否实际搜索。'
+                : undefined),
             error:
               parsed.stop === 'max_tokens'
                 ? '回答太长被截断了（输出上限）'
@@ -410,6 +580,9 @@ export async function ask(core: AppCore, input: AskInput): Promise<void> {
       if (!calls.length) {
         break;
       }
+      if (search) {
+        searchHistory = { ...search, citations: [] };
+      }
       // 执行工具：每个调用都要有结果（协议要求），超过轮数上限的不执行
       const over = round >= MAX_TOOL_ROUNDS;
       const resultParts: Part[] = [];
@@ -433,17 +606,79 @@ export async function ask(core: AppCore, input: AskInput): Promise<void> {
           continue;
         }
         useChat.setState({ busy: '正在调用 ' + c.name + '…' });
-        const out = await runTool(
-          {
-            core,
-            threadId,
-            memoryMode: prefs.memoryMode,
-            nextCardNo: () => ++cardNo,
-          },
-          c.id,
-          c.name,
-          c.args,
-        );
+        let out;
+        if (
+          c.name === SEARCH_TOOL.name &&
+          svc.providerKind === 'moonshot' &&
+          svc.search
+        ) {
+          try {
+            const found = await kimiSearch(
+              svc,
+              key,
+              c.args,
+              signal,
+              deps.fetch,
+            );
+            searchHistory = combineSearch(searchHistory, found.search);
+            out = {
+              output: found.output,
+              ui: {
+                id: c.id,
+                name: c.name,
+                label: '联网搜索：' + found.search.queries[0],
+              },
+            };
+            // 来源保存在工具消息；即便后续模型未返回注解，也可以核查真实检索结果。
+            await aiRepo.addMessage(
+              core.db,
+              {
+                threadId,
+                role: 'assistant',
+                parts: [],
+                ui: {
+                  search: found.search,
+                  usage: { ...ZERO_USAGE, searchRequests: 1 },
+                },
+              },
+              beijingIso(),
+            );
+          } catch (e) {
+            out = {
+              output: JSON.stringify({
+                error: e instanceof Error ? e.message : String(e),
+              }),
+              ui: {
+                id: c.id,
+                name: c.name,
+                label: '联网搜索失败',
+                error: true,
+              },
+            };
+          }
+        } else if (svc.capabilities?.tools === false) {
+          out = {
+            output: '当前模型未启用 App 工具，未执行',
+            ui: {
+              id: c.id,
+              name: c.name,
+              label: '模型不支持 App 工具',
+              error: true,
+            },
+          };
+        } else {
+          out = await runTool(
+            {
+              core,
+              threadId,
+              memoryMode: prefs.memoryMode,
+              nextCardNo: () => ++cardNo,
+            },
+            c.id,
+            c.name,
+            c.args,
+          );
+        }
         resultParts.push({
           t: 'result',
           id: c.id,
@@ -482,7 +717,7 @@ export async function ask(core: AppCore, input: AskInput): Promise<void> {
         : e instanceof Error
         ? e.message
         : String(e);
-    if (partialText) {
+    if (partialText || progress.thinking || progress.search) {
       // 未结束的工具参数和推理签名不能重发，只保留已经展示的正文。
       await aiRepo.addMessage(
         core.db,
@@ -490,7 +725,13 @@ export async function ask(core: AppCore, input: AskInput): Promise<void> {
           threadId,
           role: 'assistant',
           parts: [{ t: 'text', text: partialText }],
-          ui: { error: msg },
+          ui: {
+            ...progress,
+            error: msg,
+            config: config ?? undefined,
+            service: svc.name + ' · ' + svc.model,
+            price: svc.price,
+          },
         },
         beijingIso(),
       );
@@ -549,7 +790,7 @@ export async function buildFor(
     service: svc,
     system: SYSTEM_PROMPT,
     context: contextBlock(thread.memorySnapshot ?? '', thread.summary),
-    tools: TOOL_DEFS,
+    tools: modelTools(svc, noTools),
     history,
     cache: svc.cache === 'auto',
     effort: svc.effort,
@@ -557,6 +798,15 @@ export async function buildFor(
     noTools,
     stream,
   });
+}
+
+export function modelTools(svc: AiService, noTools = false) {
+  return [
+    ...(!noTools && svc.search && svc.providerKind === 'moonshot'
+      ? [SEARCH_TOOL]
+      : []),
+    ...(svc.capabilities?.tools === false ? [] : TOOL_DEFS),
+  ];
 }
 
 /** 调一次模型；服务不认缓存 / 思考字段时去掉重发一次，并记住（§6.4）。 */
@@ -569,6 +819,7 @@ async function request(
   extra?: Part[],
   noTools?: boolean,
   onText?: (text: string) => void,
+  onProgress?: (progress: ModelProgress) => void,
 ): Promise<{ call: CallResult; svc: AiService; notice?: string }> {
   let svc = svc0;
   let notice: string | undefined;
@@ -579,6 +830,7 @@ async function request(
         signal,
         fetchImpl: deps.fetch,
         onText,
+        onProgress,
       });
       return { call, svc, notice };
     } catch (e) {
@@ -588,17 +840,61 @@ async function request(
       if (e.compat === 'cache' && svc.cache === 'auto') {
         svc = { ...svc, cache: 'off' };
         notice = '这个服务不认缓存参数，已在服务设置里改成「关闭」';
-      } else if (e.compat === 'effort' && svc.effort !== 'off') {
+      } else if (
+        e.compat === 'effort' &&
+        svc.effort !== 'off' &&
+        (!svc.capabilities || svc.capabilities.thinking?.includes('off'))
+      ) {
         svc = { ...svc, effort: 'off' };
         notice = '这个服务不认思考强度参数，已在服务设置里改成「不发送」';
       } else {
         throw e;
       }
-      const list = await loadServices(core.db);
-      await saveServices(
-        core.db,
-        list.map(s => (s.id === svc.id ? svc : s)),
-      );
+      if (e.compat === 'cache') {
+        await setProviderCache(core.db, svc.id, 'off');
+      } else {
+        await saveProviders(
+          core.db,
+          (
+            await loadProviders(core.db)
+          ).map(p =>
+            p.id === svc.id
+              ? {
+                  ...p,
+                  models: p.models.map(m =>
+                    m.id === svc.model
+                      ? {
+                          ...m,
+                          overrides: {
+                            ...m.overrides,
+                            thinking: [],
+                            thinkingStyle: 'none' as const,
+                          },
+                        }
+                      : m,
+                  ),
+                }
+              : p,
+          ),
+        );
+        const cfg = {
+          providerId: svc.id,
+          model: svc.model,
+          effort: 'off' as const,
+          search: svc.search ?? false,
+        };
+        await aiRepo.updateThread(
+          core.db,
+          threadId,
+          { config: cfg, lastConfig: cfg },
+          beijingIso(),
+        );
+        await savePrefs(core.db, {
+          ...(await loadPrefs(core.db)),
+          lastConfig: cfg,
+        });
+        useChat.setState({ config: cfg });
+      }
     }
   }
 }
@@ -754,7 +1050,7 @@ export async function maybeCompact(
   try {
     const extra: Part[] = [{ t: 'text', text: COMPACT_PROMPT }];
     const ctl = new AbortController();
-    let res = await request(core, svc, key, threadId, ctl.signal, extra);
+    let res = await request(core, svc, key, threadId, ctl.signal, extra, true);
     let text = res.call.parsed.parts
       .map(p => (p.t === 'text' ? p.text : ''))
       .join('')
@@ -819,11 +1115,17 @@ export interface Preview {
   cacheNote: string;
   request: BuiltRequest | null;
   service: AiService | null;
+  rebuild: {
+    tokens: number;
+    reason: string;
+    previous: ConversationConfig;
+  } | null;
 }
 
 const TTL_MS: Record<AiService['protocol'], number> = {
   anthropic: 5 * 60_000,
   openai: 30 * 60_000,
+  chat: 5 * 60_000,
 };
 
 /** 下一次提问会发什么：每部分的原文和 token 估算、预计走缓存的部分。 */
@@ -855,7 +1157,19 @@ export async function preview(
     actions: acts,
     actionResults: [],
   });
-  const toolsText = JSON.stringify(TOOL_DEFS);
+  const actualTools = svc
+    ? (buildRequest({
+        service: svc,
+        system: '',
+        context: '',
+        tools: modelTools(svc),
+        history: [],
+        cache: svc.cache === 'auto',
+        effort: svc.effort,
+        cacheKey: '',
+      }).body.tools as unknown[])
+    : TOOL_DEFS;
+  const toolsText = JSON.stringify(actualTools ?? []);
   const histText = msgs
     .map(m =>
       m.parts
@@ -868,7 +1182,7 @@ export async function preview(
   const sections: Section[] = [
     {
       key: 'tools',
-      title: '工具定义（' + TOOL_DEFS.length + ' 个）',
+      title: '工具定义（' + (actualTools?.length ?? 0) + ' 个）',
       text: toolsText,
       tokens: estimateTokens(toolsText),
       breakpoint: '断点 1（所有对话共用）',
@@ -910,11 +1224,25 @@ export async function preview(
     },
   ];
   const total = sections.reduce((a, s) => a + s.tokens, 0);
+  const cfg = await currentConfig(core);
+  const rebuild =
+    thread?.lastConfig && cfg && !sameConfig(thread.lastConfig, cfg)
+      ? {
+          tokens: Math.max(0, total - sections[4].tokens - sections[5].tokens),
+          reason: configChanges(thread.lastConfig, cfg),
+          previous: thread.lastConfig,
+        }
+      : null;
   const fixed = sections[0].tokens + sections[1].tokens;
   let cached = 0;
   let cacheNote: string;
   if (!svc) {
     cacheNote = '还没有配置 AI 服务';
+  } else if (rebuild) {
+    cacheNote =
+      '设置已变化，预计重建 ' +
+      rebuild.tokens.toLocaleString('zh-CN') +
+      ' tokens，以服务实际用量为准';
   } else if (svc.cache === 'off') {
     cacheNote =
       svc.protocol === 'openai'
@@ -923,15 +1251,17 @@ export async function preview(
   } else if (!lastReq) {
     cacheNote = '这次打开 App 以来第一次提问，缓存是冷的（第一次要写入缓存）';
   } else if (lastReq.svcKey !== svcKeyOf(svc)) {
-    cacheNote = '换了服务、模型或思考强度，缓存要重建';
+    cacheNote = '模型、思考、搜索或供应商配置已变化，预计缓存要重建';
   } else if (Date.now() - lastReq.at > TTL_MS[svc.protocol]) {
     cacheNote =
-      '距上次提问超过 ' + TTL_MS[svc.protocol] / 60_000 + ' 分钟，缓存已过期';
+      '距上次提问超过 ' +
+      TTL_MS[svc.protocol] / 60_000 +
+      ' 分钟，缓存可能已过期';
   } else if (lastReq.threadId === threadId) {
     // 这次附带的上下文和问题是新的，不会命中
     const fresh = sections[4].tokens + sections[5].tokens;
     cached = Math.min(total - fresh, lastReq.inputTokens);
-    cacheNote = '接着上一轮，前面的内容都能读缓存';
+    cacheNote = '接着上一轮，前缀预计可读缓存；以服务报告为准';
   } else {
     cached = fixed;
     cacheNote = '换了对话：工具和系统提示能读缓存，记忆和历史要重新写入';
@@ -943,7 +1273,15 @@ export async function preview(
       { t: 'text', text: question },
     ]);
   }
-  return { sections, total, cached, cacheNote, request: built, service: svc };
+  return {
+    sections,
+    total,
+    cached,
+    cacheNote,
+    request: built,
+    service: svc,
+    rebuild,
+  };
 }
 
 /** 一个对话里累计的用量（上下文页的命中率）。 */
@@ -992,7 +1330,7 @@ export async function testConnection(
       service: svc,
       system: SYSTEM_PROMPT,
       context: contextBlock('', ''),
-      tools: TOOL_DEFS,
+      tools: modelTools(svc),
       history: [
         {
           id: 0,
@@ -1045,7 +1383,8 @@ export async function testConnection(
       if (
         e instanceof AiError &&
         e.compat === 'effort' &&
-        svc.effort !== 'off'
+        svc.effort !== 'off' &&
+        (!svc.capabilities || svc.capabilities.thinking?.includes('off'))
       ) {
         svc = { ...svc, effort: 'off' };
         lines.push('服务不认思考强度参数，已改成「不发送」');
