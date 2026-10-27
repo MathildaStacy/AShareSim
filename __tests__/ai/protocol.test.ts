@@ -259,7 +259,7 @@ describe('OpenAI Responses 请求', () => {
     expect(body.store).toBe(false);
     expect(body.prompt_cache_key).toBe('asharesim-test');
     expect(body.include).toEqual(['reasoning.encrypted_content']);
-    expect(body.reasoning).toEqual({ effort: 'low', summary:'auto' });
+    expect(body.reasoning).toEqual({ effort: 'low', summary: 'auto' });
     expect(body.instructions).toBe('SYS\n\n<memory>…</memory>');
     const input = body.input as any[];
     expect(input[0]).toEqual({
@@ -401,4 +401,34 @@ describe('兼容服务和 Key 保护', () => {
       'header sk-proj••••',
     );
   });
+});
+
+test('兼容 Responses 的字符串 / text 块 / 汇总 output_text，正文与可重放内容一致', () => {
+  for (const response of [
+    {
+      output: [
+        { type: 'message', role: 'assistant', content: '兼容服务的正文。' },
+      ],
+    },
+    {
+      output: [
+        {
+          type: 'message',
+          role: 'assistant',
+          content: [{ type: 'text', text: '兼容服务的正文。' }],
+        },
+      ],
+    },
+    { output: [], output_text: '兼容服务的正文。' },
+  ]) {
+    const parsed = parseResponse('openai', 'm', response);
+    expect(parsed.parts).toEqual([{ t: 'text', text: '兼容服务的正文。' }]);
+    expect(parsed.raw.items).toEqual([
+      {
+        type: 'message',
+        role: 'assistant',
+        content: [{ type: 'output_text', text: '兼容服务的正文。' }],
+      },
+    ]);
+  }
 });

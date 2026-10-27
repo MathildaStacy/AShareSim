@@ -13,6 +13,7 @@ import type {
   Thread,
 } from '../ai/types';
 import type { Db } from './db';
+import { restoreAssistantText } from '../ai/messageText';
 
 // ---------- 对话 ----------
 
@@ -136,16 +137,17 @@ interface MessageRow {
   created_at: string;
 }
 
-const toMessage = (r: MessageRow): StoredMessage => ({
-  id: Number(r.id),
-  threadId: Number(r.thread_id),
-  role: r.role,
-  parts: JSON.parse(r.parts),
-  raw: r.raw ? JSON.parse(r.raw) : null,
-  ui: r.ui ? JSON.parse(r.ui) : null,
-  compacted: !!r.compacted,
-  createdAt: r.created_at,
-});
+const toMessage = (r: MessageRow): StoredMessage =>
+  restoreAssistantText({
+    id: Number(r.id),
+    threadId: Number(r.thread_id),
+    role: r.role,
+    parts: JSON.parse(r.parts),
+    raw: r.raw ? JSON.parse(r.raw) : null,
+    ui: r.ui ? JSON.parse(r.ui) : null,
+    compacted: !!r.compacted,
+    createdAt: r.created_at,
+  });
 
 export async function addMessage(
   db: Db,

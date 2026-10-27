@@ -628,3 +628,92 @@ test('新对话清空草稿，快捷问题只在空对话显示，流式正文�
     useChat.setState({ busy: null });
   });
 });
+
+test('流式结束帧只有用量时，正文仍在屏幕上并能从历史重新打开', async () => {
+  const runtime = await setup();
+  const p = emptyProvider('openai');
+  p.models = [{ id: 'gpt-6.1-sol', enabled: true, price: null }];
+  p.keyTail = '0000';
+  await saveProviders(runtime.db, [p]);
+  await keychainStore.set(p.id, 'mock-ui-key');
+  newThread();
+  await selectConfig(runtime, {
+    providerId: p.id,
+    model: 'gpt-6.1-sol',
+    effort: 'low',
+    search: true,
+  });
+  let release!: () => void, begin!: () => void;
+  const started = new Promise<void>(r => {
+    begin = r;
+  });
+  const gate = new Promise<void>(r => {
+    release = r;
+  });
+  const event = (v: unknown) => 'data: ' + JSON.stringify(v) + '\n\n';
+  setAiDeps({
+    fetch: async (_url, init) => {
+      const first =
+        event({
+          type: 'response.output_item.added',
+          output_index: 0,
+          item: { type: 'message', role: 'assistant', id: 'msg', content: [] },
+        }) +
+        event({
+          type: 'response.output_text.delta',
+          output_index: 0,
+          content_index: 0,
+          delta: '你正在查看中证1000指数页面。',
+        });
+      init.onChunk!(first);
+      begin();
+      await gate;
+      const final = event({
+        type: 'response.completed',
+        response: {
+          status: 'completed',
+          output: [],
+          usage: {
+            input_tokens: 8427,
+            input_tokens_details: { cached_tokens: 3712 },
+            output_tokens: 197,
+          },
+        },
+      });
+      init.onChunk!(final);
+      return { status: 200, text: async () => first + final };
+    },
+  });
+  const r = await render('Ai', AiScreen);
+  const done = new Promise<void>(resolve => {
+    const unsub = useChat.subscribe(state => {
+      if (
+        !state.busy &&
+        state.messages.some(m => m.role === 'assistant' && m.id > 0)
+      ) {
+        unsub();
+        resolve();
+      }
+    });
+  });
+  await r.type('问 AI', '现在在哪个页面？解释一下');
+  await r.press('发送');
+  await started;
+  expect(r.text()).toContain('你正在查看中证1000指数页面');
+  await act(async () => {
+    release();
+    await done;
+  });
+  expect(r.text()).toContain('你正在查看中证1000指数页面');
+  expect(r.text()).toContain('197 tokens');
+  expect(r.text()).not.toContain('没有可显示的正文');
+  const id = useChat.getState().threadId!;
+  await act(async () => {
+    await loadThread(runtime, null);
+    await loadThread(runtime, id);
+  });
+  expect(r.text()).toContain('你正在查看中证1000指数页面');
+  await r.press('用量详情');
+  expect(r.text()).toContain('缓存读 3,712');
+  setAiDeps({ fetch: fetchMock });
+});

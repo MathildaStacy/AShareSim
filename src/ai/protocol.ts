@@ -15,6 +15,7 @@ import type {
   Usage,
 } from './types';
 import { evidenceOf } from './evidence';
+import { contentText, normalizeResponseItem } from './messageText';
 import { searchMethod } from './models';
 
 export interface ToolDef {
@@ -546,9 +547,9 @@ function parseChat(model: string, json: any): ParsedResponse {
     );
   }
   const parts: Part[] = [];
-  if (typeof m.content === 'string' && m.content) {
-    parts.push({ t: 'text', text: m.content });
-  }
+  const body =
+    contentText(m.content) || (typeof m.refusal === 'string' ? m.refusal : '');
+  if (body) parts.push({ t: 'text', text: body });
   for (const c of m.tool_calls ?? []) {
     if (c.type === 'function') {
       parts.push({
@@ -640,24 +641,31 @@ function parseAnthropic(model: string, json: any): ParsedResponse {
 }
 
 function parseOpenai(model: string, json: any): ParsedResponse {
-  if (!Array.isArray(json.output)) {
+  if (!Array.isArray(json.output) && typeof json.output_text !== 'string') {
     throw new ProtocolError('响应里没有 output（不是 OpenAI Responses 格式）');
   }
+  const output = (Array.isArray(json.output) ? json.output : []).map(
+    normalizeResponseItem,
+  );
+  if (
+    typeof json.output_text === 'string' &&
+    json.output_text.trim() &&
+    !output.some(
+      (item: any) =>
+        item?.type === 'message' && contentText(item.content).trim(),
+    )
+  ) {
+    output.push({
+      type: 'message',
+      role: 'assistant',
+      content: [{ type: 'output_text', text: json.output_text }],
+    });
+  }
   const parts: Part[] = [];
-  for (const item of json.output) {
-    if (item?.type === 'message' && Array.isArray(item.content)) {
-      const text = item.content
-        .map((c: any) =>
-          c?.type === 'output_text'
-            ? String(c.text ?? '')
-            : c?.type === 'refusal'
-            ? String(c.refusal ?? '')
-            : '',
-        )
-        .join('');
-      if (text) {
-        parts.push({ t: 'text', text });
-      }
+  for (const item of output) {
+    if (item?.type === 'message') {
+      const text = contentText(item.content);
+      if (text) parts.push({ t: 'text', text });
     } else if (item?.type === 'function_call') {
       parts.push({
         t: 'call',
@@ -667,10 +675,10 @@ function parseOpenai(model: string, json: any): ParsedResponse {
       });
     }
   }
-  const u = json.usage ?? {};
-  const d = u.input_tokens_details ?? {};
-  const read = count(d.cached_tokens);
-  const write = count(d.cache_write_tokens ?? u.cache_write_tokens);
+  const u = json.usage ?? {},
+    d = u.input_tokens_details ?? {};
+  const read = count(d.cached_tokens),
+    write = count(d.cache_write_tokens ?? u.cache_write_tokens);
   const stop: Stop =
     json.status === 'incomplete'
       ? json.incomplete_details?.reason === 'content_filter'
@@ -681,7 +689,7 @@ function parseOpenai(model: string, json: any): ParsedResponse {
       : 'end';
   return {
     parts,
-    raw: { protocol: 'openai', model, items: json.output },
+    raw: { protocol: 'openai', model, items: output },
     usage: {
       input: Math.max(0, count(u.input_tokens) - read - write),
       cacheRead: read,

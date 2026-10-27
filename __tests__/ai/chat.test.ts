@@ -807,3 +807,207 @@ describe('每个对话的模型 / 思考 / 搜索', () => {
     expect(useChat.getState().messages.at(-1)?.ui?.searchOffer).toBeUndefined();
   });
 });
+
+describe('空结束快照与历史恢复', () => {
+  async function openaiCore() {
+    const core = await setup();
+    const providers = await loadProviders(core.db);
+    providers[0] = {
+      ...providers[0],
+      protocol: 'openai',
+      models: [{ id: 'gpt-6.1-sol', enabled: true, price: null }],
+    };
+    await saveProviders(core.db, providers);
+    await selectConfig(core, {
+      providerId: providers[0].id,
+      model: 'gpt-6.1-sol',
+      effort: 'low',
+      search: false,
+    });
+    return core;
+  }
+  test('结束后正文、用量、冷加载、继续提问的历史都保留；不重复存正文', async () => {
+    const core = await openaiCore();
+    let release!: () => void, begin!: () => void;
+    const started = new Promise<void>(r => {
+      begin = r;
+    });
+    const gate = new Promise<void>(r => {
+      release = r;
+    });
+    let n = 0,
+      followup: any;
+    setAiDeps({
+      fetch: async (_url, init) => {
+        if (n++) {
+          followup = JSON.parse(init.body);
+          return {
+            status: 200,
+            text: async () =>
+              JSON.stringify({
+                output: [
+                  {
+                    type: 'message',
+                    role: 'assistant',
+                    content: [{ type: 'output_text', text: '继续解释。' }],
+                  },
+                ],
+              }),
+          };
+        }
+        const first = sse(
+          {
+            type: 'response.output_item.added',
+            output_index: 0,
+            item: {
+              type: 'message',
+              id: 'msg',
+              role: 'assistant',
+              content: [],
+            },
+          },
+          {
+            type: 'response.output_text.delta',
+            output_index: 0,
+            content_index: 0,
+            delta: '你正在查看中证1000指数页面。',
+          },
+        );
+        init.onChunk!(first);
+        begin();
+        await gate;
+        const end = sse({
+          type: 'response.completed',
+          response: {
+            status: 'completed',
+            output: [],
+            usage: {
+              input_tokens: 8427,
+              input_tokens_details: { cached_tokens: 3712 },
+              output_tokens: 197,
+            },
+          },
+        });
+        init.onChunk!(end);
+        return { status: 200, text: async () => first + end };
+      },
+    });
+    const task = ask(core, {
+      question: '现在在哪个页面？解释一下',
+      page: null,
+    });
+    await started;
+    expect(useChat.getState().messages.at(-1)?.parts).toEqual([
+      { t: 'text', text: '你正在查看中证1000指数页面。' },
+    ]);
+    release();
+    await task;
+    const id = useChat.getState().threadId!;
+    const saved = await aiRepo.messages(core.db, id);
+    expect(saved).toHaveLength(2);
+    expect(saved[1].parts).toEqual([
+      { t: 'text', text: '你正在查看中证1000指数页面。' },
+    ]);
+    expect(saved[1].ui?.usage).toMatchObject({
+      input: 4715,
+      cacheRead: 3712,
+      output: 197,
+    });
+    expect(saved[1].ui?.error).toBeUndefined();
+    await loadThread(core, null);
+    await loadThread(core, id);
+    expect(useChat.getState().messages[1].parts).toEqual(saved[1].parts);
+    await ask(core, { question: '继续', page: null });
+    expect(
+      JSON.stringify(followup.input).match(/你正在查看中证1000指数页面。/g),
+    ).toHaveLength(1);
+  });
+
+  test('真正没有正文的响应保留用量、显示错误、不偷偷重试；加密推理不能伪装成回答', async () => {
+    const core = await openaiCore();
+    let requests = 0;
+    setAiDeps({
+      fetch: async () => {
+        requests++;
+        return {
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              status: 'completed',
+              output: [
+                {
+                  type: 'reasoning',
+                  encrypted_content: 'encrypted-private-data',
+                  summary: [],
+                },
+              ],
+              usage: { input_tokens: 4715, output_tokens: 197 },
+            }),
+        };
+      },
+    });
+    await ask(core, { question: '解释页面', page: null });
+    const m = useChat.getState().messages.at(-1)!;
+    expect(m.parts).toEqual([]);
+    expect(m.ui?.error).toContain('没有可显示的正文');
+    expect(m.ui?.usage?.output).toBe(197);
+    expect(requests).toBe(1);
+    expect(JSON.stringify(m.parts)).not.toContain('encrypted-private-data');
+  });
+
+  test('旧记录有 raw 正文可恢复，原表不改写；已丢失正文的旧记录明确提示', async () => {
+    const core = await setup();
+    const id = await aiRepo.createThread(
+      core.db,
+      '旧对话',
+      '2026-10-27T21:00:00',
+    );
+    const raw = {
+      protocol: 'openai' as const,
+      model: 'm',
+      items: [
+        { type: 'reasoning', encrypted_content: 'cipher', summary: [] },
+        {
+          type: 'message',
+          role: 'assistant',
+          content: [{ type: 'text', text: '旧记录里尚存的正文。' }],
+        },
+      ],
+    };
+    const usage = {
+      input: 4715,
+      cacheRead: 3712,
+      cacheWrite: 0,
+      output: 197,
+      cacheReported: true,
+    };
+    const row = await aiRepo.addMessage(
+      core.db,
+      { threadId: id, role: 'assistant', parts: [], raw, ui: { usage } },
+      '2026-10-27T21:00:00',
+    );
+    await aiRepo.addMessage(
+      core.db,
+      {
+        threadId: id,
+        role: 'assistant',
+        parts: [],
+        raw: { ...raw, items: [] },
+        ui: { usage },
+      },
+      '2026-10-27T21:01:00',
+    );
+    const messages = await aiRepo.messages(core.db, id);
+    expect(messages[0].parts).toEqual([
+      { t: 'text', text: '旧记录里尚存的正文。' },
+    ]);
+    expect(messages[0].raw?.items[0]).toEqual(raw.items[0]);
+    expect(messages[1].ui?.error).toContain('没有可显示的正文');
+    const stored = await core.db.get<{ parts: string; raw: string }>(
+      'SELECT parts,raw FROM ai_message WHERE id = ?',
+      [row],
+    );
+    expect(stored?.parts).toBe('[]');
+    expect(JSON.parse(stored!.raw)).toEqual(raw);
+  });
+});

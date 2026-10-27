@@ -5,6 +5,7 @@
  * 缓存相关的约定都在这里落地：每条提问连同当时附带的上下文原样存下、原样重发；记忆按对话拍快照；
  * 操作卡和记忆确认的结果放进下一次提问的 <action_results>，不改历史。
  */
+import { EMPTY_ANSWER_ERROR } from './messageText';
 import { create } from 'zustand';
 import type { AppCore } from '../app/boot';
 import * as aiRepo from '../data/aiRepo';
@@ -520,7 +521,10 @@ export async function ask(core: AppCore, input: AskInput): Promise<void> {
       );
       svc = res.svc;
       const parsed = res.call.parsed;
-      const search = combineSearch(searchHistory, parsed.search);
+      const search = combineSearch(
+        searchHistory,
+        parsed.search ?? progress.search,
+      );
       const incompleteCalls =
         parsed.stop !== 'tool' && parsed.parts.some(p => p.t === 'call');
       const calls =
@@ -543,7 +547,7 @@ export async function ask(core: AppCore, input: AskInput): Promise<void> {
             service: svc.name + ' · ' + svc.model,
             price: svc.price,
             config: config ?? undefined,
-            thinking: parsed.thinking,
+            thinking: parsed.thinking ?? progress.thinking,
             search,
             searchOffer:
               !svc.search && !calls.length && needsFreshInformation(question)
@@ -559,6 +563,9 @@ export async function ask(core: AppCore, input: AskInput): Promise<void> {
                 ? '回答太长被截断了（输出上限）'
                 : parsed.stop === 'refusal'
                 ? '模型拒绝回答'
+                : !calls.length &&
+                  !parsed.parts.some(p => p.t === 'text' && p.text.trim())
+                ? EMPTY_ANSWER_ERROR
                 : undefined,
           },
         },

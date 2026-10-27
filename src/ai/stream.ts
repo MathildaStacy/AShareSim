@@ -7,6 +7,7 @@ import {
 } from './protocol';
 import type { ModelProgress, Protocol } from './types';
 import { evidenceOf } from './evidence';
+import { contentText, normalizeResponseItem } from './messageText';
 
 export class ModelStream {
   private buffer = '';
@@ -102,9 +103,8 @@ export class ModelStream {
   private publish(): void {
     const items = this.ordered();
     if (this.protocol === 'chat') {
-      if (this.response?.choices?.[0]?.message?.content) {
-        this.text(this.response.choices[0].message.content);
-      }
+      const body = contentText(this.response?.choices?.[0]?.message?.content);
+      if (body) this.text(body);
       if (this.response) {
         this.progress(evidenceOf('chat', this.response));
       }
@@ -124,17 +124,7 @@ export class ModelStream {
             .join('\n')
         : items
             .filter(b => b.type === 'message')
-            .map(b =>
-              (b.content ?? [])
-                .map((c: any) =>
-                  c?.type === 'output_text'
-                    ? c.text
-                    : c?.type === 'refusal'
-                    ? c.refusal
-                    : '',
-                )
-                .join(''),
-            )
+            .map(b => contentText(b.content))
             .join('\n');
     if (text) {
       this.text(text);
@@ -225,6 +215,74 @@ export class ModelStream {
     }
   }
 
+  private mergeItem(previous: any, next: any): any {
+    const merged = { ...previous, ...next };
+    if (next?.type !== 'message') return merged;
+    const before = normalizeResponseItem(previous)?.content ?? [];
+    const after = normalizeResponseItem(next).content;
+    // An actual refusal is authoritative; do not revive an earlier draft over it.
+    if (after.some((p: any) => p?.type === 'refusal' && p.refusal))
+      return { ...merged, content: after };
+    merged.content = Array.from(
+      { length: Math.max(before.length, after.length) },
+      (_, i) => {
+        if (!after[i]) return before[i];
+        const part = { ...before[i], ...after[i] };
+        if (
+          !contentText([after[i]]).trim() &&
+          contentText([before[i]]).trim()
+        ) {
+          return {
+            ...part,
+            text: before[i].text,
+            annotations: before[i].annotations ?? part.annotations,
+          };
+        }
+        return part;
+      },
+    );
+    return merged;
+  }
+
+  private finishOpenai(response: any): void {
+    const final = Array.isArray(response?.output) ? response.output : [];
+    const used = new Set<number>();
+    const output = final.map((item: any, i: number) => {
+      const candidates = [...this.items.entries()].filter(
+        ([index, prior]) => !used.has(index) && prior.type === item.type,
+      );
+      const pair = item.id
+        ? candidates.find(([, prior]) => prior.id === item.id) ??
+          candidates.find(([index, prior]) => index === i && !prior.id)
+        : candidates.length === 1
+        ? candidates[0]
+        : candidates.find(([index]) => index === i);
+      if (!pair) return item;
+      used.add(pair[0]);
+      return this.mergeItem(pair[1], item);
+    });
+    for (const [index, item] of [...this.items.entries()].sort(
+      (a, b) => a[0] - b[0],
+    )) {
+      if (used.has(index)) continue;
+      // Preserve received messages and completed items. Never turn partial tool arguments into a call.
+      if (
+        (item.type === 'message' && contentText(item.content).trim()) ||
+        this.stopped.has(index)
+      ) {
+        if (item.type === 'function_call') {
+          try {
+            JSON.parse(item.arguments || '{}');
+          } catch {
+            throw new ProtocolError('流式工具参数不是完整的 JSON');
+          }
+        }
+        output.push(item);
+      }
+    }
+    this.response = { ...this.response, ...response, output };
+  }
+
   private openai(e: any): void {
     const index = e.output_index;
     switch (e.type) {
@@ -261,29 +319,43 @@ export class ModelStream {
         break;
       case 'response.output_item.added':
       case 'response.output_item.done':
-        this.items.set(index, { ...e.item });
+        this.items.set(index, this.mergeItem(this.items.get(index), e.item));
+        if (e.type.endsWith('.done')) this.stopped.add(index);
         this.publish();
         break;
       case 'response.content_part.added':
-      case 'response.content_part.done':
-        this.message(index, e.item_id).content[e.content_index] = { ...e.part };
+      case 'response.content_part.done': {
+        const msg = this.message(index, e.item_id);
+        const contentIndex = e.content_index ?? 0;
+        const merged = this.mergeItem(msg, {
+          ...msg,
+          content: msg.content.map((p: any) => ({ ...p })),
+        });
+        const old = msg.content[contentIndex];
+        merged.content[contentIndex] =
+          contentText([e.part]).trim() || !contentText([old]).trim()
+            ? { ...e.part }
+            : { ...old, ...e.part, text: old.text };
+        this.items.set(index, merged);
         this.publish();
         break;
+      }
       case 'response.output_text.delta':
       case 'response.output_text.done':
       case 'response.refusal.delta':
       case 'response.refusal.done': {
         const msg = this.message(index, e.item_id);
+        const contentIndex = e.content_index ?? 0;
         const refusal = e.type.startsWith('response.refusal.');
         const key = refusal ? 'refusal' : 'text';
-        const part = msg.content[e.content_index] ?? {
+        const part = msg.content[contentIndex] ?? {
           type: refusal ? 'refusal' : 'output_text',
           [key]: '',
         };
         part[key] = e.type.endsWith('.delta')
           ? (part[key] ?? '') + e.delta
-          : e[key];
-        msg.content[e.content_index] = part;
+          : e[key] || part[key];
+        msg.content[contentIndex] = part;
         this.publish();
         break;
       }
@@ -296,14 +368,19 @@ export class ModelStream {
         item.arguments = e.type.endsWith('.delta')
           ? (item.arguments ?? '') + e.delta
           : e.arguments;
+        if (e.type.endsWith('.done')) {
+          try {
+            JSON.parse(item.arguments || '{}');
+          } catch {
+            throw new ProtocolError('流式工具参数不是完整的 JSON');
+          }
+          this.stopped.add(index);
+        }
         break;
       }
       case 'response.completed':
       case 'response.incomplete':
-        this.response = {
-          ...e.response,
-          output: e.response?.output ?? this.ordered(),
-        };
+        this.finishOpenai(e.response);
         this.complete = true;
         break;
     }
@@ -344,6 +421,14 @@ export class ModelStream {
     }
     const d = c.delta ?? {},
       m = this.response.choices[0].message;
+    if (c.message) {
+      Object.assign(m, {
+        ...c.message,
+        content: contentText(c.message.content).trim()
+          ? c.message.content
+          : m.content,
+      });
+    }
     for (const k of ['content', 'reasoning_content', 'reasoning']) {
       if (typeof d[k] === 'string') {
         m[k] = (m[k] ?? '') + d[k];
@@ -405,6 +490,22 @@ export class ModelStream {
         '回答连接中断，未收到结束事件；已收到的文字会保留，请重试',
       );
     }
-    return parseResponse(this.protocol, this.model, this.response);
+    const parsed = parseResponse(this.protocol, this.model, this.response);
+    if (
+      this.lastText.trim() &&
+      !parsed.parts.some(p => p.t === 'text' && p.text.trim())
+    ) {
+      parsed.parts.unshift({ t: 'text', text: this.lastText });
+      if (this.protocol === 'openai')
+        parsed.raw.items.push({
+          type: 'message',
+          role: 'assistant',
+          content: [{ type: 'output_text', text: this.lastText }],
+        });
+      else if (this.protocol === 'anthropic')
+        parsed.raw.items.push({ type: 'text', text: this.lastText });
+      else (parsed.raw.items[0] as any).content = this.lastText;
+    }
+    return parsed;
   }
 }
