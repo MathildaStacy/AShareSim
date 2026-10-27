@@ -2,7 +2,7 @@
  * 界面层的 hook：拿到 AppCore、按焦点订阅行情、按焦点轮询接口、写浏览日志、登记页面上下文。
  */
 import { useFocusEffect } from '@react-navigation/native';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { setPageContext, type PageContext } from '../ai/context';
 import { ViewLogger } from '../app/activity';
 import { useApp, type AppCore } from '../app/boot';
@@ -114,19 +114,17 @@ export function usePolling<T>(
   deps: unknown[],
   intervalMs: number | null,
 ): Polled<T> {
-  const [state, setState] = useState<Polled<T>>({
+  const depKey = JSON.stringify(deps);
+  const empty: Polled<T> = {
     data: null,
     error: null,
     loading: true,
     at: null,
-  });
+  };
+  const [state, setState] = useState({ key: depKey, value: empty });
   const fetchRef = useRef(fetch);
   fetchRef.current = fetch;
-  const depKey = JSON.stringify(deps);
-  // 换了参数（例如换了板块）先清掉旧数据，免得显示错的
-  useEffect(() => {
-    setState({ data: null, error: null, loading: true, at: null });
-  }, [depKey]);
+  // 数据随参数一起保存；换周期的第一帧就隔离旧数据，不能等 effect 才清空。
   useFocusEffect(
     useCallback(() => {
       let alive = true;
@@ -135,14 +133,20 @@ export function usePolling<T>(
         try {
           const data = await fetchRef.current();
           if (alive) {
-            setState({ data, error: null, loading: false, at: Date.now() });
+            setState({
+              key: depKey,
+              value: { data, error: null, loading: false, at: Date.now() },
+            });
           }
         } catch (e) {
           if (alive) {
             setState(s => ({
-              ...s,
-              error: e instanceof Error ? e.message : String(e),
-              loading: false,
+              key: depKey,
+              value: {
+                ...(s.key === depKey ? s.value : { data: null, at: null }),
+                error: e instanceof Error ? e.message : String(e),
+                loading: false,
+              },
             }));
           }
         }
@@ -157,11 +161,10 @@ export function usePolling<T>(
           clearTimeout(timer);
         }
       };
-      // depKey 不在回调里用到，但换了参数要重新开始轮询；fetch 本身通过 ref 拿最新的
-      // eslint-disable-next-line react-hooks/exhaustive-deps
+      // 换参数重新开始轮询；fetch 本身通过 ref 拿最新的。
     }, [depKey, intervalMs]),
   );
-  return state;
+  return state.key === depKey ? state.value : empty;
 }
 
 // ---------- 操作日志 ----------

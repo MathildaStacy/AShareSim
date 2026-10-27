@@ -93,6 +93,7 @@ export function StockScreen({ route }: RootScreenProps<'Stock'>) {
   const inWatch = useWatch(s => s.codes.includes(code));
   const [chart, setChart] = useState<Chart>('min');
   const [book, setBook] = useState<Book>('book');
+  const [inspectingChart, setInspectingChart] = useState(false);
   useQuoteCodes([code]);
 
   const v = quoteView(core.sim, code, route.params);
@@ -261,7 +262,10 @@ export function StockScreen({ route }: RootScreenProps<'Stock'>) {
           )
         }
       />
-      <ScrollView contentContainerStyle={s.pad}>
+      <ScrollView
+        contentContainerStyle={s.pad}
+        scrollEnabled={!inspectingChart}
+      >
         <View style={s.top}>
           <View style={s.big}>
             <Text style={[s.bigPx, num, { color: tc }]}>
@@ -318,7 +322,11 @@ export function StockScreen({ route }: RootScreenProps<'Stock'>) {
         />
         {chart === 'min' ? (
           <MinuteChart
+            key={code + ':min'}
             series={series}
+            date={day?.date}
+            priceLabel={v.index ? '点位' : '价格'}
+            onInspectChange={setInspectingChart}
             prevClose={prevClose}
             decimals={d}
             emptyText={
@@ -331,7 +339,11 @@ export function StockScreen({ route }: RootScreenProps<'Stock'>) {
           />
         ) : (
           <KlineChart
+            key={code + ':' + chart}
             bars={bars}
+            chartLabel={CHARTS.find(([id]) => id === chart)![1]}
+            priceLabel={v.index ? '点位' : '价格'}
+            onInspectChange={setInspectingChart}
             decimals={d}
             emptyText={
               kline.loading

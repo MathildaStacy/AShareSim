@@ -2,10 +2,11 @@
  * 分时图和 K 线图（react-native-svg）。数据计算在 chartMath.ts，这里只负责画。
  * 红涨绿跌：K 线阳线空心红、阴线实心绿，和同花顺一致。
  */
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { StyleSheet, View, type LayoutChangeEvent } from 'react-native';
 import Svg, {
   Defs,
+  Circle,
   Line,
   LinearGradient,
   Path,
@@ -16,7 +17,17 @@ import Svg, {
 import type { Li } from '../../engine/units';
 import type { KBar } from '../../market/tencent';
 import { color } from '../theme';
-import { klineView, MINUTES, type MinuteSeries } from './chartMath';
+import { fmtHands, fmtPct } from '../format';
+import { formatSec } from '../../engine/session';
+import {
+  chartCursorY,
+  clamp,
+  klineView,
+  MINUTES,
+  nearestChartPoint,
+  type MinuteSeries,
+} from './chartMath';
+import { ChartAxisLabels, ChartReadout, useChartTouch } from './ChartInspector';
 
 const H = 230;
 const FONT = 10;
@@ -48,11 +59,17 @@ export function MinuteChart({
   prevClose,
   decimals,
   emptyText,
+  date,
+  priceLabel = '价格',
+  onInspectChange,
 }: {
   series: MinuteSeries | null;
   prevClose: Li | null;
   decimals: number;
   emptyText: string;
+  date?: string;
+  priceLabel?: string;
+  onInspectChange?: (locked: boolean) => void;
 }) {
   const [w, onLayout] = useWidth();
   const ph = H * 0.7;
@@ -65,128 +82,253 @@ export function MinuteChart({
   const top = has ? series!.top : (prevClose ?? 0) * 1.01;
   const bot = has ? series!.bottom : (prevClose ?? 0) * 0.99;
   const Y = (v: number) => 6 + ((ph - 12) * (top - v)) / (top - bot || 1);
+  const xs = series?.x.map(X) ?? [];
+  const cursor = useChartTouch({
+    enabled: !!has && w > 0,
+    hit: (x, y) => {
+      const index = nearestChartPoint(xs, x);
+      return index < 0 ? null : { key: String(series!.times[index]), y };
+    },
+    onInspectChange,
+  });
+  const selected =
+    cursor.touch && has ? series!.times.indexOf(Number(cursor.touch.key)) : -1;
+  const current = selected >= 0 ? selected : (series?.price.length ?? 0) - 1;
+  const time =
+    current >= 0 ? formatSec(series!.times[current]).replace(/:00$/, '') : '';
+  const title = (date ? date + ' ' : '') + time;
+  const vmax = Math.max(1, ...(series?.volume ?? []));
+  const cross =
+    selected >= 0 && cursor.touch
+      ? chartCursorY(
+          cursor.touch.y,
+          { top: 6, bottom: ph - 6, high: top, low: bot },
+          { top: vTop, bottom: vTop + vh, max: vmax },
+        )
+      : null;
+  const axisValue = cross
+    ? cross.volume
+      ? '量 ' + fmtHands(cross.value)
+      : priceLabel + ' ' + fx(cross.value, decimals)
+    : '';
+  const fields =
+    current < 0
+      ? []
+      : [
+          { label: priceLabel, value: fx(series!.price[current], decimals) },
+          {
+            label: series!.avg ? '均价' : '昨收',
+            value: series!.avg
+              ? series!.avg[current] == null
+                ? '--'
+                : fx(series!.avg[current]!, decimals)
+              : fx(prevClose!, decimals),
+          },
+          {
+            label: '涨跌',
+            value: fmtPct(
+              prevClose ? (series!.price[current] / prevClose - 1) * 100 : null,
+            ),
+          },
+          { label: '量', value: fmtHands(series!.volume[current]) },
+        ];
   return (
-    <View style={styles.box} onLayout={onLayout}>
-      {w > 0 ? (
-        <Svg width={w} height={H}>
-          <Defs>
-            <LinearGradient id="area" x1="0" y1="0" x2="0" y2="1">
-              <Stop offset="0" stopColor={color.priceLine} stopOpacity={0.16} />
-              <Stop offset="1" stopColor={color.priceLine} stopOpacity={0} />
-            </LinearGradient>
-          </Defs>
-          {[0, 60, 120, 180, 240].map(g => (
-            <Line
-              key={g}
-              x1={X(g)}
-              x2={X(g)}
-              y1={0}
-              y2={ph}
-              stroke={color.grid}
-              strokeWidth={1}
-            />
-          ))}
-          <Line x1={0} x2={w} y1={ph} y2={ph} stroke={color.grid} />
-          {prevClose != null ? (
-            <Line
-              x1={0}
-              x2={w}
-              y1={Y(prevClose)}
-              y2={Y(prevClose)}
-              stroke={color.baseLine}
-              strokeDasharray="3,3"
-            />
-          ) : null}
-          {has ? (
-            <>
-              <SvgText x={4} y={14} fontSize={FONT} fill={color.up}>
-                {fx(top, decimals)}
-              </SvgText>
-              <SvgText x={4} y={ph - 4} fontSize={FONT} fill={color.down}>
-                {fx(bot, decimals)}
-              </SvgText>
-              <SvgText
-                x={w - 4}
-                y={14}
-                fontSize={FONT}
-                fill={color.up}
-                textAnchor="end"
-              >
-                {'+' +
-                  (((top - prevClose!) / prevClose!) * 100).toFixed(2) +
-                  '%'}
-              </SvgText>
-              <SvgText
-                x={w - 4}
-                y={ph - 4}
-                fontSize={FONT}
-                fill={color.down}
-                textAnchor="end"
-              >
-                {(((bot - prevClose!) / prevClose!) * 100).toFixed(2) + '%'}
-              </SvgText>
-              <Path
-                d={
-                  linePath(series!.x.map(X), series!.price.map(Y)) +
-                  `L${X(series!.x[series!.x.length - 1]).toFixed(1)} ${ph}L${X(
-                    series!.x[0],
-                  ).toFixed(1)} ${ph}Z`
-                }
-                fill="url(#area)"
+    <View style={styles.chart} onLayout={onLayout}>
+      {has && w > 0 ? (
+        <ChartReadout
+          title={title}
+          fields={fields}
+          width={w}
+          selected={selected >= 0}
+          onClear={cursor.clear}
+        />
+      ) : null}
+      <View
+        style={styles.box}
+        collapsable={false}
+        {...cursor.panHandlers}
+        accessible={!!has}
+        accessibilityRole="adjustable"
+        accessibilityLabel="分时图查价"
+        accessibilityHint="点按查看时间与数值；左右调整可逐点查价"
+        accessibilityValue={
+          has
+            ? {
+                min: 0,
+                max: series!.price.length - 1,
+                now: current,
+                text:
+                  title +
+                  '，' +
+                  fields.map(f => f.label + f.value).join('，') +
+                  (cross ? '，光标' + axisValue : ''),
+              }
+            : undefined
+        }
+        accessibilityActions={[
+          { name: 'increment', label: '下一个时刻' },
+          { name: 'decrement', label: '上一个时刻' },
+          { name: 'escape', label: '退出查价' },
+        ]}
+        onAccessibilityAction={e => {
+          if (e.nativeEvent.actionName === 'escape') cursor.clear();
+          else if (has) {
+            const i = clamp(
+              current + (e.nativeEvent.actionName === 'increment' ? 1 : -1),
+              0,
+              series!.price.length - 1,
+            );
+            cursor.select({
+              key: String(series!.times[i]),
+              y: Y(series!.price[i]),
+            });
+          }
+        }}
+      >
+        {w > 0 ? (
+          <Svg width={w} height={H} pointerEvents="none">
+            <Defs>
+              <LinearGradient id="area" x1="0" y1="0" x2="0" y2="1">
+                <Stop
+                  offset="0"
+                  stopColor={color.priceLine}
+                  stopOpacity={0.16}
+                />
+                <Stop offset="1" stopColor={color.priceLine} stopOpacity={0} />
+              </LinearGradient>
+            </Defs>
+            {[0, 60, 120, 180, 240].map(g => (
+              <Line
+                key={g}
+                x1={X(g)}
+                x2={X(g)}
+                y1={0}
+                y2={ph}
+                stroke={color.grid}
+                strokeWidth={1}
               />
-              <Path
-                d={linePath(series!.x.map(X), series!.price.map(Y))}
-                stroke={color.priceLine}
-                strokeWidth={1.3}
-                fill="none"
+            ))}
+            <Line x1={0} x2={w} y1={ph} y2={ph} stroke={color.grid} />
+            {prevClose != null ? (
+              <Line
+                x1={0}
+                x2={w}
+                y1={Y(prevClose)}
+                y2={Y(prevClose)}
+                stroke={color.baseLine}
+                strokeDasharray="3,3"
               />
-              {series!.avg ? (
+            ) : null}
+            {has ? (
+              <>
+                <SvgText x={4} y={14} fontSize={FONT} fill={color.up}>
+                  {fx(top, decimals)}
+                </SvgText>
+                <SvgText x={4} y={ph - 4} fontSize={FONT} fill={color.down}>
+                  {fx(bot, decimals)}
+                </SvgText>
+                <SvgText
+                  x={w - 4}
+                  y={14}
+                  fontSize={FONT}
+                  fill={color.up}
+                  textAnchor="end"
+                >
+                  {'+' +
+                    (((top - prevClose!) / prevClose!) * 100).toFixed(2) +
+                    '%'}
+                </SvgText>
+                <SvgText
+                  x={w - 4}
+                  y={ph - 4}
+                  fontSize={FONT}
+                  fill={color.down}
+                  textAnchor="end"
+                >
+                  {(((bot - prevClose!) / prevClose!) * 100).toFixed(2) + '%'}
+                </SvgText>
                 <Path
-                  d={linePath(
-                    series!.x.map(X),
-                    series!.avg.map(v => (v == null ? null : Y(v))),
-                  )}
-                  stroke={color.avgLine}
-                  strokeWidth={1}
+                  d={
+                    linePath(series!.x.map(X), series!.price.map(Y)) +
+                    `L${X(series!.x[series!.x.length - 1]).toFixed(
+                      1,
+                    )} ${ph}L${X(series!.x[0]).toFixed(1)} ${ph}Z`
+                  }
+                  fill="url(#area)"
+                />
+                <Path
+                  d={linePath(series!.x.map(X), series!.price.map(Y))}
+                  stroke={color.priceLine}
+                  strokeWidth={1.3}
                   fill="none"
                 />
-              ) : null}
-              <MinuteVolume series={series!} X={X} top={vTop} h={vh} w={w} />
-            </>
-          ) : (
+                {series!.avg ? (
+                  <Path
+                    d={linePath(
+                      series!.x.map(X),
+                      series!.avg.map(v => (v == null ? null : Y(v))),
+                    )}
+                    stroke={color.avgLine}
+                    strokeWidth={1}
+                    fill="none"
+                  />
+                ) : null}
+                <MinuteVolume series={series!} X={X} top={vTop} h={vh} w={w} />
+              </>
+            ) : (
+              <SvgText
+                x={w / 2}
+                y={ph / 2}
+                fontSize={12}
+                fill={color.ink3}
+                textAnchor="middle"
+              >
+                {emptyText}
+              </SvgText>
+            )}
+            <SvgText x={4} y={H - 2} fontSize={FONT} fill={color.ink3}>
+              09:30
+            </SvgText>
             <SvgText
-              x={w / 2}
-              y={ph / 2}
-              fontSize={12}
+              x={X(120)}
+              y={H - 2}
+              fontSize={FONT}
               fill={color.ink3}
               textAnchor="middle"
             >
-              {emptyText}
+              11:30/13:00
             </SvgText>
-          )}
-          <SvgText x={4} y={H - 2} fontSize={FONT} fill={color.ink3}>
-            09:30
-          </SvgText>
-          <SvgText
-            x={X(120)}
-            y={H - 2}
-            fontSize={FONT}
-            fill={color.ink3}
-            textAnchor="middle"
-          >
-            11:30/13:00
-          </SvgText>
-          <SvgText
-            x={w - 4}
-            y={H - 2}
-            fontSize={FONT}
-            fill={color.ink3}
-            textAnchor="end"
-          >
-            15:00
-          </SvgText>
-        </Svg>
-      ) : null}
+            <SvgText
+              x={w - 4}
+              y={H - 2}
+              fontSize={FONT}
+              fill={color.ink3}
+              textAnchor="end"
+            >
+              15:00
+            </SvgText>
+            {cross ? (
+              <CursorLines
+                x={xs[selected]}
+                y={cross.y}
+                width={w}
+                bottom={vTop + vh}
+                top={6}
+              />
+            ) : null}
+          </Svg>
+        ) : null}
+        {cross ? (
+          <ChartAxisLabels
+            x={xs[selected]}
+            y={cross.y}
+            width={w}
+            height={H}
+            time={title}
+            value={axisValue}
+          />
+        ) : null}
+      </View>
     </View>
   );
 }
@@ -235,16 +377,64 @@ export function KlineChart({
   bars,
   decimals,
   emptyText,
+  priceLabel = '价格',
+  chartLabel = 'K 线',
+  onInspectChange,
 }: {
   bars: KBar[] | null;
   decimals: number;
   emptyText: string;
+  priceLabel?: string;
+  chartLabel?: string;
+  onInspectChange?: (locked: boolean) => void;
 }) {
   const [w, onLayout] = useWidth();
   const ph = H * 0.68;
   const vTop = ph + 16;
   const vh = H - vTop - 14;
-  if (!bars || bars.length === 0 || w === 0) {
+  const v = useMemo(
+    () => (bars?.length ? klineView(bars, N_BARS) : null),
+    [bars],
+  );
+  const cw = (w - 8) / N_BARS;
+  const X = (i: number) => 4 + cw * i + cw / 2;
+  const Y = (p: number) =>
+    v ? 14 + ((ph - 18) * (v.hi - p)) / (v.hi - v.lo || 1) : 0;
+  const cursor = useChartTouch({
+    enabled: !!v && w > 0,
+    hit: (x, y) => {
+      const index = nearestChartPoint(v?.bars.map((_, i) => X(i)) ?? [], x);
+      return index < 0 ? null : { key: v!.bars[index].date, y };
+    },
+    onInspectChange,
+  });
+  const selected = cursor.touch
+    ? v?.bars.findIndex(b => b.date === cursor.touch!.key) ?? -1
+    : -1;
+  const current = selected >= 0 ? selected : (v?.bars.length ?? 0) - 1;
+  const bar = v?.bars[current];
+  const cross =
+    selected >= 0 && cursor.touch && v
+      ? chartCursorY(
+          cursor.touch.y,
+          { top: 14, bottom: ph - 4, high: v.hi, low: v.lo },
+          { top: vTop, bottom: vTop + vh, max: v.vmax },
+        )
+      : null;
+  const axisValue = cross
+    ? cross.volume
+      ? '量 ' + fmtHands(cross.value)
+      : priceLabel + ' ' + fx(cross.value, decimals)
+    : '';
+  const fields = bar
+    ? [
+        { label: '开盘', value: fx(bar.open, decimals) },
+        { label: '最高', value: fx(bar.high, decimals) },
+        { label: '最低', value: fx(bar.low, decimals) },
+        { label: '收盘', value: fx(bar.close, decimals) },
+      ]
+    : [];
+  if (!v || !bar || w === 0) {
     return (
       <View style={styles.box} onLayout={onLayout}>
         {w > 0 ? (
@@ -263,121 +453,181 @@ export function KlineChart({
       </View>
     );
   }
-  const v = klineView(bars, N_BARS);
-  const cw = (w - 8) / N_BARS;
-  const X = (i: number) => 4 + cw * i + cw / 2;
-  const Y = (p: number) => 14 + ((ph - 18) * (v.hi - p)) / (v.hi - v.lo || 1);
   const bw = Math.max(1, cw * 0.7);
-  const last = <T,>(a: (T | null)[]) => a[a.length - 1];
   const maText = (label: string, val: number | null) =>
     label + ' ' + (val == null ? '--' : fx(val, decimals));
   return (
-    <View style={styles.box} onLayout={onLayout}>
-      <Svg width={w} height={H}>
-        {[0, 1, 2, 3].map(k => (
-          <Line
-            key={k}
-            x1={0}
-            x2={w}
-            y1={14 + ((ph - 18) * k) / 3}
-            y2={14 + ((ph - 18) * k) / 3}
-            stroke={color.grid}
-          />
-        ))}
-        <SvgText x={4} y={10} fontSize={FONT} fill={color.ma5}>
-          {maText('MA5', last(v.ma5))}
-        </SvgText>
-        <SvgText x={w * 0.3} y={10} fontSize={FONT} fill={color.ma10}>
-          {maText('MA10', last(v.ma10))}
-        </SvgText>
-        <SvgText x={w * 0.6} y={10} fontSize={FONT} fill={color.ma20}>
-          {maText('MA20', last(v.ma20))}
-        </SvgText>
-        {v.bars.map((b, i) => {
-          const up = b.close >= b.open;
-          const c = up ? color.up : color.down;
-          const y1 = Y(Math.max(b.open, b.close));
-          const y2 = Y(Math.min(b.open, b.close));
-          return (
+    <View style={styles.chart} onLayout={onLayout}>
+      <ChartReadout
+        title={bar.date}
+        fields={fields}
+        selected={selected >= 0}
+        onClear={cursor.clear}
+        width={w}
+      />
+      <View
+        style={styles.box}
+        collapsable={false}
+        {...cursor.panHandlers}
+        accessible
+        accessibilityRole="adjustable"
+        accessibilityLabel={chartLabel + '查价'}
+        accessibilityHint="点按查看日期与数值；左右调整可逐根查价"
+        accessibilityValue={{
+          min: 0,
+          max: v.bars.length - 1,
+          now: current,
+          text:
+            bar.date +
+            '，' +
+            fields.map(f => f.label + f.value).join('，') +
+            (cross ? '，光标' + axisValue : ''),
+        }}
+        accessibilityActions={[
+          { name: 'increment', label: '下一根 K 线' },
+          { name: 'decrement', label: '上一根 K 线' },
+          { name: 'escape', label: '退出查价' },
+        ]}
+        onAccessibilityAction={e => {
+          if (e.nativeEvent.actionName === 'escape') cursor.clear();
+          else {
+            const i = clamp(
+              current + (e.nativeEvent.actionName === 'increment' ? 1 : -1),
+              0,
+              v.bars.length - 1,
+            );
+            cursor.select({ key: v.bars[i].date, y: Y(v.bars[i].close) });
+          }
+        }}
+      >
+        <Svg width={w} height={H} pointerEvents="none">
+          {[0, 1, 2, 3].map(k => (
+            <Line
+              key={k}
+              x1={0}
+              x2={w}
+              y1={14 + ((ph - 18) * k) / 3}
+              y2={14 + ((ph - 18) * k) / 3}
+              stroke={color.grid}
+            />
+          ))}
+          <SvgText x={4} y={10} fontSize={FONT} fill={color.ma5}>
+            {maText('MA5', v.ma5[current])}
+          </SvgText>
+          <SvgText x={w * 0.3} y={10} fontSize={FONT} fill={color.ma10}>
+            {maText('MA10', v.ma10[current])}
+          </SvgText>
+          <SvgText x={w * 0.6} y={10} fontSize={FONT} fill={color.ma20}>
+            {maText('MA20', v.ma20[current])}
+          </SvgText>
+          {v.bars.map((b, i) => {
+            const up = b.close >= b.open;
+            const c = up ? color.up : color.down;
+            const y1 = Y(Math.max(b.open, b.close));
+            const y2 = Y(Math.min(b.open, b.close));
+            return (
+              <Path
+                key={b.date}
+                d={
+                  `M${X(i)} ${Y(b.high)}V${y1}M${X(i)} ${y2}V${Y(b.low)}` +
+                  `M${X(i) - bw / 2} ${y1}h${bw}v${Math.max(
+                    1,
+                    y2 - y1,
+                  )}h${-bw}Z`
+                }
+                stroke={c}
+                strokeWidth={1}
+                fill={up ? color.card : c}
+              />
+            );
+          })}
+          {v.bars.map((b, i) => {
+            const up = b.close >= b.open;
+            const vv = (vh * b.volume) / v.vmax;
+            return (
+              <Rect
+                key={'v' + b.date}
+                x={X(i) - bw / 2}
+                y={vTop + vh - vv}
+                width={bw}
+                height={vv}
+                fill={up ? color.up : color.down}
+                opacity={up ? 0.55 : 0.8}
+              />
+            );
+          })}
+          {(
+            [
+              [v.ma5, color.ma5],
+              [v.ma10, color.ma10],
+              [v.ma20, color.ma20],
+            ] as const
+          ).map(([line, c]) => (
             <Path
-              key={b.date}
-              d={
-                `M${X(i)} ${Y(b.high)}V${y1}M${X(i)} ${y2}V${Y(b.low)}` +
-                `M${X(i) - bw / 2} ${y1}h${bw}v${Math.max(1, y2 - y1)}h${-bw}Z`
-              }
+              key={c + line.length}
+              d={linePath(
+                v.bars.map((_, i) => X(i)),
+                line.map(p => (p == null ? null : Y(p))),
+              )}
               stroke={c}
               strokeWidth={1}
-              fill={up ? color.card : c}
+              fill="none"
             />
-          );
-        })}
-        {v.bars.map((b, i) => {
-          const up = b.close >= b.open;
-          const vv = (vh * b.volume) / v.vmax;
-          return (
-            <Rect
-              key={'v' + b.date}
-              x={X(i) - bw / 2}
-              y={vTop + vh - vv}
-              width={bw}
-              height={vv}
-              fill={up ? color.up : color.down}
-              opacity={up ? 0.55 : 0.8}
+          ))}
+          <SvgText
+            x={w - 4}
+            y={24}
+            fontSize={FONT}
+            fill={color.ink3}
+            textAnchor="end"
+          >
+            {fx(v.hi, decimals)}
+          </SvgText>
+          <SvgText
+            x={w - 4}
+            y={ph - 2}
+            fontSize={FONT}
+            fill={color.ink3}
+            textAnchor="end"
+          >
+            {fx(v.lo, decimals)}
+          </SvgText>
+          <SvgText x={4} y={vTop - 3} fontSize={FONT} fill={color.ink3}>
+            {'成交量' + (selected >= 0 ? ' ' + fmtHands(bar.volume) : '')}
+          </SvgText>
+          <SvgText x={4} y={H - 2} fontSize={FONT} fill={color.ink3}>
+            {barLabel(v.bars[0].date)}
+          </SvgText>
+          <SvgText
+            x={w - 4}
+            y={H - 2}
+            fontSize={FONT}
+            fill={color.ink3}
+            textAnchor="end"
+          >
+            {barLabel(v.bars[v.bars.length - 1].date)}
+          </SvgText>
+          {cross ? (
+            <CursorLines
+              x={X(selected)}
+              y={cross.y}
+              width={w}
+              bottom={vTop + vh}
+              top={14}
             />
-          );
-        })}
-        {(
-          [
-            [v.ma5, color.ma5],
-            [v.ma10, color.ma10],
-            [v.ma20, color.ma20],
-          ] as const
-        ).map(([line, c]) => (
-          <Path
-            key={c + line.length}
-            d={linePath(
-              v.bars.map((_, i) => X(i)),
-              line.map(p => (p == null ? null : Y(p))),
-            )}
-            stroke={c}
-            strokeWidth={1}
-            fill="none"
+          ) : null}
+        </Svg>
+        {cross ? (
+          <ChartAxisLabels
+            x={X(selected)}
+            y={cross.y}
+            width={w}
+            height={H}
+            time={bar.date}
+            value={axisValue}
           />
-        ))}
-        <SvgText
-          x={w - 4}
-          y={24}
-          fontSize={FONT}
-          fill={color.ink3}
-          textAnchor="end"
-        >
-          {fx(v.hi, decimals)}
-        </SvgText>
-        <SvgText
-          x={w - 4}
-          y={ph - 2}
-          fontSize={FONT}
-          fill={color.ink3}
-          textAnchor="end"
-        >
-          {fx(v.lo, decimals)}
-        </SvgText>
-        <SvgText x={4} y={vTop - 3} fontSize={FONT} fill={color.ink3}>
-          成交量
-        </SvgText>
-        <SvgText x={4} y={H - 2} fontSize={FONT} fill={color.ink3}>
-          {barLabel(v.bars[0].date)}
-        </SvgText>
-        <SvgText
-          x={w - 4}
-          y={H - 2}
-          fontSize={FONT}
-          fill={color.ink3}
-          textAnchor="end"
-        >
-          {barLabel(v.bars[v.bars.length - 1].date)}
-        </SvgText>
-      </Svg>
+        ) : null}
+      </View>
     </View>
   );
 }
@@ -386,8 +636,49 @@ export function KlineChart({
 const barLabel = (d: string) => (d.length > 10 ? d.slice(5) : d);
 
 const styles = StyleSheet.create({
+  chart: { backgroundColor: color.card },
   box: { height: H, backgroundColor: color.card },
 });
+
+function CursorLines({
+  x,
+  y,
+  width,
+  top,
+  bottom,
+}: {
+  x: number;
+  y: number;
+  width: number;
+  top: number;
+  bottom: number;
+}) {
+  return (
+    <>
+      <Line
+        testID="chart-crosshair-x"
+        x1={x}
+        x2={x}
+        y1={top}
+        y2={bottom}
+        stroke={color.ink2}
+        strokeWidth={1}
+        strokeDasharray="4,3"
+      />
+      <Line
+        testID="chart-crosshair-y"
+        x1={0}
+        x2={width}
+        y1={y}
+        y2={y}
+        stroke={color.ink2}
+        strokeWidth={1}
+        strokeDasharray="4,3"
+      />
+      <Circle cx={x} cy={y} r={2.5} fill={color.ink} />
+    </>
+  );
+}
 
 export interface LineSeries {
   name: string;

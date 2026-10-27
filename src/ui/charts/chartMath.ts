@@ -20,6 +20,8 @@ export function minuteX(t: Sec): number {
 }
 
 export interface MinuteSeries {
+  /** 保留真实时刻；11:30 / 13:00 虽在同一横轴位置，查价不能拼出虚构时间。 */
+  times: Sec[];
   x: number[];
   price: Li[];
   /** 均价线 = 累计成交额 ÷ 累计成交量；指数没有意义，为 null。 */
@@ -64,6 +66,7 @@ export function minuteSeries(
   }
   dev *= 1.05;
   return {
+    times: pts.map(p => p.t),
     x,
     price,
     avg,
@@ -71,6 +74,48 @@ export function minuteSeries(
     up,
     top: prevClose + dev,
     bottom: prevClose - dev,
+  };
+}
+
+/** 按实际绘制位置选最近的数据点，边界夹紧；并列时选靠后的真实点。 */
+export function nearestChartPoint(xs: number[], x: number): number {
+  let index = -1;
+  let distance = Infinity;
+  xs.forEach((value, i) => {
+    const next = Math.abs(value - x);
+    if (next <= distance) {
+      distance = next;
+      index = i;
+    }
+  });
+  return index;
+}
+
+export const clamp = (value: number, min: number, max: number) =>
+  Math.max(min, Math.min(max, value));
+
+/** 横线所在面板决定纵轴的单位，价格与成交量使用各自实际的绘图比例。 */
+export function chartCursorY(
+  touchY: number,
+  price: { top: number; bottom: number; high: number; low: number },
+  volume: { top: number; bottom: number; max: number },
+) {
+  if (touchY < (price.bottom + volume.top) / 2) {
+    const y = clamp(touchY, price.top, price.bottom);
+    return {
+      y,
+      volume: false,
+      value:
+        price.high -
+        ((y - price.top) / (price.bottom - price.top)) *
+          (price.high - price.low),
+    };
+  }
+  const y = clamp(touchY, volume.top, volume.bottom);
+  return {
+    y,
+    volume: true,
+    value: ((volume.bottom - y) / (volume.bottom - volume.top)) * volume.max,
   };
 }
 
