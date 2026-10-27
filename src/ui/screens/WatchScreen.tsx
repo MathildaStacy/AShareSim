@@ -15,6 +15,7 @@ import {
   useLive,
   useQuoteCodes,
   useViewLog,
+  useVisibleCodes,
 } from '../hooks';
 import type { RootStackParamList } from '../navigation/types';
 import { INDICES, quoteView } from '../quoteView';
@@ -72,7 +73,13 @@ export function WatchScreen() {
       watch.load(core).catch(() => undefined);
     }
   }, [core, loaded]);
-  useQuoteCodes(TOP3.map(i => i.code));
+  const { visibleCodes, ...viewability } = useVisibleCodes<{ code: string }>(
+    'watch',
+  );
+  useQuoteCodes([
+    ...TOP3.map(i => i.code),
+    ...visibleCodes.filter(c => codes.includes(c)),
+  ]);
   // 自选还没从本地库读出来时不记，否则会记成「0 只」
   useViewLog('watch', loaded ? '查看 自选（' + codes.length + ' 只）' : null);
 
@@ -103,7 +110,7 @@ export function WatchScreen() {
           )
         : ['自选列表是空的']),
     ],
-    tip: '自选列表的价格每 3 秒刷新；点表头可以按涨跌幅或现价排序。',
+    tip: '可见自选报价目标每 1 秒请求一次；点表头可以按涨跌幅或现价排序。',
   }));
 
   const head = (key: SortKey, label: string) => (
@@ -139,6 +146,7 @@ export function WatchScreen() {
       />
       <FlatList
         data={sorted}
+        {...viewability}
         keyExtractor={r => r.code}
         ListHeaderComponent={
           <>

@@ -85,7 +85,7 @@ export function SettingsScreen() {
         BACKGROUND_MODE_NAME[rs.backgroundMode] +
         '（可选：有委托时自动 / 交易时段全程 / 关闭），后台刷新间隔 ' +
         msName(rs.backgroundMs) +
-        '（可选：3 / 5 / 10 / 30 秒），前台固定 3 秒',
+        '（可选：3 / 5 / 10 / 30 秒）；前台可见报价目标 1 秒，其余记录证券 3 秒',
       '累计净入金上限 ' +
         formatFen(st.depositCap) +
         ' 元，已转入 ' +
@@ -141,7 +141,7 @@ export function SettingsScreen() {
           <ChoiceRow
             label="快照保留"
             sub={
-              '自选、持仓、有委托的证券每 3 秒存一个快照，以后回放用。按有快照的日期数算。现在 ' +
+              '快照去重保存，按交易日保留。当前 ' +
               stats.rows.toLocaleString('zh-CN') +
               ' 条（' +
               stats.days +
@@ -165,7 +165,7 @@ export function SettingsScreen() {
           />
           <ChoiceRow
             label="后台刷新间隔"
-            sub="只影响后台跟踪；前台固定 3 秒"
+            sub="仅影响后台跟踪"
             items={BACKGROUND_MS_OPTIONS}
             value={rs.backgroundMs}
             onChange={v => applyRs({ backgroundMs: v })}

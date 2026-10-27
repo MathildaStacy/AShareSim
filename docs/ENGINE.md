@@ -25,7 +25,7 @@
 const engine = new Engine(newAccount('2026-10-26'), { calendar: new TradingCalendar(), security: lookup });
 engine.deposit({ date: '2026-10-26', t: T(9, 0) }, 30_000_000);          // 30 万元
 engine.placeOrder({ date: '2026-10-26', t: T(9, 0) }, { code: 'sh510300', side: 'B', kind: 'limit', price: 4130, qty: 1000 });
-engine.onSnapshot(snapshot);   // 每 3 秒一次，返回成交、撤单等事件
+engine.onSnapshot(snapshot);   // 接入层校验水位、去重后喂入，返回成交、撤单等事件
 engine.advance(now);           // 没有行情时也要推进时间：报送暂存委托、15:30 清算、跨日
 ```
 

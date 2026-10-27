@@ -206,15 +206,19 @@ const decodeLevels = (s: string): Level[] =>
       })
     : [];
 
-/** 存一个实时快照；同一只同一秒的重复快照（腾讯没更新时会返回同一个）忽略。补出来的快照不存。 */
+/** 存实时快照；同秒的有效修正覆盖旧值，完全重复的数据由接入层过滤。补出来的快照不存。 */
 export async function saveSnapshot(db: Db, s: Snapshot): Promise<boolean> {
   if (s.reconstructed) {
     return false;
   }
   const r = await db.run(
-    `INSERT OR IGNORE INTO quotes_snapshot
+    `INSERT INTO quotes_snapshot
       (code, date, t, prev_close, open, last, high, low, volume, amount, bids, asks, up, down, suspended)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(code,date,t) DO UPDATE SET
+       prev_close=excluded.prev_close,open=excluded.open,last=excluded.last,
+       high=excluded.high,low=excluded.low,volume=excluded.volume,amount=excluded.amount,
+       bids=excluded.bids,asks=excluded.asks,up=excluded.up,down=excluded.down,suspended=excluded.suspended`,
     [
       s.code,
       s.date,
@@ -286,6 +290,18 @@ export async function lastSnapshot(
   const r = await db.get<SnapshotDbRow>(
     'SELECT * FROM quotes_snapshot WHERE code = ? AND date = ? ORDER BY t DESC LIMIT 1',
     [code, date],
+  );
+  return r ? toSnapshot(r) : null;
+}
+
+/** 重启后的报价水位，防止接口旧缓存覆盖更晚的本地快照。 */
+export async function latestSnapshot(
+  db: Db,
+  code: string,
+): Promise<Snapshot | null> {
+  const r = await db.get<SnapshotDbRow>(
+    'SELECT * FROM quotes_snapshot WHERE code = ? ORDER BY date DESC,t DESC LIMIT 1',
+    [code],
   );
   return r ? toSnapshot(r) : null;
 }

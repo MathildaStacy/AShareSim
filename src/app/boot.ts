@@ -11,6 +11,7 @@ import * as repo from '../data/repos';
 import type { EngineEvent } from '../engine/types';
 import { beijingIso, beijingNow } from '../market/clock';
 import { MarketClient } from '../market/client';
+import { phaseAt } from '../engine/session';
 import {
   DEFAULT_REFRESH,
   Refresher,
@@ -34,7 +35,7 @@ interface AppStore {
   status: RefreshStatus | null;
   /** 账户状态每变一次加 1，界面据此重新读引擎状态。 */
   version: number;
-  /** 每刷新一轮行情加 1，行情页据此重画。 */
+  /** 报价或交易时段变化时加 1，行情页据此重画。 */
   tick: number;
   lastEvents: EngineEvent[];
 }
@@ -68,6 +69,7 @@ async function doBoot(): Promise<AppCore> {
   const settings = {
     ...DEFAULT_REFRESH,
     ...(await repo.getSetting<Partial<RefreshSettings>>(db, 'refresh', {})),
+    foregroundMs: DEFAULT_REFRESH.foregroundMs,
   };
   const refresher = new Refresher(
     sim,
@@ -85,9 +87,15 @@ async function doBoot(): Promise<AppCore> {
       syncLearn(core).catch(() => undefined);
     }
   });
-  refresher.onStatus(status =>
-    useApp.setState(s => ({ status, tick: s.tick + 1 })),
-  );
+  sim.subscribeQuotes(() => useApp.setState(s => ({ tick: s.tick + 1 })));
+  let phaseKey = '';
+  refresher.onStatus(status => {
+    const now = sim.now(),
+      key = now.date + '|' + phaseAt(now.t) + '|' + status.window;
+    const changed = key !== phaseKey;
+    phaseKey = key;
+    useApp.setState(s => ({ status, tick: s.tick + (changed ? 1 : 0) }));
+  });
 
   await sim.refreshCorporateActions().catch(() => undefined);
   await sim.catchUp().catch(() => undefined);

@@ -1,5 +1,6 @@
 /** 界面显示一只证券要用的东西：名称、类型、最新快照、显示字段、价格位数。 */
 import type { Simulator } from '../sim/simulator';
+import type { RankItem } from '../market/tencent';
 import { decimalsOf, isIndex } from './format';
 
 export function quoteView(
@@ -37,3 +38,23 @@ export const INDICES: { code: string; name: string }[] = [
   { code: 'sh000852', name: '中证1000' },
   { code: 'sh000688', name: '科创50' },
 ];
+
+/** 榜单顺序仍来自低频排行；本分段已获取的快照独立更新价格、涨幅和成交额。 */
+export function rankQuote(
+  sim: Simulator,
+  row: RankItem,
+  since: number,
+): RankItem {
+  const q = sim.quote(row.code);
+  if (!q || sim.quoteReceivedAt(row.code) < since) {
+    return row;
+  }
+  return {
+    ...row,
+    last: q.snapshot.last,
+    change: q.info.change,
+    pct: q.info.pct,
+    amount: q.snapshot.amount,
+    volume: q.snapshot.volume,
+  };
+}

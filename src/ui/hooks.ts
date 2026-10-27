@@ -2,7 +2,7 @@
  * 界面层的 hook：拿到 AppCore、按焦点订阅行情、按焦点轮询接口、写浏览日志、登记页面上下文。
  */
 import { useFocusEffect } from '@react-navigation/native';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { setPageContext, type PageContext } from '../ai/context';
 import { ViewLogger } from '../app/activity';
 import { useApp, type AppCore } from '../app/boot';
@@ -17,7 +17,7 @@ export function useCore(): AppCore {
   return core;
 }
 
-/** 每刷新一轮行情、账户每变一次都会让用到它的组件重画。 */
+/** 报价、交易时段或账户变化时重新读取；重复报价不触发重画。 */
 export function useLive(): void {
   useApp(s => s.tick);
   useApp(s => s.version);
@@ -35,7 +35,7 @@ function applySubs(core: AppCore): void {
 /** 页面获得焦点时把要看的代码交给 Refresher（多个页面合并），失去焦点时撤掉。 */
 export function useQuoteCodes(codes: string[]): void {
   const core = useCore();
-  const key = codes.join(',');
+  const key = [...new Set(codes)].sort().join(',');
   useFocusEffect(
     useCallback(() => {
       if (!key) {
@@ -44,13 +44,56 @@ export function useQuoteCodes(codes: string[]): void {
       const id = nextSub++;
       subs.set(id, key.split(','));
       applySubs(core);
-      core.refresher.kick();
       return () => {
         subs.delete(id);
         applySubs(core);
       };
     }, [core, key]),
   );
+}
+
+/** FlatList / SectionList 仅订阅可见行；scope 隔离不同榜单，滚动后撤掉离屏证券的快速报价。 */
+const QUOTE_VIEWABILITY = {
+  itemVisiblePercentThreshold: 10,
+  minimumViewTime: 100,
+};
+export function useVisibleCodes<T extends { code: string }>(scope: string) {
+  const currentScope = useRef(scope);
+  currentScope.current = scope;
+  const [visible, setVisible] = useState<{ scope: string; codes: string[] }>({
+    scope,
+    codes: [],
+  });
+  const onViewableItemsChanged = useMemo(
+    () =>
+      ({
+        viewableItems,
+      }: {
+        viewableItems: { item: T; isViewable: boolean }[];
+      }) => {
+        if (scope !== currentScope.current) {
+          return;
+        }
+        const codes = [
+          ...new Set(
+            viewableItems
+              .filter(v => v.isViewable && v.item?.code)
+              .map(v => v.item.code),
+          ),
+        ].sort();
+        setVisible(old =>
+          old.scope === scope && old.codes.join(',') === codes.join(',')
+            ? old
+            : { scope, codes },
+        );
+      },
+    [scope],
+  );
+  return {
+    visibleCodes: visible.scope === scope ? visible.codes : [],
+    onViewableItemsChanged,
+    viewabilityConfig: QUOTE_VIEWABILITY,
+  };
 }
 
 // ---------- 轮询 ----------

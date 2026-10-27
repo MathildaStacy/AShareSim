@@ -41,6 +41,10 @@ export const DEFAULT_DEPOSIT_CAP: Fen = 40_000_000;
 
 const SAVE_INTERVAL_MS = 15_000;
 
+/** 日期优先，避免跨交易日时只比较当天秒数。 */
+const compareQuoteTime = (a: Snapshot, b: Snapshot) =>
+  a.date.localeCompare(b.date) || a.t - b.t;
+
 export interface CatchUpReport {
   /** 补了哪些日期、几只证券、喂了多少个补出来的快照。 */
   dates: DateStr[];
@@ -59,6 +63,10 @@ export class Simulator {
   private infos = new Map<string, QuoteInfo>();
   /** 每只代码（含指数）最新一次的行情，界面显示用。 */
   private quotes = new Map<string, Quote>();
+  private quoteTimes = new Map<string, number>();
+  private quoteListeners = new Set<() => void>();
+  private quoteWatermarks = new Map<string, Snapshot | null>();
+  private ingesting: Promise<void> = Promise.resolve();
   private watch = new Set<string>();
   private dirty = false;
   private lastSave = 0;
@@ -128,6 +136,16 @@ export class Simulator {
   /** 最新行情（快照 + 显示字段）。指数不进引擎，只能从这里拿。 */
   quote(code: string): Quote | null {
     return this.quotes.get(code) ?? null;
+  }
+
+  /** 最近收到有效（含完全相同）报价的时间；倒退报价不会刷新这个时间。 */
+  quoteReceivedAt(code: string): number {
+    return this.quoteTimes.get(code) ?? 0;
+  }
+
+  subscribeQuotes(fn: () => void): () => void {
+    this.quoteListeners.add(fn);
+    return () => this.quoteListeners.delete(fn);
   }
 
   subscribe(fn: Listener): () => void {
@@ -200,43 +218,94 @@ export class Simulator {
   }
 
   /** 喂入一批实时行情：更新证券信息、撮合、存快照。 */
-  async ingest(quotes: Quote[]): Promise<EngineEvent[]> {
+  ingest(quotes: Quote[]): Promise<EngineEvent[]> {
+    // AI 查询与轮询可能同时返回；把校验、撮合和写库作为同一段串行操作。
+    const work = this.ingesting.then(() => this.ingestBatch(quotes));
+    this.ingesting = work.then(
+      () => undefined,
+      () => undefined,
+    );
+    return work;
+  }
+
+  private async ingestBatch(quotes: Quote[]): Promise<EngineEvent[]> {
     const nowIso = beijingIso();
     const recorded = this.recordedCodes();
     const events: EngineEvent[] = [];
-    const sorted = [...quotes].sort((a, b) => a.snapshot.t - b.snapshot.t);
+    let changed = false,
+      fed = false;
+    const sorted = [...quotes].sort((a, b) =>
+      compareQuoteTime(a.snapshot, b.snapshot),
+    );
     for (const q of sorted) {
       const { snapshot: s, info } = q;
-      this.infos.set(s.code, info);
-      this.quotes.set(s.code, q);
+      const previous = this.quotes.get(s.code);
+      if (!this.quoteWatermarks.has(s.code)) {
+        this.quoteWatermarks.set(
+          s.code,
+          recorded.has(s.code)
+            ? await repo.latestSnapshot(this.db, s.code)
+            : null,
+        );
+      }
+      const baseline = [
+        previous?.snapshot,
+        this.engine.snapshot(s.code),
+        this.quoteWatermarks.get(s.code),
+      ]
+        .filter((x): x is Snapshot => !!x)
+        .sort(compareQuoteTime)
+        .at(-1);
+      if (baseline && compareQuoteTime(s, baseline) < 0) {
+        continue;
+      }
+      this.quoteTimes.set(s.code, Date.now());
+      if (previous && JSON.stringify(previous) === JSON.stringify(q)) {
+        continue;
+      }
+      const snapshotChanged =
+        !previous || JSON.stringify(previous.snapshot) !== JSON.stringify(s);
       const known = this.securities.get(s.code);
       if (
         info.type !== 'ZS' &&
         (!known || known.name !== info.name || known.type !== info.type)
       ) {
-        this.rememberSecurity(s.code, info.name, info.type);
         await repo.upsertSecurity(
           this.db,
           { code: s.code, name: info.name, type: info.type, pinyin: '' },
           nowIso,
         );
+        this.rememberSecurity(s.code, info.name, info.type);
       }
-      if (!this.securities.has(s.code)) {
-        continue; // 指数等不交易的品种只显示，不进引擎
+      // 先落库再发布缓存；写库失败时下次相同响应仍可重试。
+      if (
+        snapshotChanged &&
+        recorded.has(s.code) &&
+        this.securities.has(s.code)
+      ) {
+        await repo.saveSnapshot(this.db, s);
+      }
+      this.infos.set(s.code, info);
+      this.quotes.set(s.code, q);
+      this.quoteWatermarks.set(s.code, s);
+      changed = true;
+      if (!snapshotChanged || !this.securities.has(s.code)) {
+        continue; // 指数只显示；仅元数据变化不重复撮合
       }
       // 15:05 以后腾讯快照的成交量不再变化（不含盘后固定价格交易），有盘后委托的证券改用分时数据，
       // 见 ingestAfterHours；这时的实时快照不喂引擎，否则成交量会在两种来源之间来回跳
       if (!(s.t >= AFTER_START && this.afterOrderCodes().includes(s.code))) {
         events.push(...this.engine.onSnapshot(s));
-      }
-      if (recorded.has(s.code)) {
-        await repo.saveSnapshot(this.db, s);
+        fed = true;
       }
     }
-    if (this.liveOrderCodes().length) {
+    if (fed && this.liveOrderCodes().length) {
       this.dirty = true;
     }
-    await this.commit(events);
+    if (changed) {
+      await this.commit(events);
+      this.quoteListeners.forEach(fn => fn());
+    }
     return events;
   }
 
@@ -517,7 +586,16 @@ export class Simulator {
    * App 启动或从后台回来时调用：有未完成委托就用分时数据补上中断的那段，然后推进到现在。
    * 网络失败时不补，直接推进（宁可少成交）。
    */
-  async catchUp(): Promise<CatchUpReport> {
+  catchUp(): Promise<CatchUpReport> {
+    const work = this.ingesting.then(() => this.catchUpBatch());
+    this.ingesting = work.then(
+      () => undefined,
+      () => undefined,
+    );
+    return work;
+  }
+
+  private async catchUpBatch(): Promise<CatchUpReport> {
     const now = this.clock();
     const report: CatchUpReport = {
       dates: [],
@@ -611,6 +689,9 @@ export class Simulator {
       });
     }
     await this.commit(report.events, true);
+    if (report.snapshots) {
+      this.quoteListeners.forEach(fn => fn());
+    }
     return report;
   }
 

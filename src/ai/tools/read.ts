@@ -84,7 +84,7 @@ export async function freshQuote(
     return null;
   }
   await core.sim.ingest(qs);
-  return qs.find(q => q.snapshot.code === code) ?? qs[0];
+  return core.sim.quote(code);
 }
 
 export function securityOf(core: AppCore, r: Resolved): Security | null {

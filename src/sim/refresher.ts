@@ -1,7 +1,7 @@
 /**
  * 行情刷新和后台跟踪。
  *
- * - 前台：交易时段每 3 秒刷新（当前页面 + 自选 + 持仓 + 有委托的），午休和收盘后每 60 秒一次。
+ * - 前台：可见报价目标 1 秒，其余自选/持仓/委托维持 3 秒，午休和收盘后每 60 秒一次。
  * - 后台：只有前台服务在跑时 JS 定时器才不会停（见 TrackerService）。默认「有未完成委托时跟踪」：
  *   交易日 9:00–15:30 有未成交委托就开前台服务，只刷新有委托的那几只，默认 5 秒一次；委托都结束、
  *   收盘或者你在通知上点了「停止跟踪」（当天不再自动开启）就停。午休不请求行情。
@@ -52,11 +52,16 @@ export interface RefreshSettings {
 }
 
 export const DEFAULT_REFRESH: RefreshSettings = {
-  foregroundMs: 3000,
+  foregroundMs: 1000,
   backgroundMs: 5000,
   backgroundMode: 'orders',
   snapshotKeepDays: 20,
 };
+
+/** 不可见但需记录/撮合的证券，维持原来的较慢周期。 */
+export const PASSIVE_REFRESH_MS = 3000;
+/** 严重超时后不忙循环，也不补发已经错过的请求。 */
+const MIN_LOOP_DELAY_MS = 50;
 
 /** 后台跟踪要不要开。 */
 export function trackerWanted(
@@ -78,12 +83,17 @@ export function nextDelay(
   tracking: boolean,
   s: RefreshSettings,
   t: Sec,
+  visible = true,
 ): number | null {
   if (!foreground && !tracking) {
     return null;
   }
   if (win === 'session') {
-    return foreground ? s.foregroundMs : s.backgroundMs;
+    return foreground
+      ? visible
+        ? s.foregroundMs
+        : PASSIVE_REFRESH_MS
+      : s.backgroundMs;
   }
   if (win === 'lunch' || win === 'pre') {
     // 睡到下一段开始（最多 60 秒检查一次）
@@ -117,8 +127,16 @@ export class Refresher {
   private foreground = true;
   private tracking = false;
   private timer: ReturnType<typeof setTimeout> | null = null;
+  private timerAt = 0;
   private running = false;
   private extra: string[] = [];
+  private passiveAt = 0;
+  private pending: 'force' | 'visible' | null = null;
+  private lastQuoteStart: number | null = null;
+  private stopped = false;
+  private resuming = false;
+  private resumeWork: Promise<void> = Promise.resolve();
+  private inFlight: Promise<void> | null = null;
   private lastOk: number | null = null;
   private lastError: string | null = null;
   private failures = 0;
@@ -157,7 +175,12 @@ export class Refresher {
 
   /** 当前页面要看的证券（个股详情、行情页的指数等）。 */
   setExtraCodes(codes: string[]): void {
-    this.extra = codes;
+    const next = [...new Set(codes)].sort();
+    if (next.join(',') === this.extra.join(',')) {
+      return;
+    }
+    this.extra = next;
+    this.wake(false);
   }
 
   /**
@@ -176,7 +199,21 @@ export class Refresher {
   }
 
   start(): void {
-    this.schedule(0);
+    this.stopped = false;
+    this.wake();
+  }
+
+  stop(): void {
+    this.stopped = true;
+    this.pending = null;
+    if (this.timer) {
+      clearTimeout(this.timer);
+      this.timer = null;
+    }
+    if (this.tracking) {
+      this.tracker?.stop();
+      this.endTracking();
+    }
   }
 
   async setForeground(fg: boolean): Promise<void> {
@@ -184,50 +221,119 @@ export class Refresher {
       return;
     }
     this.foreground = fg;
+    this.passiveAt = 0;
     if (fg) {
-      // 回到前台：先补撮合中断的那段（后台跟踪没开或被杀时），再刷新
-      await this.sim.catchUp().catch(() => undefined);
-      this.schedule(0);
+      // 先等正在进行的轮询结束，再补撮合；补撮合期间禁止启动另一轮。
+      this.resuming = true;
+      const work = this.resumeWork.then(async () => {
+        await this.inFlight;
+        if (this.foreground && !this.stopped) {
+          await this.sim.catchUp().catch(() => undefined);
+        }
+      });
+      this.resumeWork = work;
+      try {
+        await work;
+      } finally {
+        if (this.resumeWork === work) {
+          this.resuming = false;
+          this.wake();
+        }
+      }
+    } else {
+      this.wake();
     }
   }
 
   /** 下单、撤单之后立刻刷新一次，并按需要开后台跟踪。 */
   kick(): void {
-    this.schedule(0);
+    this.passiveAt = 0;
+    this.wake();
+  }
+
+  private visibleDelay(): number {
+    return this.foreground && this.lastQuoteStart != null
+      ? Math.max(
+          0,
+          this.backoff(this.settings.foregroundMs) -
+            (Date.now() - this.lastQuoteStart),
+        )
+      : 0;
+  }
+
+  private backoff(period: number): number {
+    return this.failures > 2
+      ? Math.min(60_000, period * 2 ** Math.min(this.failures - 2, 4))
+      : period;
+  }
+
+  private wake(force = true): void {
+    if (this.stopped) {
+      return;
+    }
+    if (this.running || this.resuming) {
+      this.pending = force || this.pending === 'force' ? 'force' : 'visible';
+      return;
+    }
+    // 快速滚动会连续改变可见集合，合并到下一次报价周期，避免每过一行就发请求。
+    const delay = force ? 0 : this.visibleDelay();
+    if (!force && this.timer && this.timerAt <= Date.now() + delay) {
+      return;
+    }
+    this.schedule(delay);
   }
 
   private schedule(ms: number): void {
     if (this.timer) {
       clearTimeout(this.timer);
     }
+    this.timerAt = Date.now() + ms;
     this.timer = setTimeout(() => {
       this.timer = null;
-      this.loop();
+      this.inFlight = this.loop().finally(() => {
+        this.inFlight = null;
+      });
     }, ms);
   }
 
-  private codes(): string[] {
+  private codes(win: Window, started: number): string[] {
     const orders = this.sim.activeOrderCodes(this.clock().date);
     if (!this.foreground) {
+      if (!this.tracking) {
+        return [];
+      }
       return this.settings.backgroundMode === 'session'
         ? [...this.sim.recordedCodes()]
         : orders;
     }
-    return [...new Set([...this.extra, ...this.sim.recordedCodes()])];
+    const recorded = [...this.sim.recordedCodes()];
+    if (win !== 'session') {
+      return [...new Set([...this.extra, ...recorded])];
+    }
+    const passiveDue = started >= this.passiveAt;
+    if (passiveDue) {
+      this.passiveAt = started + PASSIVE_REFRESH_MS;
+    }
+    return [...new Set([...this.extra, ...(passiveDue ? recorded : [])])];
   }
 
   private async loop(): Promise<void> {
-    if (this.running) {
+    if (this.running || this.resuming || this.stopped) {
       return;
     }
     this.running = true;
-    let delay: number | null = null;
+    this.pending = null;
+    const started = Date.now();
     try {
-      const now = this.clock();
-      const win = marketWindow(now, this.sim.calendar);
-      const codes = this.codes();
-      if (codes.length && (win === 'session' || this.foreground)) {
+      const now = this.clock(),
+        win = marketWindow(now, this.sim.calendar);
+      const codes = this.codes(win, started);
+      if (
+        codes.length &&
+        (this.foreground || (this.tracking && win === 'session'))
+      ) {
         try {
+          this.lastQuoteStart = Date.now();
           const quotes = await this.client.quotes(codes);
           await this.sim.ingest(quotes);
           this.lastOk = Date.now();
@@ -238,40 +344,60 @@ export class Refresher {
           this.lastError = e instanceof Error ? e.message : String(e);
         }
       }
-      // 盘后固定价格交易用分时数据撮合，分钟级别，30 秒查一次就够
       if (
         win === 'session' &&
         now.t >= T(15, 5) &&
-        Date.now() - this.lastAfter > 30_000
+        Date.now() - this.lastAfter > 30000
       ) {
         this.lastAfter = Date.now();
         await this.sim.ingestAfterHours().catch(() => undefined);
       }
       await this.sim.tick();
       await this.updateTracker(win);
-      delay = nextDelay(
+    } catch (e) {
+      this.failures++;
+      this.lastError = e instanceof Error ? e.message : String(e);
+    } finally {
+      this.running = false;
+      const now = this.clock(),
+        win = marketWindow(now, this.sim.calendar);
+      let period = nextDelay(
         win,
         this.foreground,
         this.tracking,
         this.settings,
         now.t,
+        this.extra.length > 0,
       );
-      // 连续失败时退避，最多 60 秒
-      if (delay != null && this.failures > 2) {
-        delay = Math.min(60_000, delay * 2 ** Math.min(this.failures - 2, 4));
+      if (period != null && this.foreground && win === 'session') {
+        // 滚出最后一个可见报价时，仍按上次慢速批次的期限取数。
+        period = Math.min(
+          period,
+          Math.max(MIN_LOOP_DELAY_MS, this.passiveAt - started),
+        );
       }
-    } finally {
-      this.running = false;
-    }
-    const st = this.status();
-    this.listeners.forEach(fn => fn(st));
-    if (delay != null) {
-      this.schedule(delay);
+      if (period != null) {
+        period = this.backoff(period);
+      }
+      if (!this.stopped) {
+        const st = this.status();
+        this.listeners.forEach(fn => fn(st));
+        if (!this.resuming && period != null) {
+          // 周期从本轮开始计时，扣除网络、撮合、写库的总耗时；慢请求不积压补发。
+          this.schedule(
+            this.pending && this.failures <= 2
+              ? this.pending === 'force'
+                ? 0
+                : this.visibleDelay()
+              : Math.max(MIN_LOOP_DELAY_MS, period - (Date.now() - started)),
+          );
+        }
+      }
     }
   }
 
   private async updateTracker(win: Window): Promise<void> {
-    if (!this.tracker) {
+    if (!this.tracker || this.stopped) {
       return;
     }
     const orders = this.sim.activeOrderCodes(this.clock().date).length;
@@ -294,10 +420,13 @@ export class Refresher {
         });
         this.tracking = true;
         try {
-          await this.tracker.start(
+          const started = await this.tracker.start(
             'AShareSim 正在后台跟踪',
             this.notificationText(),
           );
+          if (!started) {
+            this.endTracking();
+          }
         } catch {
           this.endTracking();
         }

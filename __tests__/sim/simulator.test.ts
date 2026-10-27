@@ -288,9 +288,7 @@ describe('Simulator：资金和设置（M2 第 4 步）', () => {
     const clock = { date: '2026-10-26', t: T(10, 0) };
     const { db, sim } = await setup(clock);
     const fee = { ...sim.engine.state.fee, stockRate: 10_000 };
-    expect(await sim.setFeeProfile(fee)).toEqual([
-      '股票佣金率 万 2.5 → 万 1',
-    ]);
+    expect(await sim.setFeeProfile(fee)).toEqual(['股票佣金率 万 2.5 → 万 1']);
     expect(await sim.setFeeProfile(fee)).toEqual([]); // 没变化不记
     await sim.setDepositCap(50_000_000);
     const log = await repo.recentActivity(db, 5);
@@ -345,5 +343,176 @@ describe('Simulator：资金和设置（M2 第 4 步）', () => {
     await repo.pruneActivity(db, '2999-01-01'); // 当前账户的全部过期
     expect((await repo.activityOf(db, oldId, 50)).length).toBeGreaterThan(0);
     expect((await repo.activityOf(db, sim.accountId, 50)).length).toBe(0);
+  });
+});
+
+describe('Simulator：报价时间水位与去重', () => {
+  const fresh = () =>
+    parseQuotes(fx('qt-2026-10-26-1452.txt')).find(
+      q => q.snapshot.code === 'sh600036',
+    )!;
+  const copy = (q: Quote): Quote => JSON.parse(JSON.stringify(q));
+  afterEach(() => jest.restoreAllMocks());
+
+  test('倒退数据不覆盖报价、不撮合、不写库、不通知（即使价格不同）', async () => {
+    const { db, sim } = await setup({ date: '2026-10-26', t: T(14, 53) });
+    sim.setWatchlist(['sh600036']);
+    const q = fresh();
+    await sim.ingest([q]);
+    const match = jest.spyOn(sim.engine, 'onSnapshot');
+    const sql = jest.spyOn(db, 'run');
+    const changed = jest.fn();
+    sim.subscribeQuotes(changed);
+    const old = copy(q);
+    old.snapshot.t -= 3;
+    old.snapshot.last = old.snapshot.last! - 100;
+    await sim.ingest([old]);
+    expect(sim.quote('sh600036')).toEqual(q);
+    expect(match).not.toHaveBeenCalled();
+    expect(sql).not.toHaveBeenCalled();
+    expect(changed).not.toHaveBeenCalled();
+  });
+
+  test('完全重复只更新收到报价的时间，元数据变化只通知界面', async () => {
+    const { db, sim } = await setup({ date: '2026-10-26', t: T(14, 53) });
+    sim.setWatchlist(['sh600036']);
+    const q = fresh();
+    await sim.ingest([q]);
+    const match = jest.spyOn(sim.engine, 'onSnapshot');
+    const sql = jest.spyOn(db, 'run');
+    const changed = jest.fn();
+    sim.subscribeQuotes(changed);
+    jest.spyOn(Date, 'now').mockReturnValue(123456);
+    await sim.ingest([copy(q)]);
+    expect(sim.quoteReceivedAt('sh600036')).toBe(123456);
+    expect(match).not.toHaveBeenCalled();
+    expect(sql).not.toHaveBeenCalled();
+    expect(changed).not.toHaveBeenCalled();
+    const metadata = copy(q);
+    metadata.info.pe = 12;
+    await sim.ingest([metadata]);
+    expect(sim.info('sh600036')?.pe).toBe(12);
+    expect(changed).toHaveBeenCalledTimes(1);
+    expect(match).not.toHaveBeenCalled();
+    expect(sql).not.toHaveBeenCalled();
+    const stale = copy(q);
+    stale.snapshot.t -= 3;
+    jest.spyOn(Date, 'now').mockReturnValue(234567);
+    await sim.ingest([stale]);
+    expect(sim.quoteReceivedAt('sh600036')).toBe(123456);
+  });
+
+  test('同秒的盘口/成交量修正仍撮合并覆盖本地快照，批量只通知一次', async () => {
+    const { db, sim } = await setup({ date: '2026-10-26', t: T(14, 53) });
+    sim.setWatchlist(['sh600036']);
+    const q = fresh();
+    await sim.ingest([q]);
+    const fixed = copy(q);
+    fixed.snapshot.last = fixed.snapshot.last! + 10;
+    fixed.snapshot.volume += 100;
+    fixed.snapshot.bids[0][1] += 100;
+    const match = jest.spyOn(sim.engine, 'onSnapshot');
+    const changed = jest.fn();
+    sim.subscribeQuotes(changed);
+    await sim.ingest([fixed, copy(fixed)]);
+    expect(match).toHaveBeenCalledTimes(1);
+    expect(changed).toHaveBeenCalledTimes(1);
+    expect((await repo.snapshotStats(db)).rows).toBe(1);
+    expect(await repo.latestSnapshot(db, 'sh600036')).toMatchObject(
+      fixed.snapshot,
+    );
+  });
+
+  test('按证券和日期校验：新交易日早盘可覆盖昨收，昨天较大的秒数不能回退', async () => {
+    const { sim } = await setup({ date: '2026-10-27', t: T(10, 0) });
+    const yesterday = fresh();
+    const today = copy(yesterday);
+    today.snapshot.date = '2026-10-27';
+    today.snapshot.t = T(9, 30);
+    const other = copy(yesterday);
+    other.snapshot.code = other.info.code = 'sz000001';
+    await sim.ingest([today, yesterday, other]);
+    expect(sim.quote('sh600036')?.snapshot.date).toBe('2026-10-27');
+    expect(sim.quote('sz000001')?.snapshot.date).toBe('2026-10-26');
+    await sim.ingest([yesterday]);
+    expect(sim.quote('sh600036')).toEqual(today);
+  });
+
+  test('重启后首次响应也不能落后于已记录快照', async () => {
+    const clock = { date: '2026-10-26', t: T(14, 53) };
+    const { db, sim } = await setup(clock);
+    sim.setWatchlist(['sh600036']);
+    const q = fresh();
+    await sim.ingest([q]);
+    const reopened = await Simulator.open(db, client, () => clock);
+    reopened.setWatchlist(['sh600036']);
+    const old = copy(q);
+    old.snapshot.t -= 3;
+    const match = jest.spyOn(reopened.engine, 'onSnapshot');
+    await reopened.ingest([old]);
+    expect(reopened.quote('sh600036')).toBeNull();
+    expect(match).not.toHaveBeenCalled();
+    await reopened.ingest([q]);
+    expect(reopened.quote('sh600036')).toEqual(q);
+  });
+
+  test('指数也拦截旧值，且不会进入撮合或快照表', async () => {
+    const { db, sim } = await setup({ date: '2026-10-26', t: T(14, 53) });
+    const q = parseQuotes(fx('qt-2026-10-26-1452.txt')).find(
+      x => x.snapshot.code === 'sh000001',
+    )!;
+    const match = jest.spyOn(sim.engine, 'onSnapshot');
+    await sim.ingest([q]);
+    const old = copy(q);
+    old.snapshot.t -= 3;
+    await sim.ingest([old]);
+    expect(sim.quote(q.snapshot.code)).toEqual(q);
+    expect(match).not.toHaveBeenCalled();
+    expect((await repo.snapshotStats(db)).rows).toBe(0);
+  });
+
+  test('并发到达的响应在写库等待期间仍串行校验，最终不会被旧响应覆盖', async () => {
+    const { db, sim } = await setup({ date: '2026-10-26', t: T(14, 53) });
+    sim.setWatchlist(['sh600036']);
+    let release!: () => void, entered!: () => void;
+    const gate = new Promise<void>(r => {
+      release = r;
+    });
+    const started = new Promise<void>(r => {
+      entered = r;
+    });
+    const save = repo.saveSnapshot;
+    jest.spyOn(repo, 'saveSnapshot').mockImplementationOnce(async (...args) => {
+      entered();
+      await gate;
+      return save(...args);
+    });
+    const q = fresh(),
+      old = copy(q);
+    old.snapshot.t -= 3;
+    const first = sim.ingest([q]);
+    await started;
+    const second = sim.ingest([old]);
+    release();
+    await Promise.all([first, second]);
+    expect(sim.quote('sh600036')).toEqual(q);
+    expect(await repo.latestSnapshot(db, 'sh600036')).toMatchObject(q.snapshot);
+  });
+
+  test('写库失败后缓存不抢先发布，后续相同数据可重试，队列不被拒绝状态阻断', async () => {
+    const { db, sim } = await setup({ date: '2026-10-26', t: T(14, 53) });
+    sim.setWatchlist(['sh600036']);
+    const q = fresh();
+    jest
+      .spyOn(repo, 'saveSnapshot')
+      .mockRejectedValueOnce(new Error('disk busy'));
+    const match = jest.spyOn(sim.engine, 'onSnapshot');
+    await expect(sim.ingest([q])).rejects.toThrow('disk busy');
+    expect(sim.quote('sh600036')).toBeNull();
+    expect(match).not.toHaveBeenCalled();
+    await sim.ingest([copy(q)]);
+    expect(sim.quote('sh600036')).toEqual(q);
+    expect(match).toHaveBeenCalledTimes(1);
+    expect((await repo.snapshotStats(db)).rows).toBe(1);
   });
 });
