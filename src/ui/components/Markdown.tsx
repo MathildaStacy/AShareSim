@@ -60,7 +60,9 @@ export function Markdown({
           case 'li':
             return (
               <View key={i} style={[s.li, { paddingLeft: 4 + b.depth * 14 }]}>
-                <Text style={s.marker}>{b.marker}</Text>
+                <Text style={[s.marker, num]} numberOfLines={1}>
+                  {b.marker}
+                </Text>
                 <Text style={[s.p, s.liText]}>
                   <Inline inl={b.inl} onLink={onLink} />
                 </Text>
@@ -119,7 +121,9 @@ const s = StyleSheet.create({
   link: { color: color.learn, textDecorationLine: 'underline' },
   li: { flexDirection: 'row' },
   marker: {
-    width: 20,
+    minWidth: 24,
+    paddingRight: 4,
+    flexShrink: 0,
     fontSize: 15,
     lineHeight: 23,
     color: color.ink2,

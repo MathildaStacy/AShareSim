@@ -38,6 +38,7 @@ export interface RequestInput {
   cacheKey: string;
   /** 压缩时用：不让模型调用工具。 */
   noTools?: boolean;
+  stream?: boolean;
 }
 
 export interface BuiltRequest {
@@ -158,6 +159,7 @@ function anthropicBody(input: RequestInput): Record<string, unknown> {
   return {
     model: input.service.model,
     max_tokens: MAX_OUTPUT_TOKENS,
+    ...(input.stream ? { stream: true } : {}),
     ...(input.effort !== 'off'
       ? {
           thinking: { type: 'adaptive' },
@@ -228,6 +230,7 @@ function openaiBody(input: RequestInput): Record<string, unknown> {
   return {
     model: input.service.model,
     store: false,
+    ...(input.stream ? { stream: true } : {}),
     ...(input.cache ? { prompt_cache_key: input.cacheKey } : {}),
     ...(input.effort !== 'off'
       ? {
@@ -391,13 +394,14 @@ function parseOpenai(model: string, json: any): ParsedResponse {
   const d = u.input_tokens_details ?? {};
   const read = count(d.cached_tokens);
   const write = count(d.cache_write_tokens ?? u.cache_write_tokens);
-  const stop: Stop = parts.some(p => p.t === 'call')
-    ? 'tool'
-    : json.status === 'incomplete'
-    ? json.incomplete_details?.reason === 'content_filter'
-      ? 'refusal'
-      : 'max_tokens'
-    : 'end';
+  const stop: Stop =
+    json.status === 'incomplete'
+      ? json.incomplete_details?.reason === 'content_filter'
+        ? 'refusal'
+        : 'max_tokens'
+      : parts.some(p => p.t === 'call')
+      ? 'tool'
+      : 'end';
   return {
     parts,
     raw: { protocol: 'openai', model, items: json.output },

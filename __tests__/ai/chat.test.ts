@@ -14,6 +14,7 @@ import {
   newThread,
   runCard,
   setAiDeps,
+  stop,
   useChat,
 } from '../../src/ai/chat';
 import type { FetchLike } from '../../src/ai/http';
@@ -30,6 +31,7 @@ import * as aiRepo from '../../src/data/aiRepo';
 import { openMemoryDb } from '../../src/data/drivers/nodeSqlite';
 import { migrate } from '../../src/data/migrations';
 import * as repo from '../../src/data/repos';
+import { aDelta, aEnd, aStart, aText, sse } from './helpers/stream';
 import { T } from '../../src/engine';
 import type { MarketClient } from '../../src/market/client';
 import { parseQuotes } from '../../src/market/tencent';
@@ -537,5 +539,176 @@ describe('缓存和压缩', () => {
       t: 'result',
       output: expect.stringContaining('没有执行'),
     });
+  });
+});
+
+describe('流式对话', () => {
+  test('生成中显示片段，完成后只存一份正文和最终用量', async () => {
+    const core = await setup();
+    let begin!: () => void;
+    const started = new Promise<void>(r => {
+      begin = r;
+    });
+    let finish!: () => void;
+    const gate = new Promise<void>(r => {
+      finish = r;
+    });
+    setAiDeps({
+      fetch: async (_url, init) => {
+        const first = sse(aStart, aText, aDelta('先给结论'));
+        const rest = sse(aDelta('，再讲理由。'), ...aEnd);
+        init.onChunk!(first);
+        begin();
+        await gate;
+        init.onChunk!(rest);
+        return { status: 200, text: async () => first + rest };
+      },
+    });
+    const answer = ask(core, { question: '分析一下', page: null });
+    await started;
+    expect(useChat.getState().busy).toBe('正在回答…');
+    expect(useChat.getState().messages.at(-1)!.parts).toEqual([
+      { t: 'text', text: '先给结论' },
+    ]);
+    expect(
+      await aiRepo.messages(core.db, useChat.getState().threadId!),
+    ).toHaveLength(1);
+    finish();
+    await answer;
+    const saved = await aiRepo.messages(core.db, useChat.getState().threadId!);
+    expect(saved).toHaveLength(2);
+    expect(saved[1].parts).toEqual([
+      { t: 'text', text: '先给结论，再讲理由。' },
+    ]);
+    expect(saved[1].ui?.usage).toMatchObject({
+      input: 10,
+      cacheRead: 20,
+      output: 7,
+    });
+    expect(useChat.getState().messages.some(m => m.id < 0)).toBe(false);
+  });
+
+  test('停止保留片段，丢弃未完成工具参数；下一次提问的历史仍合法', async () => {
+    const core = await setup();
+    let begin!: () => void;
+    const started = new Promise<void>(r => {
+      begin = r;
+    });
+    setAiDeps({
+      fetch: (_url, init) =>
+        new Promise((_resolve, reject) => {
+          init.onChunk!(
+            sse(
+              aStart,
+              aText,
+              aDelta('已收到的建议'),
+              { type: 'content_block_stop', index: 0 },
+              {
+                type: 'content_block_start',
+                index: 1,
+                content_block: {
+                  type: 'tool_use',
+                  name: 'place_order',
+                  id: 'unfinished',
+                  input: {},
+                },
+              },
+              {
+                type: 'content_block_delta',
+                index: 1,
+                delta: {
+                  type: 'input_json_delta',
+                  partial_json: '{"code":"600036"',
+                },
+              },
+            ),
+          );
+          init.signal!.addEventListener('abort', () =>
+            reject(new Error('aborted')),
+          );
+          begin();
+        }),
+    });
+    const answer = ask(core, { question: '分析一下', page: null });
+    await started;
+    stop();
+    await answer;
+    const saved = await aiRepo.messages(core.db, useChat.getState().threadId!);
+    expect(saved).toHaveLength(2);
+    expect(saved[1]).toMatchObject({
+      parts: [{ t: 'text', text: '已收到的建议' }],
+      raw: null,
+      ui: { error: '已停止' },
+    });
+    expect(core.sim.engine.state.orders).toHaveLength(0);
+    expect(useChat.getState().busy).toBeNull();
+    setAiDeps({ fetch: fetchMock });
+    replies = [{ json: textReply('继续分析。') }];
+    await ask(core, { question: '继续', page: null });
+    expect(JSON.stringify(sent[0].body.messages)).toContain('已收到的建议');
+    expect(JSON.stringify(sent[0].body.messages)).not.toContain('unfinished');
+  });
+
+  test('工具块完整但消息还没结束时不执行；结束后继续工具循环', async () => {
+    const core = await setup();
+    let begin!: () => void;
+    const started = new Promise<void>(r => {
+      begin = r;
+    });
+    let finish!: () => void;
+    const gate = new Promise<void>(r => {
+      finish = r;
+    });
+    let calls = 0;
+    setAiDeps({
+      fetch: async (_url, init) => {
+        if (++calls === 2) {
+          const body = JSON.parse(init.body);
+          expect(body.messages[2].content[0]).toMatchObject({
+            type: 'tool_result',
+            tool_use_id: 'stream_call',
+          });
+          return {
+            status: 200,
+            text: async () => JSON.stringify(textReply('账户已查询。')),
+          };
+        }
+        const first = sse(
+          aStart,
+          {
+            type: 'content_block_start',
+            index: 0,
+            content_block: {
+              type: 'tool_use',
+              name: 'get_positions',
+              id: 'stream_call',
+              input: {},
+            },
+          },
+          { type: 'content_block_stop', index: 0 },
+        );
+        const rest = sse(
+          {
+            type: 'message_delta',
+            delta: { stop_reason: 'tool_use' },
+            usage: { output_tokens: 3 },
+          },
+          { type: 'message_stop' },
+        );
+        init.onChunk!(first);
+        begin();
+        await gate;
+        init.onChunk!(rest);
+        return { status: 200, text: async () => first + rest };
+      },
+    });
+    const answer = ask(core, { question: '查持仓', page: null });
+    await started;
+    expect(useChat.getState().messages.map(m => m.role)).toEqual(['user']);
+    expect(calls).toBe(1);
+    finish();
+    await answer;
+    expect(calls).toBe(2);
+    expect(toolRows(useChat.getState().messages)).toHaveLength(1);
   });
 });

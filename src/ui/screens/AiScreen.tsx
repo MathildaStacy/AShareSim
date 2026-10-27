@@ -5,7 +5,7 @@
  */
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { Menu } from 'lucide-react-native';
+import { Check, ChevronDown, ChevronUp, Menu, X } from 'lucide-react-native';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -103,6 +103,9 @@ export function AiScreen() {
   } | null>(null);
   const scroll = useRef<ScrollViewInstance>(null);
   const scrollKey = useRef('');
+  const followEnd = useRef(true);
+  const userScrolling = useRef(false);
+  const [atEnd, setAtEnd] = useState(true);
   const page = source ? source.get() : null;
   const pageName = page?.name ?? null;
 
@@ -166,6 +169,9 @@ export function AiScreen() {
     }
     setError(null);
     setText('');
+    followEnd.current = true;
+    userScrolling.current = false;
+    setAtEnd(true);
     ask(core, {
       question,
       page: source ? { route: source.route, ctx: source.get() } : null,
@@ -182,12 +188,21 @@ export function AiScreen() {
   };
 
   const live = useMemo(() => messages.filter(m => !m.compacted), [messages]);
+  const tail = live[live.length - 1];
+  const scrollVersion = [
+    thread?.id,
+    live.length,
+    tail?.id,
+    tail?.parts.reduce((n, p) => n + (p.t === 'text' ? p.text.length : 0), 0),
+    !!busy,
+  ].join(':');
   const qTokens = estimateTokens(text);
 
   return (
     <KeyboardAvoidingView
       style={s.page}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      // Android 全面屏模式下 adjustResize 不会缩小页面，需按键盘遮挡高度主动避让。
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
       <NavBar
         title={thread?.title ?? 'AI 助手'}
@@ -225,12 +240,32 @@ export function AiScreen() {
         style={s.list}
         contentContainerStyle={s.listPad}
         onContentSizeChange={() => {
-          // 只在有新消息、开始 / 结束回答时滚到底；点操作卡、行情刷新导致的重排不滚，免得你往上看时被拉下来
-          if (scrollKey.current !== answerKey) {
-            scrollKey.current = answerKey;
-            scroll.current?.scrollToEnd({ animated: true });
+          // 只跟随新消息和新增正文；展开查询、操作卡重排时保留阅读位置。
+          if (scrollKey.current === scrollVersion) {
+            return;
+          }
+          scrollKey.current = scrollVersion;
+          if (followEnd.current) {
+            userScrolling.current = false;
+            scroll.current?.scrollToEnd({ animated: false });
           }
         }}
+        onScroll={({ nativeEvent: e }) => {
+          if (!userScrolling.current) {
+            return;
+          }
+          const nearEnd =
+            e.contentSize.height -
+              e.contentOffset.y -
+              e.layoutMeasurement.height <
+            60;
+          followEnd.current = nearEnd;
+          setAtEnd(nearEnd);
+        }}
+        onScrollBeginDrag={() => {
+          userScrolling.current = true;
+        }}
+        scrollEventThrottle={32}
         keyboardShouldPersistTaps="handled"
       >
         {svc === null ? (
@@ -256,7 +291,7 @@ export function AiScreen() {
         ) : null}
         {!live.length && svc ? (
           <Text style={s.hello}>
-            可以问这个页面上的任何东西：「这是什么意思」「为什么是废单」「这只股票是做什么的」。也可以让我替你操作
+            可以问这个页面上的任何东西：「这是什么意思」「这只股票现在值得买吗」「我的持仓该怎么调整」。我会先给出投资建议，再说明判断依据和风险。也可以让我替你操作
             App，例如「帮我打开沪深300ETF 的买入页，价格 4.85，100
             份」；会改数据的操作要你点「执行」才生效。
           </Text>
@@ -267,6 +302,9 @@ export function AiScreen() {
             m={m}
             last={i === live.length - 1 || live[i + 1].role === 'user'}
             usage={
+              !(
+                busy && !live.slice(i + 1).some(next => next.role === 'user')
+              ) &&
               m.role !== 'user' &&
               (i === live.length - 1 || live[i + 1].role === 'user')
                 ? answerUsage(live, firstOfAnswer(live, i))
@@ -297,6 +335,22 @@ export function AiScreen() {
         ) : null}
         {error ? <Text style={s.error}>{error}</Text> : null}
       </ScrollView>
+      {!atEnd && live.length ? (
+        <Pressable
+          style={s.latest}
+          accessibilityRole="button"
+          accessibilityLabel="回到最新回复"
+          onPress={() => {
+            followEnd.current = true;
+            userScrolling.current = false;
+            setAtEnd(true);
+            scroll.current?.scrollToEnd({ animated: true });
+          }}
+        >
+          <Text style={s.toolSummaryText}>回到最新回复</Text>
+          <ChevronDown size={14} color={color.learn} />
+        </Pressable>
+      ) : null}
       <View style={[s.bottom, { paddingBottom: Math.max(insets.bottom, 8) }]}>
         {quick.length && !busy ? (
           <ScrollView
@@ -340,7 +394,7 @@ export function AiScreen() {
             />
           )}
         </View>
-        {est && svc ? (
+        {est && svc && !busy ? (
           <Text style={[s.est, num]} numberOfLines={2}>
             {'这次约 ' +
               fmtInt(est.total + qTokens) +
@@ -350,8 +404,8 @@ export function AiScreen() {
               est.note}
           </Text>
         ) : null}
-        <Text style={s.disclaimer}>
-          AI 不荐股，回答仅供学习，不构成投资建议
+        <Text style={s.adviceHint}>
+          AI 提供投资建议与分析，模拟交易需你确认
         </Text>
       </View>
       <AiMenu
@@ -360,6 +414,9 @@ export function AiScreen() {
         go={r => {
           setMenu(false);
           if (r === 'new') {
+            followEnd.current = true;
+            userScrolling.current = false;
+            setAtEnd(true);
             newThread();
           } else {
             nav.navigate(r);
@@ -399,6 +456,7 @@ function MessageView({
   onMemory: (toolId: string, act: 'confirm' | 'decline' | 'undo') => void;
   onNav: (n: NonNullable<ToolUi['nav']>) => void;
 }) {
+  const [showQueries, setShowQueries] = useState(false);
   if (m.role === 'user') {
     const ui = m.ui ?? {};
     return (
@@ -428,34 +486,65 @@ function MessageView({
     );
   }
   if (m.role === 'tool') {
+    const tools = m.ui?.tools ?? [];
+    const isQuery = (t: ToolUi) => !t.card && !t.memory && !t.nav && !t.error;
+    const queries = tools.filter(isQuery);
     return (
       <View style={s.aiBlock}>
-        {(m.ui?.tools ?? []).map(t => (
-          <View key={t.id}>
-            {t.card ? (
-              <CardView
-                card={t.card}
-                expired={t.card.accountId !== accountId}
-                onRun={() => onCard(t.id, 'run')}
-                onCancel={() => onCard(t.id, 'cancel')}
-                onLesson={id => onLink('lesson:' + id)}
-              />
-            ) : t.memory ? (
-              <MemoryView mm={t.memory} onAct={a => onMemory(t.id, a)} />
-            ) : t.nav ? (
-              <Pressable
-                onPress={() => onNav(t.nav!)}
-                accessibilityRole="button"
-              >
-                <Text style={s.tool}>{'↗ ' + t.label}</Text>
-              </Pressable>
+        {queries.length ? (
+          <Pressable
+            style={s.toolSummary}
+            accessibilityRole="button"
+            accessibilityLabel="查询详情"
+            accessibilityState={{ expanded: showQueries }}
+            onPress={() => setShowQueries(v => !v)}
+          >
+            <Check size={15} color={color.learn} />
+            <Text style={s.toolSummaryText}>
+              {'已查询 ' + queries.length + ' 项数据'}
+            </Text>
+            {showQueries ? (
+              <ChevronUp size={15} color={color.ink2} />
             ) : (
-              <Text style={[s.tool, t.error && s.toolBad]}>
-                {(t.error ? '✕ ' : '🔧 ') + t.label}
-              </Text>
+              <ChevronDown size={15} color={color.ink2} />
             )}
-          </View>
-        ))}
+          </Pressable>
+        ) : null}
+        {tools
+          .filter(t => showQueries || !isQuery(t))
+          .map(t => (
+            <View key={t.id}>
+              {t.card ? (
+                <CardView
+                  card={t.card}
+                  expired={t.card.accountId !== accountId}
+                  onRun={() => onCard(t.id, 'run')}
+                  onCancel={() => onCard(t.id, 'cancel')}
+                  onLesson={id => onLink('lesson:' + id)}
+                />
+              ) : t.memory ? (
+                <MemoryView mm={t.memory} onAct={a => onMemory(t.id, a)} />
+              ) : t.nav ? (
+                <Pressable
+                  onPress={() => onNav(t.nav!)}
+                  accessibilityRole="button"
+                >
+                  <Text style={s.tool}>{'↗ ' + t.label}</Text>
+                </Pressable>
+              ) : (
+                <View style={s.toolLine}>
+                  {t.error ? (
+                    <X size={15} color={color.up} />
+                  ) : (
+                    <Check size={15} color={color.learn} />
+                  )}
+                  <Text style={[s.tool, s.toolLabel, t.error && s.toolBad]}>
+                    {t.label}
+                  </Text>
+                </View>
+              )}
+            </View>
+          ))}
         {usage ? (
           <Text style={[s.usage, num]}>{usageText(usage, svc)}</Text>
         ) : null}
@@ -466,6 +555,9 @@ function MessageView({
     .map(p => (p.t === 'text' ? p.text : ''))
     .join('\n')
     .trim();
+  if (!text && !m.ui?.notice && !m.ui?.error && !usage) {
+    return null;
+  }
   return (
     <View style={s.aiBlock}>
       {text ? <Markdown text={text} onLink={onLink} /> : null}
@@ -678,7 +770,7 @@ const s = StyleSheet.create({
     color: color.ink3,
     marginVertical: 6,
   },
-  hello: { fontSize: 13, lineHeight: 20, color: color.ink3, padding: 6 },
+  hello: { fontSize: 13, lineHeight: 20, color: color.ink2, padding: 6 },
   divider: { flexDirection: 'row', alignItems: 'center', marginVertical: 10 },
   divLine: {
     flex: 1,
@@ -706,6 +798,22 @@ const s = StyleSheet.create({
     marginVertical: 4,
   },
   tool: { fontSize: 13, lineHeight: 20, color: color.ink2, marginBottom: 4 },
+  toolLine: { flexDirection: 'row', alignItems: 'flex-start', gap: 6 },
+  toolLabel: { flex: 1 },
+  toolSummary: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    minHeight: 48,
+  },
+  toolSummaryText: { fontSize: 12, lineHeight: 18, color: color.ink2 },
+  latest: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'center',
+    gap: 4,
+    padding: 12,
+  },
   toolBad: { color: color.up },
   usage: {
     fontSize: 11,
@@ -791,7 +899,7 @@ const s = StyleSheet.create({
     color: color.ink,
   },
   est: { fontSize: 11, color: color.ink3, marginTop: 4 },
-  disclaimer: { fontSize: 11, color: color.ink3, marginTop: 2 },
+  adviceHint: { fontSize: 11, color: color.ink2, marginTop: 2 },
   mask: { flex: 1, backgroundColor: 'rgba(0,0,0,0.3)', alignItems: 'flex-end' },
   menu: {
     marginTop: 56,

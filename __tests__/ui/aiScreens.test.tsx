@@ -150,7 +150,8 @@ beforeAll(async () => {
 test('没配服务时，AI 页提示去配置', async () => {
   const r = await render('Ai', AiScreen);
   expect(r.text()).toContain('去配置 AI 服务');
-  expect(r.text()).toContain('AI 不荐股');
+  expect(r.text()).toContain('AI 提供投资建议与分析，模拟交易需你确认');
+  expect(r.text()).not.toContain('AI 不荐股');
 });
 
 test('添加服务：校验、Key 存 Keystore，页面上下文只写「已填」', async () => {
@@ -215,7 +216,7 @@ test('提问：回答、用到的工具、操作卡、执行；上下文条和�
       content: [
         {
           type: 'text',
-          text: '确认后会以 **42.30 元**买入 100 股 [招商银行](stock:sh600036)。\n\n仅供学习，不构成投资建议',
+          text: '确认后会以 **42.30 元**买入 100 股 [招商银行](stock:sh600036)。',
         },
       ],
       usage: {
@@ -239,6 +240,7 @@ test('提问：回答、用到的工具、操作卡、执行；上下文条和�
   expect(t).toContain('操作卡 #1 · 买入 招商银行');
   expect(t).toContain('预校验：校验通过');
   expect(t).toContain('42.30 元');
+  expect(t).not.toContain('仅供学习，不构成投资建议');
   expect(t).toContain('缓存读 5,500 · 写 2,560');
   expect(sent[0].messages[0].content[0].text).toContain(
     '页面：个股 · 招商银行',
@@ -289,4 +291,60 @@ test('navigate 预填：下单页的价格和数量、转账页的金额', async
   expect(ctxText()).toContain('300');
   await render('Transfer', TransferScreen, { dir: 'in', amount: 500_000 });
   expect(ctxText()).toContain('输入金额：5000 元');
+});
+
+test('查询过程默认折叠、展开后可追溯，错误直接可见；向上读时提供回到最新入口', async () => {
+  const r = await render('Ai', AiScreen);
+  await act(async () => {
+    useChat.setState({
+      messages: [
+        {
+          id: 1000,
+          threadId: 1,
+          role: 'tool',
+          parts: [],
+          raw: null,
+          compacted: false,
+          createdAt: '',
+          ui: {
+            tools: [
+              { id: 'read', name: 'get_positions', label: '读取 账户和持仓' },
+              {
+                id: 'error',
+                name: 'get_quote',
+                label: '行情查询失败，请重试',
+                error: true,
+              },
+            ],
+          },
+        },
+      ],
+    });
+  });
+  expect(r.text()).toContain('已查询 1 项数据');
+  expect(r.text()).not.toContain('读取 账户和持仓');
+  expect(r.text()).toContain('行情查询失败，请重试');
+  await r.press('查询详情');
+  expect(r.text()).toContain('读取 账户和持仓');
+  await r.press('查询详情');
+  expect(r.text()).not.toContain('读取 账户和持仓');
+  const list = r.tree.root.findAll(
+    n => n.props.onScrollBeginDrag && n.props.onScroll,
+  )[0];
+  await act(async () => {
+    list.props.onScrollBeginDrag();
+    list.props.onScroll({
+      nativeEvent: {
+        contentSize: { height: 2000 },
+        contentOffset: { y: 100 },
+        layoutMeasurement: { height: 600 },
+      },
+    });
+  });
+  expect(r.text()).toContain('回到最新回复');
+  await r.press('回到最新回复');
+  expect(r.text()).not.toContain('回到最新回复');
+  await act(async () => {
+    r.tree.unmount();
+  });
 });

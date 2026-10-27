@@ -318,21 +318,68 @@ export async function ask(core: AppCore, input: AskInput): Promise<void> {
   );
   const navs: ToolUi['nav'][] = [];
   useChat.setState({ busy: '思考中…', pendingNav: null });
+  let partialText = '';
+  let lastPaint = 0;
+  const onText = (text: string) => {
+    partialText = text;
+    if (Date.now() - lastPaint < 40) {
+      return;
+    }
+    lastPaint = Date.now();
+    useChat.setState(state =>
+      state.threadId !== threadId
+        ? state
+        : {
+            busy: '正在回答…',
+            messages: [
+              ...state.messages.filter(m => m.id !== -1),
+              {
+                id: -1,
+                threadId: threadId!,
+                role: 'assistant',
+                parts: [{ t: 'text', text }],
+                raw: null,
+                ui: null,
+                compacted: false,
+                createdAt: now,
+              },
+            ],
+          },
+    );
+  };
   try {
     for (let round = 0; ; round++) {
-      const res = await request(core, svc, key, threadId, signal);
+      partialText = '';
+      lastPaint = 0;
+      const res = await request(
+        core,
+        svc,
+        key,
+        threadId,
+        signal,
+        undefined,
+        undefined,
+        onText,
+      );
       svc = res.svc;
       const parsed = res.call.parsed;
-      const calls = parsed.parts.filter(
-        (p): p is Extract<Part, { t: 'call' }> => p.t === 'call',
-      );
+      const incompleteCalls =
+        parsed.stop !== 'tool' && parsed.parts.some(p => p.t === 'call');
+      const calls =
+        parsed.stop !== 'tool'
+          ? []
+          : parsed.parts.filter(
+              (p): p is Extract<Part, { t: 'call' }> => p.t === 'call',
+            );
       await aiRepo.addMessage(
         core.db,
         {
           threadId,
           role: 'assistant',
-          parts: parsed.parts,
-          raw: parsed.raw,
+          parts: incompleteCalls
+            ? parsed.parts.filter(p => p.t !== 'call')
+            : parsed.parts,
+          raw: incompleteCalls ? null : parsed.raw,
           ui: {
             usage: parsed.usage,
             service: svc.name + ' · ' + svc.model,
@@ -435,7 +482,22 @@ export async function ask(core: AppCore, input: AskInput): Promise<void> {
         : e instanceof Error
         ? e.message
         : String(e);
-    await addError(core, threadId, msg);
+    if (partialText) {
+      // 未结束的工具参数和推理签名不能重发，只保留已经展示的正文。
+      await aiRepo.addMessage(
+        core.db,
+        {
+          threadId,
+          role: 'assistant',
+          parts: [{ t: 'text', text: partialText }],
+          ui: { error: msg },
+        },
+        beijingIso(),
+      );
+      await loadThread(core, threadId);
+    } else {
+      await addError(core, threadId, msg);
+    }
   } finally {
     abort = null;
     useChat.setState({ busy: null });
@@ -444,7 +506,9 @@ export async function ask(core: AppCore, input: AskInput): Promise<void> {
   if (nav && !signal.aborted) {
     useChat.setState({ pendingNav: { route: nav.route, params: nav.params } });
   }
-  await maybeCompact(core, threadId, prefs).catch(() => undefined);
+  if (!signal.aborted) {
+    await maybeCompact(core, threadId, prefs).catch(() => undefined);
+  }
 }
 
 async function addError(core: AppCore, threadId: number, error: string) {
@@ -463,6 +527,7 @@ export async function buildFor(
   threadId: number,
   extra?: Part[],
   noTools?: boolean,
+  stream = true,
 ): Promise<BuiltRequest> {
   const thread = (await aiRepo.thread(core.db, threadId))!;
   const history = (await aiRepo.messages(core.db, threadId)).filter(
@@ -490,6 +555,7 @@ export async function buildFor(
     effort: svc.effort,
     cacheKey: await installId(core.db),
     noTools,
+    stream,
   });
 }
 
@@ -502,15 +568,17 @@ async function request(
   signal: AbortSignal,
   extra?: Part[],
   noTools?: boolean,
+  onText?: (text: string) => void,
 ): Promise<{ call: CallResult; svc: AiService; notice?: string }> {
   let svc = svc0;
   let notice: string | undefined;
   for (let attempt = 0; ; attempt++) {
-    const req = await buildFor(core, svc, threadId, extra, noTools);
+    const req = await buildFor(core, svc, threadId, extra, noTools, !!onText);
     try {
       const call = await callModel(svc, key, req, {
         signal,
         fetchImpl: deps.fetch,
+        onText,
       });
       return { call, svc, notice };
     } catch (e) {
