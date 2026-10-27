@@ -3,7 +3,12 @@
  * 红涨绿跌：K 线阳线空心红、阴线实心绿，和同花顺一致。
  */
 import { useMemo, useState } from 'react';
-import { StyleSheet, View, type LayoutChangeEvent } from 'react-native';
+import {
+  StyleSheet,
+  View,
+  useWindowDimensions,
+  type LayoutChangeEvent,
+} from 'react-native';
 import Svg, {
   Defs,
   Circle,
@@ -20,7 +25,6 @@ import { color } from '../theme';
 import { fmtHands, fmtPct } from '../format';
 import { formatSec } from '../../engine/session';
 import {
-  chartCursorY,
   clamp,
   klineView,
   MINUTES,
@@ -35,6 +39,12 @@ const FONT = 10;
 function useWidth(): [number, (e: LayoutChangeEvent) => void] {
   const [w, setW] = useState(0);
   return [w, e => setW(Math.round(e.nativeEvent.layout.width))];
+}
+
+/** 为可缩放的时间标签保留独立底轴，成交量较小时也不会盖住柱顶交点。 */
+function useChartHeight(): number {
+  const { fontScale } = useWindowDimensions();
+  return H - 14 + Math.ceil(17 * fontScale + 8) + 8;
 }
 
 const fx = (li: number, d: number) => (li / 1000).toFixed(d);
@@ -72,6 +82,7 @@ export function MinuteChart({
   onInspectChange?: (locked: boolean) => void;
 }) {
   const [w, onLayout] = useWidth();
+  const height = useChartHeight();
   const ph = H * 0.7;
   const vTop = ph + 14;
   const vh = H - vTop - 14;
@@ -87,7 +98,12 @@ export function MinuteChart({
     enabled: !!has && w > 0,
     hit: (x, y) => {
       const index = nearestChartPoint(xs, x);
-      return index < 0 ? null : { key: String(series!.times[index]), y };
+      return index < 0
+        ? null
+        : {
+            key: String(series!.times[index]),
+            panel: y < (ph - 6 + vTop) / 2 ? 'price' : 'volume',
+          };
     },
     onInspectChange,
   });
@@ -100,11 +116,17 @@ export function MinuteChart({
   const vmax = Math.max(1, ...(series?.volume ?? []));
   const cross =
     selected >= 0 && cursor.touch
-      ? chartCursorY(
-          cursor.touch.y,
-          { top: 6, bottom: ph - 6, high: top, low: bot },
-          { top: vTop, bottom: vTop + vh, max: vmax },
-        )
+      ? cursor.touch.panel === 'volume'
+        ? {
+            y: vTop + vh - (vh * series!.volume[selected]) / vmax,
+            value: series!.volume[selected],
+            volume: true,
+          }
+        : {
+            y: Y(series!.price[selected]),
+            value: series!.price[selected],
+            volume: false,
+          }
       : null;
   const axisValue = cross
     ? cross.volume
@@ -144,13 +166,13 @@ export function MinuteChart({
         />
       ) : null}
       <View
-        style={styles.box}
+        style={[styles.box, { height }]}
         collapsable={false}
         {...cursor.panHandlers}
         accessible={!!has}
         accessibilityRole="adjustable"
         accessibilityLabel="分时图查价"
-        accessibilityHint="点按查看时间与数值；左右调整可逐点查价"
+        accessibilityHint="点按吸附价格点；左右调整可逐点查价"
         accessibilityValue={
           has
             ? {
@@ -180,13 +202,13 @@ export function MinuteChart({
             );
             cursor.select({
               key: String(series!.times[i]),
-              y: Y(series!.price[i]),
+              panel: cursor.touch?.panel ?? 'price',
             });
           }
         }}
       >
         {w > 0 ? (
-          <Svg width={w} height={H} pointerEvents="none">
+          <Svg width={w} height={height} pointerEvents="none">
             <Defs>
               <LinearGradient id="area" x1="0" y1="0" x2="0" y2="1">
                 <Stop
@@ -286,12 +308,17 @@ export function MinuteChart({
                 {emptyText}
               </SvgText>
             )}
-            <SvgText x={4} y={H - 2} fontSize={FONT} fill={color.ink3}>
+            <SvgText
+              x={4}
+              y={(vTop + vh + height) / 2 + FONT / 2}
+              fontSize={FONT}
+              fill={color.ink3}
+            >
               09:30
             </SvgText>
             <SvgText
               x={X(120)}
-              y={H - 2}
+              y={(vTop + vh + height) / 2 + FONT / 2}
               fontSize={FONT}
               fill={color.ink3}
               textAnchor="middle"
@@ -300,7 +327,7 @@ export function MinuteChart({
             </SvgText>
             <SvgText
               x={w - 4}
-              y={H - 2}
+              y={(vTop + vh + height) / 2 + FONT / 2}
               fontSize={FONT}
               fill={color.ink3}
               textAnchor="end"
@@ -323,7 +350,7 @@ export function MinuteChart({
             x={xs[selected]}
             y={cross.y}
             width={w}
-            height={H}
+            plotBottom={vTop + vh}
             time={title}
             value={axisValue}
           />
@@ -389,6 +416,7 @@ export function KlineChart({
   onInspectChange?: (locked: boolean) => void;
 }) {
   const [w, onLayout] = useWidth();
+  const height = useChartHeight();
   const ph = H * 0.68;
   const vTop = ph + 16;
   const vh = H - vTop - 14;
@@ -404,7 +432,12 @@ export function KlineChart({
     enabled: !!v && w > 0,
     hit: (x, y) => {
       const index = nearestChartPoint(v?.bars.map((_, i) => X(i)) ?? [], x);
-      return index < 0 ? null : { key: v!.bars[index].date, y };
+      return index < 0
+        ? null
+        : {
+            key: v!.bars[index].date,
+            panel: y < (ph - 4 + vTop) / 2 ? 'price' : 'volume',
+          };
     },
     onInspectChange,
   });
@@ -415,16 +448,24 @@ export function KlineChart({
   const bar = v?.bars[current];
   const cross =
     selected >= 0 && cursor.touch && v
-      ? chartCursorY(
-          cursor.touch.y,
-          { top: 14, bottom: ph - 4, high: v.hi, low: v.lo },
-          { top: vTop, bottom: vTop + vh, max: v.vmax },
-        )
+      ? cursor.touch.panel === 'volume'
+        ? {
+            y: vTop + vh - (vh * v.bars[selected].volume) / v.vmax,
+            value: v.bars[selected].volume,
+            volume: true,
+          }
+        : {
+            y: Y(v.bars[selected].close),
+            value: v.bars[selected].close,
+            volume: false,
+          }
       : null;
   const axisValue = cross
     ? cross.volume
       ? '量 ' + fmtHands(cross.value)
-      : priceLabel + ' ' + fx(cross.value, decimals)
+      : (priceLabel === '点位' ? '收盘点位' : '收盘') +
+        ' ' +
+        fx(cross.value, decimals)
     : '';
   const fields = bar
     ? [
@@ -436,9 +477,9 @@ export function KlineChart({
     : [];
   if (!v || !bar || w === 0) {
     return (
-      <View style={styles.box} onLayout={onLayout}>
+      <View style={[styles.box, { height }]} onLayout={onLayout}>
         {w > 0 ? (
-          <Svg width={w} height={H}>
+          <Svg width={w} height={height}>
             <SvgText
               x={w / 2}
               y={ph / 2}
@@ -466,13 +507,13 @@ export function KlineChart({
         width={w}
       />
       <View
-        style={styles.box}
+        style={[styles.box, { height }]}
         collapsable={false}
         {...cursor.panHandlers}
         accessible
         accessibilityRole="adjustable"
         accessibilityLabel={chartLabel + '查价'}
-        accessibilityHint="点按查看日期与数值；左右调整可逐根查价"
+        accessibilityHint="点按吸附收盘价；左右调整可逐根查价"
         accessibilityValue={{
           min: 0,
           max: v.bars.length - 1,
@@ -496,11 +537,14 @@ export function KlineChart({
               0,
               v.bars.length - 1,
             );
-            cursor.select({ key: v.bars[i].date, y: Y(v.bars[i].close) });
+            cursor.select({
+              key: v.bars[i].date,
+              panel: cursor.touch?.panel ?? 'price',
+            });
           }
         }}
       >
-        <Svg width={w} height={H} pointerEvents="none">
+        <Svg width={w} height={height} pointerEvents="none">
           {[0, 1, 2, 3].map(k => (
             <Line
               key={k}
@@ -595,12 +639,17 @@ export function KlineChart({
           <SvgText x={4} y={vTop - 3} fontSize={FONT} fill={color.ink3}>
             {'成交量' + (selected >= 0 ? ' ' + fmtHands(bar.volume) : '')}
           </SvgText>
-          <SvgText x={4} y={H - 2} fontSize={FONT} fill={color.ink3}>
+          <SvgText
+            x={4}
+            y={(vTop + vh + height) / 2 + FONT / 2}
+            fontSize={FONT}
+            fill={color.ink3}
+          >
             {barLabel(v.bars[0].date)}
           </SvgText>
           <SvgText
             x={w - 4}
-            y={H - 2}
+            y={(vTop + vh + height) / 2 + FONT / 2}
             fontSize={FONT}
             fill={color.ink3}
             textAnchor="end"
@@ -622,7 +671,7 @@ export function KlineChart({
             x={X(selected)}
             y={cross.y}
             width={w}
-            height={H}
+            plotBottom={vTop + vh}
             time={bar.date}
             value={axisValue}
           />

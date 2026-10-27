@@ -1,12 +1,18 @@
 /// <reference types="node" />
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { PanResponder, type PanResponderCallbacks, View } from 'react-native';
+import {
+  PanResponder,
+  type PanResponderCallbacks,
+  StyleSheet,
+  View,
+} from 'react-native';
 import Renderer, { act } from 'react-test-renderer';
 import { T } from '../../src/engine';
 import { parseKline, type KBar } from '../../src/market/tencent';
 import { KlineChart, MinuteChart } from '../../src/ui/charts/Charts';
 import { klineView, minuteSeries } from '../../src/ui/charts/chartMath';
+import { fmtHands } from '../../src/ui/format';
 
 const bars = parseKline(
   JSON.parse(
@@ -81,8 +87,14 @@ test('K 线点按吸附实际蜡烛，横纵轴与所选 OHLC 同步，退出后
   expect(plot().props.accessibilityValue.text).toContain(
     '收盘' + (view.bars[12].close / 1000).toFixed(2),
   );
-  const price = view.hi - ((84 - 14) / (230 * 0.68 - 18)) * (view.hi - view.lo);
-  expect(text()).toContain('价格 ' + (price / 1000).toFixed(2));
+  const close = view.bars[12].close;
+  const closeY =
+    14 + ((230 * 0.68 - 18) * (view.hi - close)) / (view.hi - view.lo);
+  expect(text()).toContain('收盘 ' + (close / 1000).toFixed(2));
+  expect(nodes('chart-crosshair-y')[0].props.y1).toBeCloseTo(closeY);
+  await tap(xAt(12), 20);
+  expect(nodes('chart-crosshair-y')[0].props.y1).toBeCloseTo(closeY);
+  expect(text()).toContain('收盘 ' + (close / 1000).toFixed(2));
   expect(lock).not.toHaveBeenCalledWith(true);
   await act(async () => {
     tree.root
@@ -219,7 +231,7 @@ test('空数据不启用查价；单根平盘 ETF 保留三位精度，可用读
       nativeEvent: { actionName: 'decrement' },
     });
   });
-  expect(text()).toContain('价格 4.853');
+  expect(text()).toContain('收盘 4.853');
   expect(text()).not.toContain('NaN');
   expect(plot().props.accessibilityValue.now).toBe(0);
   await act(async () => {
@@ -228,6 +240,76 @@ test('空数据不启用查价；单根平盘 ETF 保留三位精度，可用读
     });
   });
   expect(nodes('chart-axis-time')).toHaveLength(0);
+});
+
+test('成交量吸附柱顶的实际成交量，上下点按同一根柱子不改变数值', async () => {
+  await render(<KlineChart bars={bars} decimals={2} emptyText="无数据" />);
+  const selected = view.bars[12];
+  const volumeY =
+    216 - ((216 - (230 * 0.68 + 16)) * selected.volume) / view.vmax;
+  await tap(xAt(12), 180);
+  expect(text()).toContain('量 ' + fmtHands(selected.volume));
+  expect(nodes('chart-crosshair-y')[0].props.y1).toBeCloseTo(volumeY);
+  await tap(xAt(12), 215);
+  expect(text()).toContain('量 ' + fmtHands(selected.volume));
+  expect(nodes('chart-crosshair-y')[0].props.y1).toBeCloseTo(volumeY);
+  await act(async () => {
+    plot().props.onAccessibilityAction({
+      nativeEvent: { actionName: 'increment' },
+    });
+  });
+  expect(plot().props.accessibilityValue.now).toBe(13);
+  expect(text()).toContain('量 ' + fmtHands(view.bars[13].volume));
+});
+
+test('实时修正所选 K 线时，十字线和读数跟随最新收盘价与成交量', async () => {
+  await render(<KlineChart bars={bars} decimals={2} emptyText="无数据" />);
+  await tap(xAt(12), 30);
+  const updated = bars.map(b =>
+    b.date === view.bars[12].date
+      ? {
+          ...b,
+          close: b.close + 200,
+          high: Math.max(b.high, b.close + 200),
+          volume: b.volume + 10000,
+        }
+      : b,
+  );
+  const fresh = klineView(updated, 60);
+  await act(async () => {
+    tree.update(<KlineChart bars={updated} decimals={2} emptyText="无数据" />);
+  });
+  expect(plot().props.accessibilityValue.now).toBe(12);
+  expect(text()).toContain('收盘 ' + (fresh.bars[12].close / 1000).toFixed(2));
+  const y =
+    14 +
+    ((230 * 0.68 - 18) * (fresh.hi - fresh.bars[12].close)) /
+      (fresh.hi - fresh.lo);
+  expect(nodes('chart-crosshair-y')[0].props.y1).toBeCloseTo(y);
+});
+
+test('零成交量的首尾交点不被时间或数值标签遮挡', async () => {
+  const window = Array.from({ length: 60 }, (_, i) => ({
+    ...bars[i % bars.length],
+    date: String(i),
+    volume: 0,
+  }));
+  await render(<KlineChart bars={window} decimals={2} emptyText="无数据" />);
+  for (const index of [0, 59]) {
+    await tap(xAt(index), 215);
+    const x = nodes('chart-crosshair-x')[0].props.x1;
+    const y = nodes('chart-crosshair-y')[0].props.y1;
+    expect(y).toBe(216);
+    const time = StyleSheet.flatten(nodes('chart-axis-time')[0].props.style);
+    expect(time.top).toBeGreaterThan(y + 2.5);
+    const value = StyleSheet.flatten(nodes('chart-axis-value')[0].props.style);
+    if (value.right === 0)
+      expect(400 - value.maxWidth).toBeGreaterThan(x + 2.5);
+    else {
+      expect(value.left).toBe(0);
+      expect(value.maxWidth).toBeLessThan(x - 2.5);
+    }
+  }
 });
 
 test('分时吸附真实时刻，午休不出现虚构时间，未来空白停在最后成交点；指数标明点位', async () => {
@@ -252,7 +334,18 @@ test('分时吸附真实时刻，午休不出现虚构时间，未来空白停�
   );
   await tap(200, 80);
   expect(plot().props.accessibilityValue.text).toContain('2026-10-27 13:00');
-  expect(text()).toContain('点位 ');
+  expect(text()).toContain('点位 5001.00');
+  const pointY =
+    6 +
+    ((230 * 0.7 - 12) * (series.top - series.price[1])) /
+      (series.top - series.bottom);
+  expect(nodes('chart-crosshair-y')[0].props.y1).toBeCloseTo(pointY);
+  await tap(200, 15);
+  expect(text()).toContain('点位 5001.00');
+  expect(nodes('chart-crosshair-y')[0].props.y1).toBeCloseTo(pointY);
+  await tap(200, 190);
+  expect(text()).toContain('量 0手');
+  expect(nodes('chart-crosshair-y')[0].props.y1).toBeCloseTo(216);
   expect(text()).not.toContain('12:00');
   await tap(999, 80);
   expect(plot().props.accessibilityValue.text).toContain('13:01:25');

@@ -13,7 +13,6 @@ import {
   sameWeek,
   withLivePoint,
   nearestChartPoint,
-  chartCursorY,
 } from '../../src/ui/charts/chartMath';
 
 const day = parseMinute(
@@ -53,36 +52,6 @@ describe('触摸查价坐标', () => {
     expect(nearestChartPoint([4, 10, 20], 999)).toBe(2);
     expect(nearestChartPoint([4, 10, 10, 20], 10)).toBe(2);
     expect(nearestChartPoint([4], 200)).toBe(0);
-  });
-  test('价格 / 成交量分别按绘图范围反算，间隔和越界不产生虚构坐标', () => {
-    const price = { top: 14, bottom: 154, high: 50000, low: 40000 };
-    const volume = { top: 170, bottom: 216, max: 460000 };
-    expect(chartCursorY(-100, price, volume)).toEqual({
-      y: 14,
-      volume: false,
-      value: 50000,
-    });
-    expect(chartCursorY(84, price, volume).value).toBe(45000);
-    expect(chartCursorY(160, price, volume)).toEqual({
-      y: 154,
-      volume: false,
-      value: 40000,
-    });
-    expect(chartCursorY(165, price, volume)).toEqual({
-      y: 170,
-      volume: true,
-      value: 460000,
-    });
-    expect(chartCursorY(193, price, volume).value).toBe(230000);
-    expect(chartCursorY(900, price, volume)).toEqual({
-      y: 216,
-      volume: true,
-      value: 0,
-    });
-    expect(
-      chartCursorY(84, { ...price, high: 42000, low: 42000 }, volume).value,
-    ).toBe(42000);
-    expect(chartCursorY(193, price, { ...volume, max: 0 }).value).toBe(0);
   });
 });
 

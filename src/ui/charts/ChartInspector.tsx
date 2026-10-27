@@ -1,6 +1,6 @@
 /** 图表共用的触摸查价：轻点定位，横向拖动或长按后锁定，竖向滑动留给页面。 */
 import { X } from 'lucide-react-native';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   PanResponder,
   Pressable,
@@ -14,7 +14,7 @@ import { clamp } from './chartMath';
 
 export interface ChartTouch {
   key: string;
-  y: number;
+  panel: 'price' | 'volume';
 }
 
 export function useChartTouch(options: {
@@ -23,6 +23,13 @@ export function useChartTouch(options: {
   onInspectChange?: (locked: boolean) => void;
 }) {
   const [touch, setTouch] = useState<ChartTouch | null>(null);
+  const select = useCallback((next: ChartTouch | null) => {
+    setTouch(previous =>
+      previous?.key === next?.key && previous?.panel === next?.panel
+        ? previous
+        : next,
+    );
+  }, []);
   const current = useRef(options);
   current.current = options;
   const locked = useRef(false);
@@ -46,13 +53,13 @@ export function useChartTouch(options: {
           current.current.enabled && e.nativeEvent.touches.length === 1,
         onPanResponderGrant: e => {
           const { locationX: x, locationY: y } = e.nativeEvent;
-          setTouch(current.current.hit(x, y));
+          select(current.current.hit(x, y));
           timer.current = setTimeout(lock, 220);
         },
         onPanResponderStart: e => {
           if (e.nativeEvent.touches.length > 1) {
             stop();
-            setTouch(null);
+            select(null);
           }
         },
         onPanResponderMove: (e, g) => {
@@ -60,13 +67,13 @@ export function useChartTouch(options: {
           if (!locked.current) {
             if (Math.abs(g.dy) > 7 && Math.abs(g.dy) > Math.abs(g.dx)) {
               stop();
-              setTouch(null);
+              select(null);
               return;
             }
             if (Math.abs(g.dx) > 7) lock();
           }
           if (locked.current) {
-            setTouch(
+            select(
               current.current.hit(
                 e.nativeEvent.locationX,
                 e.nativeEvent.locationY,
@@ -77,20 +84,20 @@ export function useChartTouch(options: {
         onPanResponderRelease: stop,
         onPanResponderTerminate: () => {
           stop();
-          setTouch(null);
+          select(null);
         },
         onPanResponderTerminationRequest: () => !locked.current,
         onShouldBlockNativeResponder: () => locked.current,
       }),
-    [],
+    [select],
   );
   useEffect(() => stop, []);
   return {
     touch,
-    select: setTouch,
+    select,
     clear: () => {
       stop();
-      setTouch(null);
+      select(null);
     },
     panHandlers: responder.panHandlers,
   };
@@ -146,33 +153,34 @@ export function ChartAxisLabels({
   x,
   y,
   width,
-  height,
+  plotBottom,
   time,
   value,
 }: {
   x: number;
   y: number;
   width: number;
-  height: number;
+  plotBottom: number;
   time: string;
   value: string;
 }) {
-  const [timeSize, setTimeSize] = useState({ width: 170, height: 26 });
+  const [timeWidth, setTimeWidth] = useState(170);
   const [valueHeight, setValueHeight] = useState(26);
+  const onLeft = x > width / 2;
   return (
     <View pointerEvents="none" style={StyleSheet.absoluteFill}>
       <View
         testID="chart-axis-value"
         style={[
           s.badge,
-          s.valueBadge,
+          onLeft ? s.valueBadgeLeft : s.valueBadgeRight,
           {
             top: clamp(
               y - valueHeight / 2,
               0,
-              height - timeSize.height - valueHeight - 3,
+              Math.max(0, plotBottom - valueHeight),
             ),
-            maxWidth: width,
+            maxWidth: Math.max(1, (onLeft ? x : width - x) - 8),
           },
         ]}
         onLayout={e => setValueHeight(e.nativeEvent.layout.height)}
@@ -183,13 +191,13 @@ export function ChartAxisLabels({
         testID="chart-axis-time"
         style={[
           s.badge,
-          s.timeBadge,
           {
+            top: plotBottom + 4,
             maxWidth: width - 8,
-            left: clamp(x - timeSize.width / 2, 4, width - timeSize.width - 4),
+            left: clamp(x - timeWidth / 2, 4, width - timeWidth - 4),
           },
         ]}
-        onLayout={e => setTimeSize(e.nativeEvent.layout)}
+        onLayout={e => setTimeWidth(e.nativeEvent.layout.width)}
       >
         <Text style={[s.badgeText, num]}>{time}</Text>
       </View>
@@ -221,8 +229,8 @@ const s = StyleSheet.create({
   field: { flexDirection: 'row', alignItems: 'baseline', gap: 5 },
   quarter: { width: '25%' },
   half: { width: '50%' },
-  valueBadge: { right: 0 },
-  timeBadge: { bottom: 0 },
+  valueBadgeRight: { right: 0 },
+  valueBadgeLeft: { left: 0 },
   label: { fontSize: 12, color: color.ink2 },
   value: { fontSize: 13, color: color.ink, fontWeight: '500' },
   badge: {

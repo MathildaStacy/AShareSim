@@ -94,31 +94,6 @@ export function nearestChartPoint(xs: number[], x: number): number {
 export const clamp = (value: number, min: number, max: number) =>
   Math.max(min, Math.min(max, value));
 
-/** 横线所在面板决定纵轴的单位，价格与成交量使用各自实际的绘图比例。 */
-export function chartCursorY(
-  touchY: number,
-  price: { top: number; bottom: number; high: number; low: number },
-  volume: { top: number; bottom: number; max: number },
-) {
-  if (touchY < (price.bottom + volume.top) / 2) {
-    const y = clamp(touchY, price.top, price.bottom);
-    return {
-      y,
-      volume: false,
-      value:
-        price.high -
-        ((y - price.top) / (price.bottom - price.top)) *
-          (price.high - price.low),
-    };
-  }
-  const y = clamp(touchY, volume.top, volume.bottom);
-  return {
-    y,
-    volume: true,
-    value: ((volume.bottom - y) / (volume.bottom - volume.top)) * volume.max,
-  };
-}
-
 /** 简单移动平均：前 n−1 根为 null。 */
 export function movingAverage(values: number[], n: number): (number | null)[] {
   const out: (number | null)[] = [];
