@@ -7,6 +7,10 @@ import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import {
   ArrowUp,
+  ArrowRight,
+  ChevronLeft,
+  SquarePen,
+  Share2,
   Brain,
   Check,
   ChevronDown,
@@ -25,6 +29,7 @@ import {
   Platform,
   Pressable,
   ScrollView,
+  Share,
   StyleSheet,
   Text,
   TextInput,
@@ -80,10 +85,11 @@ import {
   SearchUnavailable,
 } from '../components/AiOptions';
 import { Markdown } from '../components/Markdown';
-import { Button, IconButton, NavBar } from '../components/ui';
+import { Button, IconButton } from '../components/ui';
 import { useCore } from '../hooks';
 import type { RootStackParamList } from '../navigation/types';
-import { color, num, PAD } from '../theme';
+import { color, num } from '../theme';
+import { aiColor as c } from '../aiTheme';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
@@ -153,6 +159,7 @@ export function AiScreen() {
   const followEnd = useRef(true);
   const userScrolling = useRef(false);
   const [atEnd, setAtEnd] = useState(true);
+  const [composerHeight, setComposerHeight] = useState(120);
   const page = source ? source.get() : null;
   const pageName = page?.name ?? null;
 
@@ -337,45 +344,84 @@ export function AiScreen() {
 
   return (
     <KeyboardAvoidingView
-      style={s.page}
+      style={[s.page, { paddingLeft: insets.left, paddingRight: insets.right }]}
       // Android 全面屏模式下 adjustResize 不会缩小页面，需按键盘遮挡高度主动避让。
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
-      <NavBar
-        title={thread?.title ?? 'AI 助手'}
-        sub={
-          svc
-            ? '投资分析 · 当前页面随问随查'
-            : svc === null
-            ? '还没有配置服务'
-            : ''
-        }
-        back
-        right={
-          <IconButton label="AI 菜单" onPress={() => setMenu(true)}>
-            <Menu color={color.ink} size={22} />
+      <View style={[s.header, { paddingTop: insets.top }]}>
+        <View style={s.headerRow}>
+          <IconButton label="返回" onPress={() => nav.goBack()}>
+            <ChevronLeft size={23} color={c.ink} />
           </IconButton>
-        }
-      />
-      <Pressable
-        style={s.ctxBar}
-        onPress={() => nav.navigate('AiContext')}
-        accessibilityRole="button"
-      >
-        <Text style={s.ctxText} numberOfLines={1}>
-          {(pageName ? '页面：' + pageName : '没有页面上下文') +
-            ' · 操作 ' +
-            actCount +
-            ' 条 · 记忆 ' +
-            memCount +
-            ' 条'}
-        </Text>
-        <Text style={s.ctxMore}>上下文 ›</Text>
-      </Pressable>
+          <Pressable
+            style={s.headerTitle}
+            onPress={() => nav.navigate('AiContext')}
+            accessibilityRole="button"
+            accessibilityLabel="查看上下文"
+            accessibilityHint={
+              '页面：' +
+              (pageName ?? '无') +
+              '，操作 ' +
+              actCount +
+              ' 条，记忆 ' +
+              memCount +
+              ' 条' +
+              (est
+                ? '，预计 ' +
+                  fmtInt(est.total + qTokens) +
+                  ' tokens，缓存 ' +
+                  fmtInt(est.cached)
+                : '')
+            }
+          >
+            <Text style={s.headerName} numberOfLines={1}>
+              {thread?.title ?? 'AI 助手'}
+            </Text>
+            <View style={s.headerMeta}>
+              <Text style={s.ctxText} numberOfLines={1}>
+                {(pageName ?? '上下文') +
+                  (est && svc
+                    ? ' · ' + ((est.total + qTokens) / 1000).toFixed(1) + 'k'
+                    : '')}
+              </Text>
+              <ChevronDown size={12} color={c.secondary} />
+            </View>
+          </Pressable>
+          <Pressable
+            style={s.headerButton}
+            accessibilityLabel="新对话"
+            accessibilityRole="button"
+            disabled={!!busy}
+            accessibilityState={{ disabled: !!busy }}
+            onPress={() => {
+              if (!busy) {
+                newThread();
+                setText('');
+                followEnd.current = true;
+                userScrolling.current = false;
+                setAtEnd(true);
+              }
+            }}
+          >
+            <SquarePen size={20} color={busy ? c.muted : c.ink} />
+          </Pressable>
+          <IconButton label="AI 菜单" onPress={() => setMenu(true)}>
+            <Menu color={c.ink} size={21} />
+          </IconButton>
+        </View>
+      </View>
       <ScrollView
         ref={scroll}
         style={s.list}
         contentContainerStyle={s.listPad}
+        keyboardDismissMode="on-drag"
+        onLayout={() => {
+          if (followEnd.current) {
+            requestAnimationFrame(() =>
+              scroll.current?.scrollToEnd({ animated: false }),
+            );
+          }
+        }}
         onContentSizeChange={() => {
           // 只跟随新消息和新增正文；展开查询、操作卡重排时保留阅读位置。
           if (scrollKey.current === scrollVersion) {
@@ -413,6 +459,27 @@ export function AiScreen() {
                 tone="learn"
                 onPress={() => nav.navigate('AiServices')}
               />
+            </View>
+          </View>
+        ) : null}
+        {!live.length && svc ? (
+          <View style={s.emptyState}>
+            <Text style={s.emptyTitle}>有什么想聊的？</Text>
+            <View style={s.quick}>
+              {quick.slice(0, 3).map(q => (
+                <Pressable
+                  key={q}
+                  style={({ pressed }) => [
+                    s.suggestion,
+                    pressed && s.suggestionPressed,
+                  ]}
+                  onPress={() => send(q)}
+                  accessibilityRole="button"
+                >
+                  <Text style={s.suggestionText}>{q}</Text>
+                  <ArrowRight size={17} color={c.secondary} />
+                </Pressable>
+              ))}
             </View>
           </View>
         ) : null}
@@ -456,7 +523,7 @@ export function AiScreen() {
         ))}
         {busy ? (
           <View style={s.busy}>
-            <ActivityIndicator color={color.learn} />
+            <ActivityIndicator color={c.accent} size="small" />
             <Text style={s.busyText}>{busy}</Text>
           </View>
         ) : null}
@@ -464,7 +531,7 @@ export function AiScreen() {
       </ScrollView>
       {!atEnd && live.length ? (
         <Pressable
-          style={s.latest}
+          style={[s.latest, { bottom: composerHeight + 10 }]}
           accessibilityRole="button"
           accessibilityLabel="回到最新回复"
           onPress={() => {
@@ -474,11 +541,13 @@ export function AiScreen() {
             scroll.current?.scrollToEnd({ animated: true });
           }}
         >
-          <Text style={s.toolSummaryText}>回到最新回复</Text>
-          <ChevronDown size={14} color={color.learn} />
+          <ChevronDown size={19} color={c.secondary} />
         </Pressable>
       ) : null}
-      <View style={[s.bottom, { paddingBottom: Math.max(insets.bottom, 8) }]}>
+      <View
+        style={[s.bottom, { paddingBottom: Math.max(insets.bottom, 8) }]}
+        onLayout={e => setComposerHeight(e.nativeEvent.layout.height)}
+      >
         {rebuild && !busy ? (
           <View style={s.cacheWarning}>
             <Text style={s.cacheText}>
@@ -507,44 +576,27 @@ export function AiScreen() {
         ) : svc?.capabilities?.tools === null ? (
           <Text style={s.notice}>工具能力未知，可在供应商里标注</Text>
         ) : null}
-        {quick.length && !busy ? (
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={s.quick}
-            keyboardShouldPersistTaps="handled"
-          >
-            {quick.map(q => (
-              <Pressable
-                key={q}
-                style={s.chip}
-                onPress={() => send(q)}
-                accessibilityRole="button"
-              >
-                <Text style={s.chipText}>{q}</Text>
-              </Pressable>
-            ))}
-          </ScrollView>
-        ) : null}
         <View style={s.inputRow}>
           <TextInput
             value={text}
             onChangeText={setText}
-            placeholder={
-              svc ? '问 AI，或让它替你操作 App' : '先配置供应商与模型'
-            }
-            placeholderTextColor={color.ink3}
+            placeholder={svc ? '给 AI 助手发消息' : '先配置供应商与模型'}
+            placeholderTextColor={c.muted}
             style={s.input}
             multiline
+            hitSlop={4}
+            textAlignVertical="top"
+            selectionColor={c.accent}
             editable={!!svc}
             accessibilityLabel="问 AI"
           />
           <View style={s.toolbar}>
             <Pressable
-              style={[s.modelControl, s.control]}
+              style={[s.control, s.modelControl]}
               onPress={() => setSheet('model')}
               disabled={!!busy}
               accessibilityLabel="选择模型"
+              accessibilityValue={{ text: svc?.model ?? '未选择' }}
               accessibilityRole="button"
             >
               <Text style={s.controlText} numberOfLines={1}>
@@ -553,24 +605,25 @@ export function AiScreen() {
               <ChevronDown size={13} color={color.ink2} />
             </Pressable>
             <Pressable
-              style={[
-                s.control,
-                config?.search && s.controlOn,
-                !availability.ok && s.controlDashed,
-              ]}
+              style={s.control}
               onPress={toggleSearch}
               disabled={!!busy || !svc}
               accessibilityRole="button"
               accessibilityLabel="联网搜索"
               accessibilityState={{ selected: config?.search ?? false }}
             >
-              <Globe
-                size={15}
-                color={config?.search ? color.learn : color.ink2}
-              />
-              <Text style={[s.controlText, config?.search && s.linkText]}>
-                搜索
-              </Text>
+              <View
+                style={[
+                  s.controlSymbol,
+                  !availability.ok && s.unavailableSymbol,
+                ]}
+              >
+                <Globe
+                  size={19}
+                  color={config?.search ? c.accent : c.secondary}
+                />
+              </View>
+              {config?.search ? <View style={s.searchDot} /> : null}
             </Pressable>
             <Pressable
               style={s.control}
@@ -578,41 +631,40 @@ export function AiScreen() {
               disabled={!!busy || !svc}
               accessibilityRole="button"
               accessibilityLabel="思考强度"
+              accessibilityValue={{
+                text: config ? EFFORT_NAME[config.effort] : '未选择',
+              }}
             >
-              <Brain size={15} color={color.ink2} />
+              <Brain size={19} color={c.secondary} />
               <Text style={s.controlText}>
-                {config && config.effort !== 'off'
-                  ? '思考·' + EFFORT_NAME[config.effort]
-                  : '思考'}
+                {config ? EFFORT_NAME[config.effort] : ''}
               </Text>
             </Pressable>
             <Pressable
-              style={[
-                s.send,
-                (!svc || (!text.trim() && !busy)) && s.sendDisabled,
-              ]}
+              style={[s.send]}
               onPress={busy ? stop : () => send(text)}
               disabled={!busy && (!text.trim() || !svc)}
               accessibilityRole="button"
               accessibilityLabel={busy ? '停止' : '发送'}
             >
-              {busy ? (
-                <Square size={17} color="#FFFFFF" fill="#FFFFFF" />
-              ) : (
-                <ArrowUp size={22} color="#FFFFFF" />
-              )}
+              <View
+                style={[
+                  s.sendDisc,
+                  (!svc || (!text.trim() && !busy)) && s.sendDisabled,
+                ]}
+              >
+                {busy ? (
+                  <Square size={14} color="#FFFFFF" fill="#FFFFFF" />
+                ) : (
+                  <ArrowUp
+                    size={20}
+                    color={!svc || !text.trim() ? c.secondary : '#FFFFFF'}
+                  />
+                )}
+              </View>
             </Pressable>
           </View>
         </View>
-        {est && svc && !busy ? (
-          <Text style={[s.est, num]} numberOfLines={2}>
-            {'这次约 ' +
-              fmtInt(est.total + qTokens) +
-              ' tokens，预计 ' +
-              fmtInt(est.cached) +
-              ' 可读缓存'}
-          </Text>
-        ) : null}
       </View>
       <AiMenu
         visible={menu}
@@ -708,6 +760,7 @@ function MessageView({
   searchBusy: boolean;
 }) {
   const [showQueries, setShowQueries] = useState(false);
+  const [showSources, setShowSources] = useState(false);
   const [showThinking, setShowThinking] = useState(false),
     [showSearch, setShowSearch] = useState(false);
   if (m.role === 'user') {
@@ -743,7 +796,7 @@ function MessageView({
     const isQuery = (t: ToolUi) => !t.card && !t.memory && !t.nav && !t.error;
     const queries = tools.filter(isQuery);
     return (
-      <View style={s.aiBlock}>
+      <View style={s.toolBlock}>
         {queries.length ? (
           <Pressable
             style={s.toolSummary}
@@ -752,7 +805,7 @@ function MessageView({
             accessibilityState={{ expanded: showQueries }}
             onPress={() => setShowQueries(v => !v)}
           >
-            <Check size={15} color={color.learn} />
+            <Check size={14} color={c.secondary} />
             <Text style={s.toolSummaryText}>
               {'已查询 ' + queries.length + ' 项数据'}
             </Text>
@@ -789,7 +842,7 @@ function MessageView({
                   {t.error ? (
                     <X size={15} color={color.up} />
                   ) : (
-                    <Check size={15} color={color.learn} />
+                    <Check size={14} color={c.secondary} />
                   )}
                   <Text style={[s.tool, s.toolLabel, t.error && s.toolBad]}>
                     {t.label}
@@ -798,14 +851,7 @@ function MessageView({
               )}
             </View>
           ))}
-        {usage ? (
-          <Text style={[s.usage, num]}>
-            {usageText(
-              usage,
-              m.ui?.price !== undefined ? { price: m.ui.price } : svc,
-            )}
-          </Text>
-        ) : null}
+        {usage ? <AnswerDetails m={m} usage={usage} svc={svc} text="" /> : null}
       </View>
     );
   }
@@ -822,14 +868,6 @@ function MessageView({
   }
   return (
     <View style={s.aiBlock}>
-      {m.ui?.config ? (
-        <Text style={s.answerHead}>
-          {prettyModel(m.ui.config.model) +
-            ' · 思考' +
-            EFFORT_NAME[m.ui.config.effort] +
-            (m.ui.config.search ? ' · 搜索' : '')}
-        </Text>
-      ) : null}
       {m.ui?.thinking ? (
         <>
           <Pressable
@@ -839,7 +877,7 @@ function MessageView({
             accessibilityLabel="思考过程"
             accessibilityState={{ expanded: showThinking }}
           >
-            <Brain size={15} color={color.ink2} />
+            <Brain size={14} color={c.secondary} />
             <Text style={s.toolSummaryText}>
               {m.id === -1 ? '正在思考' : '思考摘要'}
             </Text>
@@ -861,7 +899,7 @@ function MessageView({
             accessibilityLabel="搜索详情"
             accessibilityState={{ expanded: showSearch }}
           >
-            <Globe size={15} color={color.learn} />
+            <Globe size={14} color={c.secondary} />
             <Text style={s.toolSummaryText}>
               {(m.ui.search.queries.length
                 ? '搜索 ' + m.ui.search.queries.length + ' 个查询 · '
@@ -878,16 +916,6 @@ function MessageView({
                   ? m.ui.search.queries.map(q => '搜索：' + q).join('\n')
                   : '供应商未返回搜索词'}
               </Text>
-              {m.ui.search.sources.map((src, i) => (
-                <Pressable
-                  key={src.url}
-                  style={s.source}
-                  onPress={() => onLink(src.url)}
-                  accessibilityRole="link"
-                >
-                  <Text style={s.linkText}>{i + 1 + '. ' + src.title}</Text>
-                </Pressable>
-              ))}
             </View>
           ) : null}
         </>
@@ -904,22 +932,36 @@ function MessageView({
       ) : null}
       {text && m.ui?.search?.sources.length ? (
         <View style={s.sources}>
-          <Text style={s.sourceTitle}>来源</Text>
-          {m.ui.search.sources.map((src, i) => (
-            <Pressable
-              key={src.url}
-              onPress={() => onLink(src.url)}
-              style={s.source}
-              accessibilityRole="link"
-            >
-              <Text style={s.sourceText}>
-                {'[' + (i + 1) + '] ' + src.title}
-              </Text>
-              <Text style={s.sourceUrl} numberOfLines={1}>
-                {src.url.replace(/^https?:\/\//, '')}
-              </Text>
-            </Pressable>
-          ))}
+          <Pressable
+            style={s.toolSummary}
+            onPress={() => setShowSources(v => !v)}
+            accessibilityRole="button"
+            accessibilityLabel="查看来源"
+            accessibilityState={{ expanded: showSources }}
+          >
+            <Globe size={14} color={c.secondary} />
+            <Text style={s.toolSummaryText}>
+              {m.ui.search.sources.length + ' 个来源'}
+            </Text>
+            <ChevronDown size={13} color={c.secondary} />
+          </Pressable>
+          {showSources
+            ? m.ui.search.sources.map((src, i) => (
+                <Pressable
+                  key={src.url}
+                  onPress={() => onLink(src.url)}
+                  style={s.source}
+                  accessibilityRole="link"
+                >
+                  <Text style={s.sourceText}>
+                    {'[' + (i + 1) + '] ' + src.title}
+                  </Text>
+                  <Text style={s.sourceUrl} numberOfLines={1}>
+                    {src.url.replace(/^https?:\/\//, '')}
+                  </Text>
+                </Pressable>
+              ))
+            : null}
         </View>
       ) : null}
       {m.ui?.searchOffer ? (
@@ -929,19 +971,87 @@ function MessageView({
           onPress={() => onSearch(m.ui!.searchOffer!)}
           accessibilityRole="button"
         >
-          <Globe size={15} color={color.learn} />
+          <Globe size={14} color={c.secondary} />
           <Text style={s.linkText}>开启搜索并重问</Text>
         </Pressable>
       ) : null}
       {m.ui?.notice ? <Text style={s.notice}>{m.ui.notice}</Text> : null}
       {m.ui?.error ? <Text style={s.error}>{m.ui.error}</Text> : null}
       {usage ? (
-        <Text style={[s.usage, num]}>
-          {usageText(
-            usage,
-            m.ui?.price !== undefined ? { price: m.ui.price } : svc,
-          )}
-        </Text>
+        <AnswerDetails m={m} usage={usage} svc={svc} text={text} />
+      ) : null}
+    </View>
+  );
+}
+
+function AnswerDetails({
+  m,
+  usage,
+  svc,
+  text,
+}: {
+  m: StoredMessage;
+  usage: Usage;
+  svc: AiService | null;
+  text: string;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const model = m.ui?.config?.model ?? m.raw?.model;
+  const price = m.ui?.price !== undefined ? { price: m.ui.price } : svc;
+  return (
+    <View>
+      <View style={s.answerActions}>
+        <Pressable
+          style={s.detailsToggle}
+          onPress={() => setExpanded(v => !v)}
+          accessibilityRole="button"
+          accessibilityLabel="用量详情"
+          accessibilityState={{ expanded }}
+        >
+          <Text style={[s.detailsText, num]} numberOfLines={1}>
+            {(model ? prettyModel(model) + ' · ' : '') +
+              fmtInt(usage.output) +
+              ' tokens'}
+          </Text>
+          <ChevronDown size={13} color={c.muted} />
+        </Pressable>
+        {text ? (
+          <Pressable
+            style={s.share}
+            onPress={() => {
+              const sources = m.ui?.search?.sources ?? [];
+              Share.share({
+                message:
+                  text +
+                  (sources.length
+                    ? '\n\n来源\n' +
+                      sources
+                        .map(src => src.title + '\n' + src.url)
+                        .join('\n\n')
+                    : ''),
+              }).catch(() => undefined);
+            }}
+            accessibilityRole="button"
+            accessibilityLabel="分享回答"
+          >
+            <Share2 size={16} color={c.muted} />
+          </Pressable>
+        ) : null}
+      </View>
+      {expanded ? (
+        <View style={s.answerDetailBody}>
+          {m.ui?.config ? (
+            <Text style={s.usage}>
+              {prettyModel(m.ui.config.model) +
+                ' · 思考' +
+                EFFORT_NAME[m.ui.config.effort] +
+                (m.ui.config.search ? ' · 搜索已开启' : '')}
+            </Text>
+          ) : null}
+          <Text selectable style={[s.usage, num]}>
+            {usageText(usage, price)}
+          </Text>
+        </View>
       ) : null}
     </View>
   );
@@ -1124,198 +1234,332 @@ function AiMenu({
 }
 
 const s = StyleSheet.create({
-  page: { flex: 1, backgroundColor: color.bg },
-  ctxBar: {
+  page: { flex: 1, backgroundColor: c.page },
+  header: { paddingHorizontal: 6, backgroundColor: c.page },
+  headerRow: { flexDirection: 'row', alignItems: 'center', minHeight: 62 },
+  headerButton: {
+    width: 48,
+    height: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerTitle: {
+    flex: 1,
+    minWidth: 0,
+    minHeight: 56,
+    justifyContent: 'center',
+    paddingHorizontal: 4,
+  },
+  headerName: { fontSize: 16, lineHeight: 23, color: c.ink, fontWeight: '500' },
+  headerMeta: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: PAD,
-    paddingVertical: 7,
-    backgroundColor: color.learnBg,
+    gap: 4,
+    marginTop: 1,
   },
-  ctxText: { flex: 1, fontSize: 12, color: '#0B5552' },
-  ctxMore: { fontSize: 12, color: color.learn, marginLeft: 8 },
+  ctxText: { fontSize: 12, lineHeight: 18, color: c.secondary, flexShrink: 1 },
   list: { flex: 1 },
-  listPad: { padding: 10, paddingBottom: 20 },
-  setup: { marginBottom: 10 },
+  listPad: {
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    paddingBottom: 28,
+    maxWidth: 760,
+    width: '100%',
+    alignSelf: 'center',
+    flexGrow: 1,
+  },
+  setup: { flex: 1, justifyContent: 'center', paddingBottom: 48 },
   setupBtn: { marginTop: 10 },
+  emptyState: {
+    flex: 1,
+    justifyContent: 'center',
+    paddingBottom: 56,
+    paddingTop: 24,
+  },
+  emptyTitle: {
+    fontSize: 25,
+    lineHeight: 36,
+    fontWeight: '500',
+    color: c.ink,
+    marginBottom: 24,
+  },
+  quick: { gap: 8 },
+  suggestion: {
+    minHeight: 52,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+    paddingVertical: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: c.line,
+  },
+  suggestionPressed: { backgroundColor: c.soft },
+  suggestionText: { flex: 1, fontSize: 15, lineHeight: 23, color: c.secondary },
   compacted: {
     textAlign: 'center',
     fontSize: 12,
-    color: color.ink3,
-    marginVertical: 6,
+    lineHeight: 18,
+    color: c.muted,
+    marginVertical: 12,
   },
-  divider: { flexDirection: 'row', alignItems: 'center', marginVertical: 10 },
+  divider: { flexDirection: 'row', alignItems: 'center', marginVertical: 20 },
   divLine: {
     flex: 1,
     height: StyleSheet.hairlineWidth,
-    backgroundColor: color.ink3,
+    backgroundColor: c.line,
   },
   divText: {
     fontSize: 12,
-    color: color.ink2,
-    marginHorizontal: 8,
+    color: c.secondary,
+    marginHorizontal: 10,
     flexShrink: 1,
     textAlign: 'center',
   },
-  userWrap: { alignItems: 'flex-end', marginVertical: 6 },
+  userWrap: { alignItems: 'flex-end', marginTop: 8, marginBottom: 24 },
   userBubble: {
-    maxWidth: '85%',
-    backgroundColor: '#26313C',
-    borderRadius: 12,
-    borderBottomRightRadius: 3,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    maxWidth: '92%',
+    backgroundColor: c.user,
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
   },
-  userText: { color: '#FFFFFF', fontSize: 15, lineHeight: 22 },
-  attach: { fontSize: 11, color: color.ink3, marginTop: 3 },
-  aiBlock: {
-    backgroundColor: color.card,
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingTop: 10,
-    paddingBottom: 6,
-    marginVertical: 4,
+  userText: { color: c.ink, fontSize: 16, lineHeight: 26 },
+  attach: { fontSize: 11, lineHeight: 17, color: c.muted, marginTop: 6 },
+  aiBlock: { padding: 0, marginBottom: 20 },
+  toolBlock: { marginBottom: 8 },
+  tool: { fontSize: 13, lineHeight: 21, color: c.secondary, marginBottom: 6 },
+  toolLine: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+    paddingVertical: 3,
   },
-  tool: { fontSize: 13, lineHeight: 20, color: color.ink2, marginBottom: 4 },
-  toolLine: { flexDirection: 'row', alignItems: 'flex-start', gap: 6 },
   toolLabel: { flex: 1 },
   toolSummary: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 8,
     minHeight: 48,
+    alignSelf: 'flex-start',
+    paddingRight: 8,
   },
-  toolSummaryText: { fontSize: 12, lineHeight: 18, color: color.ink2 },
+  toolSummaryText: {
+    fontSize: 13,
+    lineHeight: 20,
+    color: c.secondary,
+    flexShrink: 1,
+  },
   latest: {
-    flexDirection: 'row',
+    position: 'absolute',
+    left: '50%',
+    marginLeft: -24,
+    width: 48,
+    height: 48,
     alignItems: 'center',
-    alignSelf: 'center',
-    gap: 4,
-    padding: 12,
+    justifyContent: 'center',
+    backgroundColor: c.paper,
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: c.line,
+    zIndex: 2,
   },
   toolBad: { color: color.up },
-  usage: {
-    fontSize: 11,
-    lineHeight: 16,
-    color: color.ink3,
-    marginTop: 4,
-    marginBottom: 2,
+  answerActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  detailsToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    minHeight: 48,
+    flexShrink: 1,
+    paddingRight: 8,
   },
-  notice: { fontSize: 12, color: color.warnInk, marginBottom: 4 },
-  error: { fontSize: 13, lineHeight: 19, color: color.up, marginVertical: 4 },
-  busy: { flexDirection: 'row', alignItems: 'center', padding: 10, gap: 8 },
-  busyText: { fontSize: 13, color: color.ink2 },
+  detailsText: { fontSize: 12, lineHeight: 19, color: c.muted, flexShrink: 1 },
+  share: {
+    width: 48,
+    height: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  answerDetailBody: {
+    backgroundColor: c.soft,
+    padding: 12,
+    borderRadius: 12,
+    marginBottom: 8,
+  },
+  usage: { fontSize: 12, lineHeight: 20, color: c.secondary },
+  notice: {
+    fontSize: 12,
+    lineHeight: 19,
+    color: color.warnInk,
+    marginBottom: 6,
+  },
+  error: { fontSize: 14, lineHeight: 22, color: color.up, marginVertical: 8 },
+  busy: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    gap: 10,
+  },
+  busyText: { fontSize: 13, lineHeight: 21, color: c.secondary, flex: 1 },
   card: {
     borderWidth: 1,
-    borderColor: color.learnLine,
-    borderRadius: 8,
-    padding: 10,
-    marginVertical: 6,
+    borderColor: c.line,
+    borderRadius: 14,
+    padding: 16,
+    marginVertical: 10,
+    backgroundColor: c.paper,
   },
   cardTitle: {
-    fontSize: 15,
+    fontSize: 16,
+    lineHeight: 24,
     fontWeight: '600',
-    color: color.ink,
-    marginBottom: 6,
+    color: c.ink,
+    marginBottom: 10,
   },
   cardRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    paddingVertical: 3,
-    gap: 10,
+    paddingVertical: 5,
+    gap: 16,
   },
-  cardK: { fontSize: 13, color: color.ink2 },
-  cardV: { flexShrink: 1, fontSize: 13, color: color.ink, textAlign: 'right' },
+  cardK: { fontSize: 14, lineHeight: 22, color: c.secondary },
+  cardV: {
+    flexShrink: 1,
+    fontSize: 14,
+    lineHeight: 22,
+    color: c.ink,
+    textAlign: 'right',
+  },
   cardCheck: { marginHorizontal: -10 },
-  cardLink: { fontSize: 13, color: color.learn, marginTop: 6 },
-  cardNote: { fontSize: 12, lineHeight: 17, color: color.ink3, marginTop: 6 },
-  cardBtns: { flexDirection: 'row', gap: 10, marginTop: 10 },
+  cardLink: {
+    fontSize: 14,
+    color: c.ink,
+    marginTop: 8,
+    textDecorationLine: 'underline',
+  },
+  cardNote: { fontSize: 12, lineHeight: 20, color: c.secondary, marginTop: 8 },
+  cardBtns: { flexDirection: 'row', gap: 12, marginTop: 12 },
   grow: { flex: 1 },
-  cardResult: { fontSize: 13, lineHeight: 19, color: color.ink2, marginTop: 8 },
+  cardResult: {
+    fontSize: 14,
+    lineHeight: 22,
+    color: c.secondary,
+    marginTop: 10,
+  },
   ok: { color: color.down },
   bad: { color: color.up },
   mem: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: color.learnBg,
-    borderRadius: 6,
-    padding: 8,
-    marginVertical: 4,
-    gap: 8,
+    backgroundColor: c.soft,
+    borderRadius: 12,
+    padding: 12,
+    marginVertical: 8,
+    gap: 10,
   },
-  memText: { flex: 1, fontSize: 13, lineHeight: 19, color: '#0B5552' },
-  memBtns: { flexDirection: 'row', gap: 6 },
-  memUndo: { fontSize: 13, color: color.learn, paddingHorizontal: 4 },
+  memText: { flex: 1, fontSize: 13, lineHeight: 21, color: c.secondary },
+  memBtns: { flexDirection: 'row', gap: 8 },
+  memUndo: {
+    fontSize: 13,
+    color: c.ink,
+    paddingHorizontal: 4,
+    minHeight: 48,
+    textAlignVertical: 'center',
+  },
   bottom: {
-    backgroundColor: color.card,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: color.line,
-    paddingHorizontal: 10,
-    paddingTop: 6,
+    backgroundColor: c.page,
+    paddingHorizontal: 12,
+    paddingTop: 8,
+    maxWidth: 760,
+    width: '100%',
+    alignSelf: 'center',
   },
-  quick: { gap: 8, paddingBottom: 6 },
-  chip: {
-    borderWidth: 1,
-    borderColor: color.learnLine,
-    borderRadius: 14,
-    paddingHorizontal: 10,
-    height: 28,
-    justifyContent: 'center',
-  },
-  chipText: { fontSize: 13, color: color.learn },
   inputRow: {
     borderWidth: 1,
-    borderColor: '#DCE2E5',
-    borderRadius: 16,
-    padding: 6,
-    backgroundColor: '#FFFFFF',
+    borderColor: c.line,
+    borderRadius: 18,
+    padding: 4,
+    backgroundColor: c.paper,
   },
   input: {
-    minHeight: 48,
-    maxHeight: 96,
+    minHeight: 40,
+    maxHeight: 132,
     paddingHorizontal: 10,
-    paddingVertical: 8,
-    fontSize: 15,
-    color: color.ink,
+    paddingVertical: 7,
+    fontSize: 16,
+    lineHeight: 24,
+    color: c.ink,
   },
   toolbar: { flexDirection: 'row', alignItems: 'center', gap: 2 },
   control: {
     minHeight: 48,
-    paddingHorizontal: 8,
+    minWidth: 48,
+    paddingHorizontal: 7,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 4,
-    borderRadius: 10,
+    borderRadius: 12,
   },
-  modelControl: { flex: 1, justifyContent: 'flex-start', minWidth: 40 },
-  controlText: { fontSize: 12, color: color.ink2, flexShrink: 1 },
-  controlOn: { backgroundColor: color.learnBg },
-  controlDashed: {
+  modelControl: {
+    flex: 1,
+    justifyContent: 'flex-start',
+    minWidth: 48,
+    paddingHorizontal: 10,
+  },
+  controlText: {
+    fontSize: 12,
+    lineHeight: 18,
+    color: c.secondary,
+    flexShrink: 1,
+  },
+  controlSymbol: {
+    width: 28,
+    height: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  unavailableSymbol: {
     borderWidth: 1,
-    borderColor: '#B7C0C5',
+    borderColor: c.line,
     borderStyle: 'dashed',
+    borderRadius: 14,
   },
-  linkText: { fontSize: 12, color: color.learn },
+  searchDot: {
+    position: 'absolute',
+    right: 10,
+    top: 9,
+    width: 4,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: c.accent,
+  },
+  linkText: { fontSize: 13, lineHeight: 21, color: c.ink },
   send: {
     width: 48,
     height: 48,
-    borderRadius: 24,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: color.learn,
   },
-  sendDisabled: { backgroundColor: '#B6C8C7' },
+  sendDisc: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: c.action,
+  },
+  sendDisabled: { backgroundColor: c.disabled },
   cacheWarning: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 8,
     backgroundColor: color.warnBg,
-    borderRadius: 10,
-    paddingLeft: 10,
-    marginBottom: 6,
+    borderRadius: 12,
+    paddingLeft: 12,
+    marginBottom: 8,
   },
-  cacheText: { fontSize: 11, lineHeight: 17, color: color.warnInk, flex: 1 },
+  cacheText: { fontSize: 12, lineHeight: 19, color: color.warnInk, flex: 1 },
   revert: {
     minHeight: 48,
     minWidth: 48,
@@ -1323,54 +1567,50 @@ const s = StyleSheet.create({
     alignItems: 'center',
   },
   revertText: { fontSize: 12, fontWeight: '600', color: color.warnInk },
-  answerHead: {
-    fontSize: 11,
-    color: color.ink2,
-    marginBottom: 6,
-    fontWeight: '500',
-  },
   thinking: {
-    fontSize: 12,
-    lineHeight: 19,
-    color: color.ink2,
-    backgroundColor: color.bg,
-    padding: 10,
-    borderRadius: 8,
-    marginBottom: 8,
+    fontSize: 14,
+    lineHeight: 23,
+    color: c.secondary,
+    backgroundColor: c.soft,
+    padding: 14,
+    borderRadius: 12,
+    marginBottom: 12,
   },
-  sources: {
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderColor: color.line,
-    marginTop: 8,
-    paddingTop: 10,
+  sources: { marginBottom: 4 },
+  source: { minHeight: 48, justifyContent: 'center', paddingVertical: 8 },
+  sourceText: {
+    fontSize: 13,
+    lineHeight: 21,
+    color: c.ink,
+    textDecorationLine: 'underline',
   },
-  sourceTitle: { fontSize: 11, color: color.ink2, fontWeight: '600' },
-  source: { minHeight: 48, justifyContent: 'center', paddingVertical: 7 },
-  sourceText: { fontSize: 12, color: color.learn, lineHeight: 18 },
-  sourceUrl: { fontSize: 10, color: color.ink2, lineHeight: 16 },
+  sourceUrl: { fontSize: 12, lineHeight: 19, color: c.secondary },
   searchOffer: {
     minHeight: 48,
     alignSelf: 'flex-start',
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 7,
+    gap: 8,
     paddingHorizontal: 12,
-    borderRadius: 9,
-    backgroundColor: color.learnBg,
-    marginTop: 8,
+    borderRadius: 12,
+    backgroundColor: c.soft,
+    marginVertical: 8,
   },
-  est: { fontSize: 11, color: color.ink3, marginTop: 4 },
-  mask: { flex: 1, backgroundColor: 'rgba(0,0,0,0.3)', alignItems: 'flex-end' },
+  mask: {
+    flex: 1,
+    backgroundColor: 'rgba(35,34,30,0.25)',
+    alignItems: 'flex-end',
+  },
   menu: {
     marginTop: 56,
-    marginRight: 8,
-    width: 260,
-    backgroundColor: color.card,
-    borderRadius: 10,
-    paddingVertical: 4,
+    marginRight: 12,
+    width: 270,
+    backgroundColor: c.paper,
+    borderRadius: 16,
+    paddingVertical: 8,
     elevation: 8,
   },
-  menuItem: { paddingHorizontal: 14, paddingVertical: 10 },
-  menuTitle: { fontSize: 15, color: color.ink },
-  menuSub: { fontSize: 12, color: color.ink3, marginTop: 2 },
+  menuItem: { paddingHorizontal: 18, paddingVertical: 12, minHeight: 64 },
+  menuTitle: { fontSize: 15, color: c.ink },
+  menuSub: { fontSize: 12, lineHeight: 19, color: c.secondary, marginTop: 3 },
 });

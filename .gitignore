@@ -83,3 +83,6 @@ yarn-error.log
 *.p12
 *.mobileprovision
 *.jks
+
+# Generated native design review evidence
+/.impeccable/review/

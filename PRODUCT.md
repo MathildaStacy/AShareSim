@@ -28,7 +28,7 @@ android
 
 ## Brand Commitments
 
-沿用 AShareSim 的中文术语和现有浅色界面。AI 改版按用户明确选定的 docs/design/ai-redesign.html 布局与交互落地。
+沿用 AShareSim 的中文术语和现有浅色界面。AI 功能按 docs/design/ai-redesign.html 的交互约束落地；对话阅读排版按用户后续选定的 Claude Desktop 截图重做，适配手机，详见 docs/design/ai-chat-layout.md。
 
 ## Evidence on Hand
 

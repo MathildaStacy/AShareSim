@@ -253,7 +253,7 @@ test('提问：回答、用到的工具、操作卡、执行；上下文条和�
     },
   ];
   const r = await render('Ai', AiScreen);
-  expect(r.text()).toContain('页面：个股 · 招商银行');
+  expect(r.text()).toContain('个股 · 招商银行');
   await r.type('问 AI', '帮我 42.30 买 100 股招商银行');
   await r.press('发送');
   await act(async () => {
@@ -266,7 +266,9 @@ test('提问：回答、用到的工具、操作卡、执行；上下文条和�
   expect(t).toContain('预校验：校验通过');
   expect(t).toContain('42.30 元');
   expect(t).not.toContain('仅供学习，不构成投资建议');
-  expect(t).toContain('缓存读 5,500 · 写 2,560');
+  expect(t).not.toContain('缓存读 5,500');
+  await r.press('用量详情');
+  expect(r.text()).toContain('缓存读 5,500 · 写 2,560');
   expect(sent[0].messages[0].content[0].text).toContain(
     '页面：个股 · 招商银行',
   );
@@ -474,6 +476,11 @@ test('聊天模型、搜索、思考跟随对话；虚线搜索可引导选择�
   await r.press('选择模型');
   await r.press('测试中转 claude-sonnet-5-5');
   expect(useChat.getState().config?.model).toBe('claude-sonnet-5-5');
+  expect(
+    r.tree.root.findAll(
+      n => n.props.accessibilityLabel === '选择模型' && n.props.onPress,
+    )[0].props.accessibilityValue.text,
+  ).toBe('claude-sonnet-5-5');
   await r.press('思考强度');
   expect(r.text()).toContain('最高');
   expect(
@@ -481,6 +488,11 @@ test('聊天模型、搜索、思考跟随对话；虚线搜索可引导选择�
   ).toHaveLength(0);
   await r.press('思考 最高');
   expect(useChat.getState().config?.effort).toBe('max');
+  expect(
+    r.tree.root.findAll(
+      n => n.props.accessibilityLabel === '思考强度' && n.props.onPress,
+    )[0].props.accessibilityValue.text,
+  ).toBe('最高');
   await act(async () => {
     await loadThread(core, null);
   });
@@ -529,8 +541,12 @@ test('来源和正文编号可点击；隐藏思考保留可展开内容，历�
       ],
     });
   });
-  expect(r.text()).toContain('实际返回的公告');
+  expect(r.text()).toContain('1 个来源');
+  expect(r.text()).not.toContain('实际返回的公告');
   expect(r.text()).not.toContain('公开思考摘要');
+  await r.press('查看来源');
+  expect(r.text()).toContain('实际返回的公告');
+  await r.press('用量详情');
   expect(r.text()).toContain('$0.0003');
   await r.press('思考过程');
   expect(r.text()).toContain('公开思考摘要');
@@ -545,5 +561,70 @@ test('来源和正文编号可点击；隐藏思考保留可展开内容，历�
     citation.props.onPress();
   });
   expect(open).toHaveBeenCalledWith('https://www.cmbchina.com/');
+  const { Share } = require('react-native');
+  const share = jest
+    .spyOn(Share, 'share')
+    .mockResolvedValue({ action: 'sharedAction' });
+  await r.press('分享回答');
+  expect(share).toHaveBeenCalledWith({
+    message: expect.stringContaining('https://www.cmbchina.com/'),
+  });
+  share.mockRestore();
   open.mockRestore();
+});
+
+test('新对话清空草稿，快捷问题只在空对话显示，流式正文和忙碌控件可读', async () => {
+  const r = await render('Ai', AiScreen);
+  await r.press('新对话');
+  expect(r.text()).toContain('有什么想聊的？');
+  await r.type('问 AI', '这是一段尚未发送的草稿');
+  await r.press('新对话');
+  expect(
+    r.tree.root.findAll(
+      n => n.props.accessibilityLabel === '问 AI' && n.props.onChangeText,
+    )[0].props.value,
+  ).toBe('');
+  await act(async () => {
+    useChat.setState({
+      busy: '正在回答',
+      messages: [
+        {
+          id: 10001,
+          threadId: 1,
+          role: 'user',
+          parts: [],
+          raw: null,
+          compacted: false,
+          createdAt: '',
+          ui: { question: '请分析投资判断', page: '自选', actions: 2 },
+        },
+        {
+          id: -1,
+          threadId: 1,
+          role: 'assistant',
+          ui: null,
+          parts: [{ t: 'text', text: '## 投资判断\n\n先核实盈利与估值。' }],
+          raw: null,
+          compacted: false,
+          createdAt: '',
+        },
+      ],
+    });
+  });
+  expect(r.text()).toContain('先核实盈利与估值');
+  expect(r.text()).not.toContain('有什么想聊的');
+  expect(r.text()).not.toContain('这次约');
+  expect(
+    r.tree.root.findAll(
+      n => n.props.accessibilityLabel === '停止' && n.props.onPress,
+    ),
+  ).toHaveLength(1);
+  expect(
+    r.tree.root.findAll(
+      n => n.props.accessibilityLabel === '新对话' && n.props.onPress,
+    )[0].props.disabled,
+  ).toBe(true);
+  await act(async () => {
+    useChat.setState({ busy: null });
+  });
 });

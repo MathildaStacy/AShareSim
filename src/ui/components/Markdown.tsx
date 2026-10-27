@@ -1,8 +1,16 @@
-/** AI 回答的排版：段落、标题、列表、表格、代码块；lesson: / stock: 链接可以点。 */
+/** 可连续阅读的 AI 正文。表格共用列宽，宽表与代码只横向滚动自身。 */
 import { useMemo } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import {
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+  useWindowDimensions,
+} from 'react-native';
 import { parseMarkdown, type MdInline } from '../../ai/markdown';
-import { color, num } from '../theme';
+import { aiColor as c } from '../aiTheme';
+import { num } from '../theme';
 
 function Inline({
   inl,
@@ -42,6 +50,55 @@ function Inline({
   );
 }
 
+function Table({
+  rows,
+  onLink,
+}: {
+  rows: MdInline[][][];
+  onLink: (href: string) => void;
+}) {
+  const { width, fontScale } = useWindowDimensions();
+  const count = Math.max(0, ...rows.map(row => row.length));
+  const available = Math.min(720, width - 40);
+  const widths = Array.from({ length: count }, (_, i) => {
+    const longest = Math.max(
+      ...rows.map(row => (row[i] ?? []).map(x => x.text).join('').length),
+    );
+    return count <= 2
+      ? available / Math.max(1, count)
+      : Math.min(
+          220 * fontScale,
+          Math.max(112 * fontScale, longest * 8 * fontScale + 24),
+        );
+  });
+  return (
+    <ScrollView
+      horizontal
+      style={s.tableWrap}
+      showsHorizontalScrollIndicator
+      nestedScrollEnabled
+      accessibilityLabel="表格，可横向滚动"
+    >
+      <View style={s.table}>
+        {rows.map((row, r) => (
+          <View
+            key={r}
+            style={[s.tr, r === 0 && s.th, r === rows.length - 1 && s.lastRow]}
+          >
+            {widths.map((cellWidth, col) => (
+              <View key={col} style={[s.cell, { width: cellWidth }]}>
+                <Text selectable style={[s.td, num, r === 0 && s.bold]}>
+                  <Inline inl={row[col] ?? []} onLink={onLink} />
+                </Text>
+              </View>
+            ))}
+          </View>
+        ))}
+      </View>
+    </ScrollView>
+  );
+}
+
 export function Markdown({
   text,
   onLink,
@@ -56,53 +113,73 @@ export function Markdown({
         switch (b.t) {
           case 'h':
             return (
-              <Text key={i} style={[s.p, s.h]}>
+              <Text
+                key={i}
+                selectable
+                accessibilityRole="header"
+                style={[
+                  s.h,
+                  b.level === 1 ? s.h1 : b.level === 2 ? s.h2 : s.h3,
+                  i === 0 && s.firstHeading,
+                ]}
+              >
                 <Inline inl={b.inl} onLink={onLink} />
               </Text>
             );
           case 'li':
             return (
-              <View key={i} style={[s.li, { paddingLeft: 4 + b.depth * 14 }]}>
-                <Text style={[s.marker, num]} numberOfLines={1}>
+              <View
+                key={i}
+                style={[
+                  s.li,
+                  { paddingLeft: b.depth * 16 },
+                  blocks[i + 1]?.t !== 'li' && s.listEnd,
+                ]}
+              >
+                <Text
+                  style={[
+                    s.marker,
+                    num,
+                    { minWidth: Math.max(26, b.marker.length * 9) },
+                  ]}
+                >
                   {b.marker}
                 </Text>
-                <Text style={[s.p, s.liText]}>
+                <Text selectable style={s.liText}>
                   <Inline inl={b.inl} onLink={onLink} />
                 </Text>
               </View>
             );
           case 'table':
+            return <Table key={i} rows={b.rows} onLink={onLink} />;
+          case 'code':
             return (
               <ScrollView
                 key={i}
                 horizontal
-                style={s.tableWrap}
-                showsHorizontalScrollIndicator={false}
+                style={s.codeWrap}
+                nestedScrollEnabled
+                showsHorizontalScrollIndicator
+                accessibilityLabel="代码，可横向滚动"
               >
-                <View style={s.table}>
-                  {b.rows.map((row, r) => (
-                    <View key={r} style={[s.tr, r === 0 && s.th]}>
-                      {row.map((cell, c) => (
-                        <Text key={c} style={[s.td, num, r === 0 && s.bold]}>
-                          <Inline inl={cell} onLink={onLink} />
-                        </Text>
-                      ))}
-                    </View>
-                  ))}
-                </View>
+                <Text selectable style={s.code}>
+                  {b.text}
+                </Text>
               </ScrollView>
             );
-          case 'code':
+          case 'quote':
             return (
-              <Text key={i} style={s.code}>
-                {b.text}
-              </Text>
+              <View key={i} style={s.quote}>
+                <Text selectable style={s.quoteText}>
+                  <Inline inl={b.inl} onLink={onLink} />
+                </Text>
+              </View>
             );
           case 'hr':
             return <View key={i} style={s.hr} />;
           default:
             return (
-              <Text key={i} style={s.p}>
+              <Text key={i} selectable style={s.p}>
                 <Inline inl={b.inl} onLink={onLink} />
               </Text>
             );
@@ -112,67 +189,68 @@ export function Markdown({
   );
 }
 
+const mono = Platform.OS === 'ios' ? 'Menlo' : 'monospace';
 const s = StyleSheet.create({
-  p: { fontSize: 15, lineHeight: 23, color: color.ink, marginBottom: 6 },
-  h: { fontWeight: '600', fontSize: 16, marginTop: 4 },
+  p: { fontSize: 16, lineHeight: 27, color: c.ink, marginBottom: 14 },
+  h: { fontWeight: '600', color: c.ink, marginTop: 24, marginBottom: 10 },
+  h1: { fontSize: 22, lineHeight: 32 },
+  h2: { fontSize: 20, lineHeight: 30 },
+  h3: { fontSize: 17, lineHeight: 27 },
+  firstHeading: { marginTop: 0 },
   bold: { fontWeight: '600' },
   icode: {
-    fontFamily: 'monospace',
-    fontSize: 13,
-    backgroundColor: color.bg,
+    fontFamily: mono,
+    fontSize: 14,
+    backgroundColor: c.soft,
+    color: c.code,
   },
-  link: { color: color.learn, textDecorationLine: 'underline' },
-  citation: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: color.learn,
-    backgroundColor: color.learnBg,
-    textDecorationLine: 'none',
-  },
-  li: { flexDirection: 'row' },
+  link: { color: c.ink, textDecorationLine: 'underline' },
+  citation: { fontSize: 12, color: c.secondary, textDecorationLine: 'none' },
+  li: { flexDirection: 'row', marginBottom: 5 },
   marker: {
-    minWidth: 24,
-    paddingRight: 4,
+    paddingRight: 6,
     flexShrink: 0,
-    fontSize: 15,
-    lineHeight: 23,
-    color: color.ink2,
+    fontSize: 16,
+    lineHeight: 27,
+    color: c.secondary,
   },
-  liText: { flex: 1 },
-  tableWrap: { marginBottom: 8 },
+  liText: { flex: 1, fontSize: 16, lineHeight: 27, color: c.ink },
+  listEnd: { marginBottom: 16 },
+  tableWrap: { marginVertical: 6, marginBottom: 20, borderRadius: 12 },
   table: {
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: color.line,
-    borderRadius: 4,
+    borderWidth: 1,
+    borderColor: c.line,
+    borderRadius: 12,
+    overflow: 'hidden',
   },
   tr: {
     flexDirection: 'row',
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: color.line,
+    borderBottomColor: c.line,
   },
-  th: { backgroundColor: color.bg },
-  td: {
-    minWidth: 64,
-    maxWidth: 180,
-    paddingHorizontal: 8,
-    paddingVertical: 5,
-    fontSize: 13,
-    lineHeight: 18,
-    color: color.ink,
-  },
+  lastRow: { borderBottomWidth: 0 },
+  th: { backgroundColor: c.soft },
+  cell: { paddingHorizontal: 12, paddingVertical: 11 },
+  td: { fontSize: 14, lineHeight: 22, color: c.ink },
+  codeWrap: { backgroundColor: c.soft, borderRadius: 12, marginBottom: 18 },
   code: {
-    fontFamily: 'monospace',
-    fontSize: 12,
-    lineHeight: 17,
-    color: color.ink2,
-    backgroundColor: color.bg,
-    padding: 8,
-    borderRadius: 4,
-    marginBottom: 8,
+    fontFamily: mono,
+    fontSize: 13,
+    lineHeight: 21,
+    color: c.ink,
+    padding: 14,
   },
+  quote: {
+    borderLeftWidth: 1,
+    borderLeftColor: c.line,
+    paddingLeft: 14,
+    marginVertical: 4,
+    marginBottom: 18,
+  },
+  quoteText: { fontSize: 16, lineHeight: 27, color: c.secondary },
   hr: {
     height: StyleSheet.hairlineWidth,
-    backgroundColor: color.line,
-    marginVertical: 8,
+    backgroundColor: c.line,
+    marginVertical: 20,
   },
 });

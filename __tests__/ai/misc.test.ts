@@ -195,3 +195,18 @@ describe('东方财富 F10（2026-10-27 贵州茅台真实样本）', () => {
     ).toBeNull();
   });
 });
+
+test('Markdown 保留标题层级及标题内强调，连续引用不混入普通段落', () => {
+  const blocks = parseMarkdown(
+    '# 判断\n\n### **理由**\n\n> 成本包含买入费用。\n> 盈亏尚未扣卖出费用。\n\n普通段落',
+  );
+  expect(blocks).toMatchObject([
+    { t: 'h', level: 1 },
+    { t: 'h', level: 3, inl: [{ t: 'bold', text: '理由' }] },
+    {
+      t: 'quote',
+      inl: [{ t: 'text', text: '成本包含买入费用。\n盈亏尚未扣卖出费用。' }],
+    },
+    { t: 'p', inl: [{ t: 'text', text: '普通段落' }] },
+  ]);
+});

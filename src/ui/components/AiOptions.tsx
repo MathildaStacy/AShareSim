@@ -25,6 +25,7 @@ import type {
   ModelCapabilities,
   ModelEntry,
 } from '../../ai/types';
+import { aiColor as c } from '../aiTheme';
 import { color } from '../theme';
 
 export function AiSheet({
@@ -61,7 +62,7 @@ export function AiSheet({
               style={s.touch}
               accessibilityLabel="关闭"
             >
-              <X size={21} color={color.ink2} />
+              <X size={21} color={c.secondary} />
             </Pressable>
           </View>
           {children}
@@ -170,7 +171,7 @@ export function ModelPicker({
         value={query}
         onChangeText={setQuery}
         placeholder="搜索模型名或供应商"
-        placeholderTextColor={color.ink3}
+        placeholderTextColor={c.muted}
         accessibilityLabel="搜索可用模型"
       />
       <ScrollView
@@ -217,7 +218,7 @@ export function ModelPicker({
                 <Text style={s.sub}>{p.name + ' · ' + m.id}</Text>
                 <CapabilityTags caps={capabilitiesOf(p, m)} />
               </View>
-              {selected ? <Check size={20} color={color.learn} /> : null}
+              {selected ? <Check size={20} color={c.ink} /> : null}
             </Pressable>
           );
         }}
@@ -263,9 +264,7 @@ export function EffortPicker({
             accessibilityState={{ selected: config?.effort === e }}
           >
             <Text style={s.modelTitle}>{EFFORT_NAME[e]}</Text>
-            {config?.effort === e ? (
-              <Check size={20} color={color.learn} />
-            ) : null}
+            {config?.effort === e ? <Check size={20} color={c.ink} /> : null}
           </Pressable>
         ))}
         {caps?.thinking === null ? (
@@ -295,7 +294,7 @@ export function SearchUnavailable({
   return (
     <AiSheet title="当前模型无法搜索" visible={visible} onClose={onClose}>
       <View style={s.explain}>
-        <Globe size={24} color={color.ink2} />
+        <Globe size={24} color={c.secondary} />
         <Text style={s.reason}>{reason}</Text>
         <Text style={s.sub}>联网搜索可能单独计费。</Text>
         <Pressable
@@ -304,7 +303,7 @@ export function SearchUnavailable({
           accessibilityRole="button"
         >
           <Text style={s.link}>查看能搜索的模型</Text>
-          <ChevronDown size={18} color={color.learn} />
+          <ChevronDown size={18} color={c.ink} />
         </Pressable>
       </View>
     </AiSheet>
@@ -318,7 +317,7 @@ const s = StyleSheet.create({
   },
   backdrop: { flex: 1 },
   sheet: {
-    backgroundColor: color.card,
+    backgroundColor: c.page,
     borderTopLeftRadius: 22,
     borderTopRightRadius: 22,
     maxHeight: '85%',
@@ -332,7 +331,7 @@ const s = StyleSheet.create({
     marginTop: 9,
   },
   header: { flexDirection: 'row', alignItems: 'center', paddingLeft: 20 },
-  title: { fontSize: 19, fontWeight: '600', color: color.ink, flex: 1 },
+  title: { fontSize: 19, fontWeight: '600', color: c.ink, flex: 1 },
   touch: {
     width: 48,
     height: 48,
@@ -345,17 +344,17 @@ const s = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: 20,
   },
-  link: { color: color.learn, fontSize: 13, fontWeight: '500' },
+  link: { color: c.ink, fontSize: 13, fontWeight: '500' },
   input: {
     marginHorizontal: 16,
     marginBottom: 10,
     paddingHorizontal: 12,
     paddingVertical: 10,
     borderWidth: 1,
-    borderColor: color.line,
+    borderColor: c.line,
     borderRadius: 10,
     fontSize: 14,
-    color: color.ink,
+    color: c.ink,
     minHeight: 48,
   },
   filters: { flexGrow: 0 },
@@ -366,7 +365,7 @@ const s = StyleSheet.create({
     justifyContent: 'center',
     borderRadius: 12,
   },
-  active: { backgroundColor: color.learnBg },
+  active: { backgroundColor: c.soft },
   modelList: { flexGrow: 0 },
   model: {
     flexDirection: 'row',
@@ -374,9 +373,9 @@ const s = StyleSheet.create({
     gap: 10,
     padding: 16,
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderColor: color.line,
+    borderColor: c.line,
   },
-  selected: { backgroundColor: '#F1F8F7' },
+  selected: { backgroundColor: c.soft },
   mark: {
     width: 30,
     height: 30,
@@ -386,20 +385,20 @@ const s = StyleSheet.create({
   },
   markText: { fontWeight: '700', fontSize: 15, color: '#FFFFFF' },
   grow: { flex: 1 },
-  modelTitle: { fontSize: 15, fontWeight: '500', color: color.ink },
-  sub: { fontSize: 12, lineHeight: 18, color: color.ink2 },
+  modelTitle: { fontSize: 15, fontWeight: '500', color: c.ink },
+  sub: { fontSize: 12, lineHeight: 18, color: c.secondary },
   tags: { flexDirection: 'row', flexWrap: 'wrap', gap: 5, marginTop: 7 },
   tag: {
     fontSize: 10,
-    color: color.learn,
-    backgroundColor: color.learnBg,
+    color: c.ink,
+    backgroundColor: c.soft,
     paddingHorizontal: 6,
     paddingVertical: 3,
     borderRadius: 4,
   },
   warn: { color: color.warnInk, backgroundColor: color.warnBg },
-  empty: { padding: 24, fontSize: 14, color: color.ink2, lineHeight: 22 },
-  explain: { padding: 20, fontSize: 14, lineHeight: 22, color: color.ink2 },
+  empty: { padding: 24, fontSize: 14, color: c.secondary, lineHeight: 22 },
+  explain: { padding: 20, fontSize: 14, lineHeight: 22, color: c.secondary },
   option: {
     minHeight: 52,
     flexDirection: 'row',
@@ -407,12 +406,12 @@ const s = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: 20,
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderColor: color.line,
+    borderColor: c.line,
   },
   reason: {
     fontSize: 16,
     fontWeight: '500',
-    color: color.ink,
+    color: c.ink,
     marginVertical: 14,
   },
 });

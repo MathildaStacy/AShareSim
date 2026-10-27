@@ -11,7 +11,8 @@ export type MdInline =
 
 export type MdBlock =
   | { t: 'p'; inl: MdInline[] }
-  | { t: 'h'; inl: MdInline[] }
+  | { t: 'h'; level: number; inl: MdInline[] }
+  | { t: 'quote'; inl: MdInline[] }
   | { t: 'li'; marker: string; depth: number; inl: MdInline[] }
   | { t: 'table'; rows: MdInline[][][] }
   | { t: 'code'; text: string }
@@ -73,10 +74,20 @@ export function parseMarkdown(text: string): MdBlock[] {
       flush();
       continue;
     }
-    const h = /^#{1,6}\s+(.*)$/.exec(line);
+    const h = /^(#{1,6})\s+(.*)$/.exec(line);
     if (h) {
       flush();
-      out.push({ t: 'h', inl: parseInline(h[1].replace(/\*\*/g, '')) });
+      out.push({ t: 'h', level: h[1].length, inl: parseInline(h[2]) });
+      continue;
+    }
+    if (/^\s*>\s?/.test(line)) {
+      flush();
+      const quote: string[] = [];
+      for (; i < lines.length && /^\s*>\s?/.test(lines[i]); i++) {
+        quote.push(lines[i].replace(/^\s*>\s?/, ''));
+      }
+      i--;
+      out.push({ t: 'quote', inl: parseInline(quote.join('\n')) });
       continue;
     }
     if (/^\s*([-*_])\s*\1\s*\1[\s\-*_]*$/.test(line)) {
