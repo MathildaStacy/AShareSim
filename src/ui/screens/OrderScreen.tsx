@@ -141,7 +141,7 @@ export function OrderScreen({ route }: RootScreenProps<'Order'>) {
     side: p.side === 'S' ? 'S' : 'B',
     kind: p.kind ?? 'limit',
     price: '',
-    qty: '',
+    qty: p.qty ? String(p.qty) : '',
     protect: '',
   }));
   const [priceTouched, setPriceTouched] = useState(p.price != null);
@@ -163,11 +163,15 @@ export function OrderScreen({ route }: RootScreenProps<'Order'>) {
       side: p.side === 'S' ? 'S' : p.side === 'B' ? 'B' : f.side,
       kind: p.kind ?? (p.code && p.code !== f.code ? 'limit' : f.kind),
       price: '',
-      qty: p.code && p.code !== f.code ? '' : f.qty,
+      qty: p.qty
+        ? String(p.qty)
+        : p.code && p.code !== f.code
+        ? ''
+        : f.qty,
       protect: '',
     }));
     setPriceTouched(p.price != null);
-  }, [p.side, p.code, p.price, p.kind]);
+  }, [p.side, p.code, p.price, p.kind, p.qty]);
 
   const code = form.code;
   const q = sim.quote(code);

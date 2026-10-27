@@ -460,7 +460,8 @@ export type ActivityKind =
   | 'setting'
   | 'learn'
   | 'export'
-  | 'system';
+  | 'system'
+  | 'ai';
 
 export interface Activity {
   id?: number;

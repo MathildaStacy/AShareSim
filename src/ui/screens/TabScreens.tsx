@@ -2,11 +2,12 @@
  * 交易、我的。交易 Tab：账户概览、功能格、持仓（M2 第 3 步）；资金和设置的页面是第 4 步，
  * 「我的」按 PRODUCT_DESIGN §6.3 的顺序排入口。学习 Tab 在 LearnScreens.tsx（M3）。
  */
-import { useNavigation } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { ChevronRight } from 'lucide-react-native';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { activeService } from '../../ai/chat';
 import { useApp } from '../../app/boot';
 import * as repo from '../../data/repos';
 import { isLive, summary } from '../../engine/account';
@@ -333,6 +334,7 @@ export function MeScreen() {
   const basis = usePrefs(st => st.costBasis);
   const [archived, setArchived] = useState(0);
   const [reset, setReset] = useState(false);
+  const [aiSvc, setAiSvc] = useState<string | null>(null);
   const st = core.sim.engine.state;
   useEffect(() => {
     repo
@@ -340,6 +342,15 @@ export function MeScreen() {
       .then(rows => setArchived(rows.filter(r => r.archivedAt).length))
       .catch(() => undefined);
   }, [core, reset]);
+  useFocusEffect(
+    useCallback(() => {
+      activeService(core)
+        .then(svc =>
+          setAiSvc(svc ? '使用中：' + svc.name + ' · ' + svc.model : null),
+        )
+        .catch(() => undefined);
+    }, [core]),
+  );
   useViewLog('me', '查看 我的');
   const mb = ((status?.bytesToday ?? 0) / 1024 / 1024).toFixed(2);
   const mode = core.refresher.settings.backgroundMode;
@@ -454,7 +465,16 @@ export function MeScreen() {
           />
         </View>
         <View style={s.card}>
-          <Entry title="AI 设置" sub="M4" />
+          <Entry
+            title="AI 服务"
+            sub={aiSvc ?? '还没有配置：添加服务（Base URL、API Key、模型）'}
+            onPress={() => nav.navigate('AiServices')}
+          />
+          <Entry
+            title="AI 记忆"
+            sub="AI 记住的背景、偏好、计划、约定，可改、可删"
+            onPress={() => nav.navigate('AiMemory')}
+          />
           <Entry
             title="调试页"
             sub="数据层、刷新、补撮合、后台跟踪的调试工具"

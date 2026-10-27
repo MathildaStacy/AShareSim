@@ -259,7 +259,7 @@ export function Empty({ text }: { text: string }) {
   return <Text style={s.empty}>{text}</Text>;
 }
 
-/** 右下角「AI」按钮。M2 打开的是占位页，显示这次会发给 AI 的页面上下文和最近操作。 */
+/** 右下角「AI」按钮：打开 AI 对话，提问时附带当前页面的上下文（AI_ASSISTANT.md §2）。 */
 export function AiFab({ lift = 0 }: { lift?: number }) {
   const nav = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   return (

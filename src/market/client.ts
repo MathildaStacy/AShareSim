@@ -3,7 +3,17 @@
  * 「我的」页和后台通知里显示，耗电耗流量你看得到。
  */
 import { beijingNow } from './clock';
-import { bonusUrl, parseBonus, type CorporateActionRow } from './eastmoney';
+import {
+  bonusUrl,
+  financeUrl,
+  parseBonus,
+  parseFinance,
+  parseProfile,
+  profileUrl,
+  type CompanyProfile,
+  type CorporateActionRow,
+  type FinancePeriod,
+} from './eastmoney';
 import { parseSinaEtfRank, sinaEtfRankUrl } from './sina';
 import {
   minuteKlineUrl,
@@ -222,5 +232,15 @@ export class MarketClient {
   async corporateActions(code: string): Promise<CorporateActionRow[]> {
     const text = await this.get(bonusUrl(code.slice(2)));
     return parseBonus(JSON.parse(text), code);
+  }
+
+  /** F10 公司简况（东方财富）；ETF、指数没有，返回 null。 */
+  async companyProfile(code: string): Promise<CompanyProfile | null> {
+    return parseProfile(JSON.parse(await this.get(profileUrl(code))));
+  }
+
+  /** 最近几期主要财务指标（东方财富），从新到旧。 */
+  async financials(code: string, periods: number): Promise<FinancePeriod[]> {
+    return parseFinance(JSON.parse(await this.get(financeUrl(code, periods))));
   }
 }

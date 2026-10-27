@@ -60,7 +60,9 @@ export function TransferScreen({ route }: RootScreenProps<'Transfer'>) {
   useLive();
   const sim = core.sim;
   const [dir, setDir] = useState<TransferDir>(route.params?.dir ?? 'in');
-  const [text, setText] = useState('');
+  const [text, setText] = useState(() =>
+    route.params?.amount ? String(route.params.amount / 100) : '',
+  );
   const [busy, setBusy] = useState(false);
   const st = sim.engine.state;
   const now = sim.now();

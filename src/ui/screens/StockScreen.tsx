@@ -403,6 +403,7 @@ export function StockScreen({ route }: RootScreenProps<'Stock'>) {
               />
             ) : null}
             <F10 info={info} etf={sec?.board === 'etf'} />
+            {sec && sec.board !== 'etf' ? <Company code={code} /> : null}
           </>
         )}
       </ScrollView>
@@ -665,9 +666,42 @@ function F10({ info, etf }: { info: QuoteView['info']; etf: boolean }) {
           <Text style={s.f10Why}>{why}</Text>
         </View>
       ))}
-      <Text style={s.small}>
-        公司简介、主营构成、股东和财务数据在 M4 接东方财富 F10。
-      </Text>
+    </View>
+  );
+}
+
+/** 公司简况（东方财富 F10，M4）：行业、主营业务、简介，只取一次；更多财务数据问 AI。 */
+function Company({ code }: { code: string }) {
+  const core = useCore();
+  const [open, setOpen] = useState(false);
+  const pr = usePolling(() => core.client.companyProfile(code), [code], null);
+  if (!pr.data) {
+    return null;
+  }
+  const p = pr.data;
+  return (
+    <View style={s.card}>
+      <SectionTitle title="公司简况" right="来自东方财富 F10" />
+      <View style={s.f10Row}>
+        <Text style={s.f10K}>{p.fullName}</Text>
+        <Text style={s.f10Why}>
+          {p.industry +
+            ' · ' +
+            p.province +
+            ' · 上市 ' +
+            (p.listingDate ?? '--')}
+        </Text>
+      </View>
+      <View style={s.f10Row}>
+        <Text style={s.f10K}>主营业务</Text>
+        <Text style={s.f10Why}>{p.mainBusiness}</Text>
+      </View>
+      <Pressable onPress={() => setOpen(!open)} style={s.f10Row}>
+        <Text style={s.f10Why} numberOfLines={open ? undefined : 3}>
+          {p.profile}
+        </Text>
+        <Text style={s.small}>{open ? '收起' : '展开全文'}</Text>
+      </Pressable>
     </View>
   );
 }

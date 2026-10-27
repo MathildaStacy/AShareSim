@@ -16,6 +16,13 @@ import {
   ArchivedAccountScreen,
 } from '../screens/AccountsScreens';
 import { AiScreen } from '../screens/AiScreen';
+import {
+  AiContextScreen,
+  AiMemoryScreen,
+  AiServiceScreen,
+  AiServicesScreen,
+  AiThreadsScreen,
+} from '../screens/AiScreens';
 import { DebugScreen } from '../screens/DebugScreen';
 import { FillDetailScreen, OrderDetailScreen } from '../screens/DetailScreens';
 import { CalibrateScreen, FeesScreen } from '../screens/FeeScreens';
@@ -153,6 +160,11 @@ export function RootStack() {
         component={AiScreen}
         options={{ animation: 'slide_from_bottom' }}
       />
+      <Stack.Screen name="AiThreads" component={AiThreadsScreen} />
+      <Stack.Screen name="AiMemory" component={AiMemoryScreen} />
+      <Stack.Screen name="AiServices" component={AiServicesScreen} />
+      <Stack.Screen name="AiService" component={AiServiceScreen} />
+      <Stack.Screen name="AiContext" component={AiContextScreen} />
     </Stack.Navigator>
   );
 }

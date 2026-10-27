@@ -1,6 +1,7 @@
 /**
  * 页面上下文（AI_ASSISTANT.md §2）：每个页面声明「用户此刻在屏幕上看到什么」，提问时附带给 AI。
- * M2 只有占位的 AI 页，用来在手机上核对每个页面给出的内容；M4 接模型时按 §1 的顺序拼进请求。
+ * 打开 AI 时记下来源页面（capturePage），每次提问重新计算它的上下文（行情、表单都是最新值），
+ * 所以从 AI 打开「AI 服务」这类页面再回来，问的还是原来那个页面。
  */
 import type { Activity } from '../data/repos';
 
@@ -13,7 +14,7 @@ export interface PageContext {
   tip?: string;
 }
 
-interface Provider {
+export interface Provider {
   route: string;
   get: () => PageContext;
 }
@@ -23,6 +24,11 @@ let provider: Provider | null = null;
 /** 页面获得焦点时登记；AI 页自己不登记，所以打开 AI 时拿到的是来源页面。 */
 export function setPageContext(route: string, get: () => PageContext): void {
   provider = { route, get };
+}
+
+/** 打开 AI 时记下来源页面。 */
+export function capturePage(): Provider | null {
+  return provider;
 }
 
 /** 每次提问重新计算，行情和表单都是最新值。 */

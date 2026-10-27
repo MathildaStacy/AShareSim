@@ -64,17 +64,19 @@ export function FeeCalcScreen({ route }: RootScreenProps<'FeeCalc'>) {
   const sim = core.sim;
   const fee = sim.engine.state.fee;
   const [form, setForm] = useState<FeeCalcForm>(() => {
-    const code = route.params?.code ?? 'sh600036';
+    const p = route.params;
+    const code = p?.code ?? 'sh600036';
     const q = sim.quote(code);
     const d = sim.security(code)?.board === 'etf' ? 3 : 2;
+    const price = p?.price ?? q?.snapshot.last;
     return {
       code: code.slice(2),
-      price:
-        q?.snapshot.last != null ? formatPrice(q.snapshot.last, d) : '40.00',
-      qty: '1000',
+      price: price != null ? formatPrice(price, d) : '40.00',
+      qty: p?.qty ? String(p.qty) : '1000',
     };
   });
-  const [priceEdited, setPriceEdited] = useState(false);
+  // AI 填好的价格不要被现价覆盖
+  const [priceEdited, setPriceEdited] = useState(route.params?.price != null);
   const rec = recognizeCode(form.code);
   useQuoteCodes(rec ? [rec.code] : []);
   const liveLast = rec ? sim.quote(rec.code)?.snapshot.last ?? null : null;

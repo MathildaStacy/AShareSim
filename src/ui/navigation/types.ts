@@ -23,22 +23,25 @@ export type RootStackParamList = {
   Search: { pick?: { side: 'B' | 'S'; kind?: OrderKind } } | undefined;
   WatchEdit: undefined;
   Debug: undefined;
-  Ai: undefined;
-  /** price 是点五档带过来的价格（厘）；kind 默认限价，「盘后交易」入口传 after。 */
+  /**
+   * price 是点五档带过来的价格（厘）；kind 默认限价，「盘后交易」入口传 after。
+   * qty：AI 的 navigate 把表单填好时带的数量（只填好，不提交）。
+   */
   Order: {
     side: OrderSide;
     code?: string;
     name?: string;
     price?: number;
     kind?: OrderKind;
+    qty?: number;
   };
   Positions: undefined;
   Position: { code: string };
   Orders: { tab?: OrdersTab } | undefined;
   OrderDetail: { id: number };
   FillDetail: { id: number };
-  /** 银证转账：in 银行转证券（默认），out 证券转银行。 */
-  Transfer: { dir?: 'in' | 'out' } | undefined;
+  /** 银证转账：in 银行转证券（默认），out 证券转银行；amount（分）是 AI 填好的金额。 */
+  Transfer: { dir?: 'in' | 'out'; amount?: number } | undefined;
   Flows: undefined;
   Fees: undefined;
   Calibrate: undefined;
@@ -50,13 +53,21 @@ export type RootStackParamList = {
   Stage: { no: number };
   Lessons: undefined;
   Lesson: { id: string };
-  /** code：从个股页、费率设置带过来的证券。 */
-  FeeCalc: { code?: string } | undefined;
+  /** code：从个股页、费率设置带过来的证券；price（厘）、qty 是 AI 填好的。 */
+  FeeCalc: { code?: string; price?: number; qty?: number } | undefined;
   Auction: undefined;
   Analysis: undefined;
   DataLab: undefined;
   /** M5 才做的功能，先放说明页。 */
   Coming: { key: 'datacenter' | 'exec' };
+  // M4 AI
+  Ai: undefined;
+  AiThreads: undefined;
+  AiMemory: undefined;
+  AiServices: undefined;
+  /** 没有 id 是添加服务。 */
+  AiService: { id?: string } | undefined;
+  AiContext: undefined;
 };
 
 export type RootScreenProps<K extends keyof RootStackParamList> =
