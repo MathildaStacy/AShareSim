@@ -23,6 +23,7 @@ import {
   displayUrl,
   fetchMcpTools,
   loadMcpServers,
+  isTushareUrl,
   MCP_PRESETS,
   mcpTokens,
   newMcpId,
@@ -125,6 +126,7 @@ export function AiMcpScreen() {
         <Button
           title="添加外部工具"
           tone="learn"
+          style={s.action}
           onPress={() => nav.navigate('AiMcpServer', {})}
         />
       </ScrollView>
@@ -147,7 +149,10 @@ export function AiMcpServerScreen({ route }: RootScreenProps<'AiMcpServer'>) {
     [deleting, setDeleting] = useState(false);
   const request = useRef<AbortController | null>(null),
     mounted = useRef(true);
-  const preset = draft ? MCP_PRESETS[draft.slug] : undefined;
+  const preset =
+    draft && isTushareUrl(draft.url) ? MCP_PRESETS.tushare : undefined;
+  const storedTokenTail =
+    original?.url === draft?.url.trim() ? original?.tokenTail : '';
   useEffect(() => {
     mounted.current = true;
     if (id) {
@@ -211,10 +216,13 @@ export function AiMcpServerScreen({ route }: RootScreenProps<'AiMcpServer'>) {
     validateMcpUrl(draft.url.trim());
   };
   const connect = async () => {
+    if (busy) {
+      return;
+    }
     try {
       validate();
-      const t = await getToken();
       setBusy('正在连接并获取工具…');
+      const t = await getToken();
       setError('');
       setResult(null);
       request.current = new AbortController();
@@ -235,14 +243,18 @@ export function AiMcpServerScreen({ route }: RootScreenProps<'AiMcpServer'>) {
       });
       const writes = r.tools.filter(x => !x.readOnly).length;
       setResult(
-        '连接成功：' +
+        '已获取目录：' +
           r.tools.length +
           ' 个工具' +
-          (writes ? '，其中 ' + writes + ' 个会改外部数据，不能启用' : '') +
-          (probe ? '\n但试调用失败：' + probe : ''),
+          (writes ? '，其中 ' + writes + ' 个未确认只读，不能启用' : '') +
+          (probe
+            ? '。试调用未通过。'
+            : preset
+            ? '。试调用通过。'
+            : '。尚未试调用数据接口。'),
       );
       if (probe) {
-        setError('token 可能不对：' + probe);
+        setError('试调用失败，请检查 token 和接口权限：' + probe);
       }
     } catch (e) {
       if (mounted.current) {
@@ -255,11 +267,15 @@ export function AiMcpServerScreen({ route }: RootScreenProps<'AiMcpServer'>) {
     }
   };
   const save = async () => {
+    if (busy) {
+      return;
+    }
     try {
       validate();
       if (!draft!.tools.length) {
         throw new Error('先点「连接并获取工具」');
       }
+      setBusy('保存中…');
       const all = await loadMcpServers(core.db);
       const others = all.filter(x => x.id !== draft!.id);
       const t = await getToken();
@@ -275,7 +291,6 @@ export function AiMcpServerScreen({ route }: RootScreenProps<'AiMcpServer'>) {
           ),
         tokenTail: t ? keyTailOf(t) : '',
       };
-      setBusy('保存中…');
       if (t) {
         await mcpTokens().set(x.id, t);
       } else if (original) {
@@ -328,14 +343,14 @@ export function AiMcpServerScreen({ route }: RootScreenProps<'AiMcpServer'>) {
           'token：' +
             (token.trim()
               ? '已填（未保存）'
-              : draft.tokenTail
+              : storedTokenTail
               ? '已保存'
               : '未填'),
           '工具：' +
             draft.tools.length +
             ' 个，启用 ' +
             enabledCount(draft) +
-            ' 个，会改外部数据的 ' +
+            ' 个，未确认只读的 ' +
             draft.tools.filter(t => !t.readOnly).length +
             ' 个（不能启用）',
           ...(error ? ['错误：' + error] : []),
@@ -417,7 +432,7 @@ export function AiMcpServerScreen({ route }: RootScreenProps<'AiMcpServer'>) {
         value={value}
         onChangeText={onChangeText}
         placeholder={placeholder}
-        placeholderTextColor={color.ink3}
+        placeholderTextColor={color.ink2}
         autoCapitalize="none"
         autoCorrect={false}
         secureTextEntry={secure}
@@ -453,31 +468,46 @@ export function AiMcpServerScreen({ route }: RootScreenProps<'AiMcpServer'>) {
           {input(
             'token',
             token,
-            setToken,
-            draft.tokenTail
-              ? '已保存，末 4 位 ' + draft.tokenTail + '；留空沿用'
-              : preset?.tokenHint ?? '没有可以留空',
+            v => {
+              setToken(v);
+              setError('');
+              setResult(null);
+            },
+            storedTokenTail ? '留空沿用已保存的 token' : '填写 token',
             true,
           )}
+          <Text style={s.tokenHint}>
+            {storedTokenTail
+              ? '已保存，末 4 位 ' + storedTokenTail + '；留空沿用'
+              : preset?.tokenHint ?? '服务无需认证时可以留空'}
+          </Text>
           {preset ? (
-            <Text
+            <Pressable
               style={s.linkPad}
-              onPress={() => Linking.openURL(preset.site)}
+              onPress={() =>
+                Linking.openURL(preset.site).catch(() =>
+                  setError('无法打开网站，请检查浏览器'),
+                )
+              }
               accessibilityRole="link"
             >
-              {'打开 ' + preset.site + '（能用哪些接口取决于你的积分和权限）'}
-            </Text>
+              <Text style={s.link}>
+                {'打开 ' + preset.site + '（接口权限取决于你的积分）'}
+              </Text>
+            </Pressable>
           ) : null}
           <SwitchRow
             label="启用"
             sub="停用后对话里调不到这个服务的工具"
             value={draft.enabled}
+            disabled={!!busy}
             onChange={on => patch({ enabled: on })}
           />
         </View>
         <Button
           title="连接并获取工具"
           tone="learn"
+          style={s.action}
           disabled={!!busy}
           onPress={connect}
         />
@@ -509,6 +539,8 @@ export function AiMcpServerScreen({ route }: RootScreenProps<'AiMcpServer'>) {
             <View style={s.bulk}>
               <Pressable
                 style={s.bulkBtn}
+                disabled={!!busy}
+                accessibilityState={{ disabled: !!busy }}
                 onPress={() => setAll(true)}
                 accessibilityRole="button"
               >
@@ -516,6 +548,8 @@ export function AiMcpServerScreen({ route }: RootScreenProps<'AiMcpServer'>) {
               </Pressable>
               <Pressable
                 style={s.bulkBtn}
+                disabled={!!busy}
+                accessibilityState={{ disabled: !!busy }}
                 onPress={() => setAll(false)}
                 accessibilityRole="button"
               >
@@ -540,7 +574,7 @@ export function AiMcpServerScreen({ route }: RootScreenProps<'AiMcpServer'>) {
                 accessibilityLabel={'启用工具 ' + t.name}
                 accessibilityState={{
                   checked: t.enabled,
-                  disabled: !t.readOnly,
+                  disabled: !!busy || !t.readOnly,
                 }}
               >
                 <View style={[s.checkbox, t.enabled && s.checked]}>
@@ -552,7 +586,7 @@ export function AiMcpServerScreen({ route }: RootScreenProps<'AiMcpServer'>) {
                     {t.description.replace(/^\/?数据接口\//, '')}
                   </Text>
                   {!t.readOnly ? (
-                    <Text style={s.warning}>会改外部数据，不能启用</Text>
+                    <Text style={s.warning}>未确认只读，不能启用</Text>
                   ) : null}
                 </View>
               </Pressable>
@@ -578,7 +612,13 @@ export function AiMcpServerScreen({ route }: RootScreenProps<'AiMcpServer'>) {
         ) : null}
       </ScrollView>
       <View style={[s.save, { paddingBottom: Math.max(10, safe.bottom) }]}>
-        <Button title="保存" tone="learn" disabled={!!busy} onPress={save} />
+        <Button
+          title="保存"
+          tone="learn"
+          style={s.action}
+          disabled={!!busy}
+          onPress={save}
+        />
       </View>
       <ConfirmDialog
         visible={deleting}
@@ -599,6 +639,7 @@ export function AiMcpServerScreen({ route }: RootScreenProps<'AiMcpServer'>) {
 }
 
 const s = StyleSheet.create({
+  action: { minHeight: 48 },
   page: { flex: 1, backgroundColor: color.bg },
   pad: { padding: PAD, gap: 10, paddingBottom: 40 },
   intro: { fontSize: 13, lineHeight: 21, color: color.ink2 },
@@ -629,16 +670,22 @@ const s = StyleSheet.create({
     color: color.ink,
     backgroundColor: color.card,
   },
-  linkPad: {
-    color: color.learn,
+  tokenHint: {
+    color: color.ink2,
     fontSize: 12,
     lineHeight: 18,
     paddingHorizontal: 14,
     paddingBottom: 8,
   },
+  linkPad: {
+    minHeight: 48,
+    justifyContent: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+  },
   link: { color: color.learn, fontSize: 13, fontWeight: '500' },
-  bulk: { flexDirection: 'row', gap: 8 },
-  bulkBtn: { minHeight: 44, justifyContent: 'center', paddingHorizontal: 8 },
+  bulk: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  bulkBtn: { minHeight: 48, justifyContent: 'center', paddingHorizontal: 8 },
   tool: {
     flexDirection: 'row',
     alignItems: 'flex-start',

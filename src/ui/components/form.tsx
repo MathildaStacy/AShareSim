@@ -86,10 +86,12 @@ export function SwitchRow({
   sub,
   value,
   onChange,
+  disabled = false,
 }: {
   label: string;
   sub?: string;
   value: boolean;
+  disabled?: boolean;
   onChange: (v: boolean) => void;
 }) {
   return (
@@ -100,6 +102,8 @@ export function SwitchRow({
       </View>
       <Switch
         value={value}
+        disabled={disabled}
+        accessibilityState={{ disabled }}
         onValueChange={onChange}
         trackColor={{ true: color.up, false: color.line }}
         thumbColor="#FFFFFF"

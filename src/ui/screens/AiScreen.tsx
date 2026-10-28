@@ -284,6 +284,7 @@ export function AiScreen() {
         model: m.id,
         effort: config?.effort ?? 'low',
         search: forSearch ? true : config?.search ?? false,
+        mcp: config?.mcp ?? false,
       },
       providers,
     );
@@ -724,15 +725,23 @@ export function AiScreen() {
                 disabled={!!busy || !svc || svc.capabilities?.tools === false}
                 accessibilityRole="button"
                 accessibilityLabel="外部工具"
-                accessibilityState={{ selected: config?.mcp ?? false }}
+                accessibilityState={{
+                  selected: svc?.mcp ?? false,
+                  disabled: !!busy || !svc || svc.capabilities?.tools === false,
+                }}
+                accessibilityValue={{
+                  text:
+                    svc?.capabilities?.tools === false
+                      ? '当前模型不支持工具'
+                      : svc?.mcp
+                      ? '已开启'
+                      : '已关闭',
+                }}
               >
                 <View style={s.controlSymbol}>
-                  <Plug
-                    size={19}
-                    color={config?.mcp ? c.accent : c.secondary}
-                  />
+                  <Plug size={19} color={svc?.mcp ? c.accent : c.secondary} />
                 </View>
-                {config?.mcp ? <View style={s.searchDot} /> : null}
+                {svc?.mcp ? <View style={s.searchDot} /> : null}
               </Pressable>
             ) : null}
             <Pressable

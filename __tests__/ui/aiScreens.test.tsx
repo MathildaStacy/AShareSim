@@ -477,6 +477,7 @@ test('聊天模型、搜索、思考跟随对话；虚线搜索可引导选择�
       model: 'deepseek-reasoner',
       effort: 'off',
       search: false,
+      mcp: true,
     });
   });
   await r.press('思考强度');
@@ -490,6 +491,7 @@ test('聊天模型、搜索、思考跟随对话；虚线搜索可引导选择�
   await r.press('选择模型');
   await r.press('测试中转 claude-sonnet-5-5');
   expect(useChat.getState().config?.model).toBe('claude-sonnet-5-5');
+  expect(useChat.getState().config?.mcp).toBe(true);
   expect(
     r.tree.root.findAll(
       n => n.props.accessibilityLabel === '选择模型' && n.props.onPress,
@@ -859,15 +861,15 @@ test('外部工具（MCP）：添加 Tushare、连接获取工具、写工具不
   await r.press('连接并获取工具');
   expect(auth.every(a => a === 'Bearer ts-token-abcd9876')).toBe(true);
   expect(r.text()).toContain(
-    '连接成功：9 个工具，其中 2 个会改外部数据，不能启用',
+    '已获取目录：9 个工具，其中 2 个未确认只读，不能启用',
   );
   expect(r.text()).toContain('工具 · 启用 7 / 7');
-  expect(r.text()).toContain('会改外部数据，不能启用');
+  expect(r.text()).toContain('未确认只读，不能启用');
   await r.press('启用工具 income');
   expect(r.text()).toContain('工具 · 启用 6 / 7');
   await r.press('启用工具 p_delete'); // 不能启用
   expect(r.text()).toContain('工具 · 启用 6 / 7');
-  expect(ctxText()).toContain('会改外部数据的 2 个（不能启用）');
+  expect(ctxText()).toContain('未确认只读的 2 个（不能启用）');
   expect(ctxText()).not.toContain('ts-token');
   await r.press('保存');
   const [srv] = await loadMcpServers(core.db);
@@ -893,7 +895,7 @@ test('外部工具（MCP）：添加 Tushare、连接获取工具、写工具不
   expect(useChat.getState().config?.mcp).toBe(true);
 
   const edit = await render('AiMcpServer', AiMcpServerScreen, { id: srv.id });
-  await edit.type('地址', 'https://other.example/mcp?api_key=hidden-secret');
+  await edit.type('地址', 'https://other.example/mcp?%74oken=hidden-secret');
   expect(ctxText()).not.toContain('hidden-secret');
   await edit.press('保存');
   expect(edit.text()).toContain('地址不能包含认证信息');

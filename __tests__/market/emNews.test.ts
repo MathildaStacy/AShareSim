@@ -229,3 +229,39 @@ test('资讯缓存 10 分钟；错误响应不缓存；服务端忽略截止日�
     clock.mockRestore();
   }
 });
+
+test('字段漂移明确报错；数字字符串年份和页数安全转换', () => {
+  const research = JSON.parse(fx('em-research-600036.json'));
+  expect(parseResearch({ ...research, currentYear: '2024' }).year).toBe(2024);
+  expect(() => parseResearch({ ...research, currentYear: undefined })).toThrow(
+    FeedFormatError,
+  );
+  const content = JSON.parse(fx('em-ann-content.json'));
+  expect(
+    parseAnnContent({ data: { ...content.data, page_size: '1' } }).pages,
+  ).toBe(1);
+  expect(() =>
+    parseAnnContent({ data: { ...content.data, page_size: undefined } }),
+  ).toThrow(FeedFormatError);
+  expect(() =>
+    parseAnnContent({ data: { ...content.data, page_size: 0 } }),
+  ).toThrow(FeedFormatError);
+  const anns = JSON.parse(fx('em-ann-600036.json'));
+  anns.data.list[0].notice_date = undefined;
+  expect(() => parseAnnList(anns)).toThrow(FeedFormatError);
+  expect(() =>
+    parseResearch({
+      ...research,
+      data: [{ ...research.data[0], publishDate: '2026-02-30' }],
+    }),
+  ).toThrow(FeedFormatError);
+  expect(() =>
+    parseNews(
+      JSON.stringify({
+        result: {
+          cmsArticleWebOld: [{ title: '新闻', url: 'https://example.com' }],
+        },
+      }),
+    ),
+  ).toThrow(FeedFormatError);
+});

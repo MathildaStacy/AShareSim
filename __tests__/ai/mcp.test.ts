@@ -246,10 +246,10 @@ test('只读判断、前缀、遮掉 URL 里的 token', () => {
   expect(slugOf('Tushare Pro', [])).toBe('tusharepro');
   expect(slugOf('我的数据', ['mcp'])).toBe('mcp2');
   expect(displayUrl('https://api.tushare.pro/mcp/token=abc123')).toBe(
-    'https://api.tushare.pro/mcp/token=••••',
+    '（含认证信息或片段的地址已隐藏）',
   );
   expect(displayUrl('https://x.com/mcp?token=abc&y=1')).toBe(
-    'https://x.com/mcp?token=••••&y=1',
+    '（含认证信息或片段的地址已隐藏）',
   );
 });
 
@@ -467,5 +467,75 @@ test('认证信息不能作为明文 URL 保存；工具描述同样包在 exter
   }
   expect(await mcpSearch(d, 'income', 3)).toContain(
     '<external source="MCP 工具说明">',
+  );
+});
+
+test.each([
+  '?key=secret-123',
+  '?%74oken=secret-123',
+  '?accessToken=secret-123',
+  '?client_secret=secret-123',
+  '/token=secret-123/extra',
+  '?%2574oken=secret-123',
+  '/path=x/token=secret-123',
+])('认证 URL 变体 %s 不进入设置或展示上下文', async suffix => {
+  const d = await db();
+  const url = 'https://example.com/mcp' + suffix;
+  expect(displayUrl(url)).not.toContain('secret-123');
+  await expect(saveMcpServers(d, [{ ...SRV(), url }])).rejects.toThrow(
+    '地址不能包含认证信息',
+  );
+});
+
+test('写工具使用 camelCase 也不能靠 readOnlyHint 放行', () => {
+  for (const name of [
+    'deleteAccount',
+    'getAndDelete',
+    'bulkUPDATEAccount',
+    'createOrder',
+  ]) {
+    expect(isReadOnly({ name, annotations: { readOnlyHint: true } })).toBe(
+      false,
+    );
+  }
+  expect(
+    isReadOnly({ name: 'getAccount', annotations: { readOnlyHint: true } }),
+  ).toBe(true);
+});
+
+test('Tushare 探测按地址识别，重复前缀和自定义名称都检查 token', async () => {
+  callResult = () => ({
+    isError: true,
+    content: [{ type: 'text', text: 'bad token' }],
+  });
+  for (const slug of ['', 'tushare2', 'custom']) {
+    expect(
+      await probeMcp(
+        { ...SRV(), id: slug, slug, url: 'https://api.tushare.pro/mcp' },
+        'tok-secret-1234',
+      ),
+    ).toBe('bad token');
+  }
+  expect(calls.filter(c => c.body.method === 'tools/call')).toHaveLength(3);
+  calls = [];
+  expect(
+    await probeMcp(
+      { ...SRV(), url: 'https://example.com/mcp' },
+      'tok-secret-1234',
+    ),
+  ).toBeNull();
+  expect(calls).toHaveLength(0);
+});
+
+test.each([
+  'https://user:p%2Fprivate-fragment@example.com/mcp',
+  'https://example.com/mcp?token=abc%26private-fragment',
+  'https://example.com/mcp?%74oken=abc%26private-fragment',
+])('编码分隔符不能泄漏密钥片段 %s', async url => {
+  const d = await db();
+  expect(displayUrl(url)).not.toContain('private-fragment');
+  expect(displayUrl(url)).toBe('（含认证信息或片段的地址已隐藏）');
+  await expect(saveMcpServers(d, [{ ...SRV(), url }])).rejects.toThrow(
+    '地址不能包含认证信息',
   );
 });

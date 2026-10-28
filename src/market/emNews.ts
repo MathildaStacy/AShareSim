@@ -104,12 +104,32 @@ export function newsUrl(keyword: string, n: number): string {
 export class FeedFormatError extends Error {}
 
 const str = (v: unknown) => (typeof v === 'string' ? v.trim() : '');
-const day = (v: unknown) => {
-  const s = str(v);
-  return /^\d{4}-\d{2}-\d{2}/.test(s) ? s.slice(0, 10) : '';
+const requiredText = (v: unknown, field: string): string => {
+  const value = str(v);
+  if (!value) {
+    throw new FeedFormatError('资讯接口缺少有效字段：' + field);
+  }
+  return value;
+};
+const day = (v: unknown, field: string): string => {
+  const s = requiredText(v, field);
+  const value = /^\d{4}-\d{2}-\d{2}/.test(s) ? s.slice(0, 10) : '';
+  const d = new Date(value + 'T00:00:00Z');
+  if (!Number.isFinite(d.getTime()) || d.toISOString().slice(0, 10) !== value) {
+    throw new FeedFormatError('资讯接口日期格式异常：' + field);
+  }
+  return value;
+};
+const integer = (v: unknown, field: string, min = 0): number => {
+  const value =
+    typeof v === 'number' ? v : /^\d+$/.test(str(v)) ? Number(v) : NaN;
+  if (!Number.isSafeInteger(value) || value < min) {
+    throw new FeedFormatError('资讯接口数字格式异常：' + field);
+  }
+  return value;
 };
 const num = (v: unknown) => {
-  const n = typeof v === 'number' ? v : parseFloat(str(v));
+  const n = typeof v === 'number' ? v : str(v) ? Number(v) : NaN;
   return Number.isFinite(n) ? n : null;
 };
 
@@ -132,11 +152,14 @@ export function parseAnnList(json: unknown): {
   return {
     total: typeof d.total_hits === 'number' ? d.total_hits : d.list.length,
     items: d.list.map((x: any) => ({
-      artCode: str(x.art_code),
+      artCode: requiredText(x?.art_code, 'art_code'),
       // 标题前面带「招商银行:」，去掉
-      title: str(x.title_ch || x.title).replace(/^[^:：]{1,12}[:：]/, ''),
-      date: day(x.notice_date),
-      category: str(x.columns?.[0]?.column_name),
+      title: requiredText(x?.title_ch || x?.title, 'title').replace(
+        /^[^:：]{1,12}[:：]/,
+        '',
+      ),
+      date: day(x?.notice_date, 'notice_date'),
+      category: str(x?.columns?.[0]?.column_name),
     })),
   };
 }
@@ -156,13 +179,20 @@ export function parseAnnContent(json: unknown): AnnouncementText {
   if (!d || typeof d !== 'object') {
     throw new FeedFormatError('公告正文接口返回的格式变了（没有 data）');
   }
+  const pages = integer(d.page_size, 'page_size');
+  if (str(d.notice_content) && pages === 0) {
+    throw new FeedFormatError('公告正文存在但页数为 0，无法确认分页');
+  }
   return {
-    title: str(d.notice_title).replace(/^[^:：]{1,12}[:：]/, ''),
-    date: day(d.notice_date),
+    title: requiredText(d.notice_title, 'notice_title').replace(
+      /^[^:：]{1,12}[:：]/,
+      '',
+    ),
+    date: day(d.notice_date, 'notice_date'),
     text: compactText(
       typeof d.notice_content === 'string' ? d.notice_content : '',
     ),
-    pages: typeof d.page_size === 'number' ? d.page_size : 0,
+    pages,
     pdf: str(d.attach_url_web || d.attach_url),
   };
 }
@@ -208,14 +238,14 @@ export function parseResearch(json: unknown): {
   return {
     total: typeof j.hits === 'number' ? j.hits : j.data.length,
     year:
-      typeof j.currentYear === 'number'
-        ? j.currentYear
-        : new Date().getFullYear(),
+      j.data.length || j.currentYear != null
+        ? integer(j.currentYear, 'currentYear', 1000)
+        : 0,
     items: j.data.map((x: any) => ({
-      infoCode: str(x.infoCode),
-      title: str(x.title),
+      infoCode: requiredText(x?.infoCode, 'infoCode'),
+      title: requiredText(x?.title, 'title'),
       org: str(x.orgSName || x.orgName),
-      date: day(x.publishDate),
+      date: day(x?.publishDate, 'publishDate'),
       rating: str(x.sRatingName),
       emRating: str(x.emRatingName),
       researcher: str(x.researcher),
@@ -262,11 +292,11 @@ export function parseNews(text: string): { total: number; items: NewsItem[] } {
   return {
     total: typeof j.hitsTotal === 'number' ? j.hitsTotal : list.length,
     items: list.map((x: any) => ({
-      title: plain(x.title),
+      title: plain(requiredText(x?.title, 'title')),
       summary: plain(x.content).replace(/\s+/g, ' '),
       media: str(x.mediaName),
-      time: str(x.date).slice(0, 16),
-      url: str(x.url).replace(/^http:\/\//, 'https://'),
+      time: day(x?.date, 'date') + str(x.date).slice(10, 16),
+      url: requiredText(x?.url, 'url').replace(/^http:\/\//, 'https://'),
     })),
   };
 }

@@ -154,31 +154,61 @@ export function slugOf(name: string, taken: string[]): string {
 export const newMcpId = () =>
   'mcp_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 
-/** 界面上显示的地址：URL 里如果带了 token（?token= 或 /token=），遮掉。 */
-export const displayUrl = (url: string) =>
-  url
+/** 认证参数可能采用大小写、下划线或百分号编码；显示与保存共用同一规则。 */
+const SECRET_ASSIGNMENT =
+  /([?&/])((?:key|api[_-]?key|token|access[_-]?token|refresh[_-]?token|auth|authorization|password|passwd|secret|client[_-]?secret|credential|signature|jwt|bearer))=([^&#]*)/gi;
+function decodedUrl(url: string): string {
+  let decoded = url.trim();
+  for (let i = 0; i < 2 && /%[0-9a-f]{2}/i.test(decoded); i++) {
+    const next = decodeURIComponent(decoded);
+    if (next === decoded) {
+      break;
+    }
+    decoded = next;
+  }
+  return decoded;
+}
+function redactUrlCredentials(url: string): string {
+  return url
     .replace(/(https?:\/\/)[^/?#]*@/i, '$1••••@')
-    .replace(
-      /([?&/](?:token|access_token|api[_-]?key|authorization|password)=)[^&/#]+/gi,
-      '$1••••',
-    )
+    .replace(SECRET_ASSIGNMENT, '$1$2=••••')
     .replace(/#.*$/, '#••••');
+}
+export function displayUrl(url: string): string {
+  try {
+    const raw = url.trim();
+    const decoded = decodedUrl(raw);
+    return redactUrlCredentials(raw) !== raw ||
+      redactUrlCredentials(decoded) !== decoded
+      ? '（含认证信息或片段的地址已隐藏）'
+      : raw;
+  } catch {
+    return '（地址编码不完整）';
+  }
+}
 
 /** URL 是普通配置，认证信息必须放进单独的 token 安全存储。 */
 export function validateMcpUrl(url: string): void {
   if (!/^https?:\/\/[^/?#\s]+(?:[/?#]\S*)?$/i.test(url.trim())) {
     throw new McpError('地址要以 http:// 或 https:// 开头');
   }
+  let decoded: string;
+  try {
+    decoded = decodedUrl(url);
+  } catch {
+    throw new McpError('地址编码不完整，请检查百分号编码');
+  }
   if (
-    /^https?:\/\/[^/?#]*@/i.test(url) ||
-    /[?&/](?:token|access_token|api[_-]?key|authorization|password)=/i.test(
-      url,
-    ) ||
-    url.includes('#')
+    redactUrlCredentials(url.trim()) !== url.trim() ||
+    redactUrlCredentials(decoded) !== decoded
   ) {
     throw new McpError('地址不能包含认证信息或片段，请把密钥填在 token 栏');
   }
 }
+
+/** 服务身份取决于端点，不取决于用户为工具分配的唯一前缀。 */
+export const isTushareUrl = (url: string) =>
+  /^https:\/\/api\.tushare\.pro(?::443)?\/mcp\/?$/i.test(url.trim());
 
 // ---------- 只读判断 ----------
 
@@ -198,7 +228,11 @@ export function isReadOnly(
   if (
     a.readOnlyHint === false ||
     a.destructiveHint === true ||
-    WRITE_NAME.test(t.name) ||
+    WRITE_NAME.test(
+      t.name
+        .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
+        .replace(/([A-Z])([A-Z][a-z])/g, '$1_$2'),
+    ) ||
     WRITE_DESC.test(t.description ?? '')
   ) {
     return false;
@@ -461,7 +495,7 @@ export async function fetchMcpTools(
       if (typeof t?.name !== 'string') {
         continue;
       }
-      const readOnly = isReadOnly(t, server.url === MCP_PRESETS.tushare.url);
+      const readOnly = isReadOnly(t, isTushareUrl(server.url));
       tools.push({
         name: t.name,
         description: typeof t.description === 'string' ? t.description : '',
@@ -496,7 +530,7 @@ export async function probeMcp(
   token: string,
   signal?: AbortSignal,
 ): Promise<string | null> {
-  if (server.slug !== 'tushare') {
+  if (!isTushareUrl(server.url)) {
     return null;
   }
   const d = beijingNow().date.replace(/-/g, '');

@@ -45,7 +45,7 @@ import {
 import { executeCard as execCard } from './tools/actions';
 import { TOOL_DEFS } from './tools/defs';
 import { runTool } from './tools/index';
-import { EXTERNAL_TOOLS } from './external';
+import { EXTERNAL_TOOLS, external } from './external';
 import { MCP_TOOL_DEFS } from './mcp';
 import { phaseName } from './tools/read';
 import type {
@@ -683,9 +683,12 @@ export async function ask(core: AppCore, input: AskInput): Promise<void> {
             );
           } catch (e) {
             out = {
-              output: JSON.stringify({
-                error: e instanceof Error ? e.message : String(e),
-              }),
+              output: external(
+                { source: 'Kimi 联网搜索' },
+                JSON.stringify({
+                  error: e instanceof Error ? e.message : String(e),
+                }),
+              ),
               ui: {
                 id: c.id,
                 name: c.name,
