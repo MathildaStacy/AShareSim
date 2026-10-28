@@ -1,5 +1,6 @@
 package com.asharesim.files
 
+import android.app.Activity
 import android.content.ClipData
 import android.content.Intent
 import android.net.Uri
@@ -9,6 +10,7 @@ import android.system.OsConstants
 import android.util.Base64
 import androidx.core.content.FileProvider
 import com.asharesim.specs.NativeDocumentStoreSpec
+import com.facebook.react.bridge.BaseActivityEventListener
 import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.UiThreadUtil
@@ -19,7 +21,7 @@ import java.util.concurrent.Executors
 
 /**
  * 导出文件：把内容写到 cacheDir/document_exports/<进程会话>/<随机目录>/<文件名>，通过 FileProvider 交给系统分享面板。
- * 只接受文件名和内容（base64），不接受调用方给的路径。移植自 NovelCreationPartner，去掉了选择文件。
+ * 只接受文件名和内容（base64），不接受调用方给的路径。支持通过系统选择器读取 UTF-8 目标文件。
  */
 class DocumentStoreModule(context: ReactApplicationContext) : NativeDocumentStoreSpec(context) {
   companion object {
@@ -33,6 +35,55 @@ class DocumentStoreModule(context: ReactApplicationContext) : NativeDocumentStor
   private val executor = Executors.newSingleThreadExecutor()
   @Volatile private var invalidated = false
   @Volatile private var exporting = false
+
+  private var pendingPick: Promise? = null
+  private val pickerListener = object : BaseActivityEventListener() {
+    override fun onActivityResult(activity: Activity, requestCode: Int, resultCode: Int, data: Intent?) {
+      if (requestCode != 7305) return
+      val promise = pendingPick ?: return
+      pendingPick = null
+      if (resultCode != Activity.RESULT_OK) { promise.resolve(null); return }
+      val uri = data?.data
+      if (uri == null) { promise.reject("DOCUMENT_INVALID", "没有选择文件"); return }
+      dispatch(promise) {
+        try {
+          val bytes = reactApplicationContext.contentResolver.openInputStream(uri)?.use { stream ->
+            val out = java.io.ByteArrayOutputStream()
+            val buffer = ByteArray(8192)
+            while (true) {
+              val n = stream.read(buffer)
+              if (n < 0) break
+              if (out.size() + n > 1024 * 1024) throw IOException("目标文件超过 1 MB")
+              out.write(buffer, 0, n)
+            }
+            out.toByteArray()
+          } ?: throw IOException("无法读取文件")
+          val decoder = Charsets.UTF_8.newDecoder().onMalformedInput(java.nio.charset.CodingErrorAction.REPORT)
+          promise.resolve(decoder.decode(java.nio.ByteBuffer.wrap(bytes)).toString())
+        } catch (error: Exception) {
+          promise.reject("DOCUMENT_INVALID", "无法读取 UTF-8 CSV/JSON：" + error.message)
+        }
+      }
+    }
+  }
+  init { context.addActivityEventListener(pickerListener) }
+
+  override fun pickText(promise: Promise) {
+    UiThreadUtil.runOnUiThread {
+      val activity = reactApplicationContext.currentActivity
+      if (pendingPick != null) { promise.reject("DOCUMENT_BUSY", "文件选择器已打开"); return@runOnUiThread }
+      if (activity == null || invalidated) { promise.reject("DOCUMENT_UNAVAILABLE", "当前无法打开文件选择器"); return@runOnUiThread }
+      pendingPick = promise
+      try {
+        val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+          addCategory(Intent.CATEGORY_OPENABLE)
+          type = "*/*"
+          putExtra(Intent.EXTRA_MIME_TYPES, arrayOf("text/*", "application/json", "application/vnd.ms-excel", "application/octet-stream"))
+        }
+        activity.startActivityForResult(intent, 7305)
+      } catch (error: Exception) { pendingPick = null; promise.reject("DOCUMENT_UNAVAILABLE", error) }
+    }
+  }
 
   override fun getName() = NAME
 
@@ -190,6 +241,9 @@ class DocumentStoreModule(context: ReactApplicationContext) : NativeDocumentStor
 
   override fun invalidate() {
     invalidated = true
+    reactApplicationContext.removeActivityEventListener(pickerListener)
+    pendingPick?.reject("DOCUMENT_UNAVAILABLE", "文件选择已结束")
+    pendingPick = null
     executor.shutdown()
     super.invalidate()
   }

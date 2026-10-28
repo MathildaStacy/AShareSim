@@ -43,3 +43,38 @@ export function parseSinaEtfRank(json: unknown): RankItem[] {
   }
   return out;
 }
+
+export interface SinaQuote {
+  code: string;
+  date: string;
+  time: string;
+  open: number;
+  prevClose: number;
+  last: number;
+  high: number;
+  low: number;
+  volume: number;
+}
+/** 新浪股票/ETF 报价数值字段；不依赖 GBK 名称，避免跨源编码影响核对。 */
+export function parseSinaQuote(text: string, code: string): SinaQuote {
+  const match = text.match(new RegExp('hq_str_' + code + '="([^"]*)"'));
+  const v = match?.[1].split(',');
+  if (!v || v.length < 32 || !/^\d{4}-\d{2}-\d{2}$/.test(v[30])) {
+    throw new Error('新浪没有返回可核对的报价');
+  }
+  const numbers = [1, 2, 3, 4, 5, 8].map(i => Number(v[i]));
+  if (numbers.some(n => !Number.isFinite(n) || n < 0)) {
+    throw new Error('新浪报价数值无效');
+  }
+  return {
+    code,
+    date: v[30],
+    time: v[31],
+    open: Math.round(numbers[0] * 1000),
+    prevClose: Math.round(numbers[1] * 1000),
+    last: Math.round(numbers[2] * 1000),
+    high: Math.round(numbers[3] * 1000),
+    low: Math.round(numbers[4] * 1000),
+    volume: numbers[5],
+  };
+}

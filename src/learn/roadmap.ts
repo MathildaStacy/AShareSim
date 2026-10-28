@@ -162,9 +162,8 @@ export const STAGES: Stage[] = [
     ],
     tools: [
       {
-        route: 'Coming',
-        label: '数据中心（M5）',
-        params: { key: 'datacenter' },
+        route: 'DataCenter',
+        label: '数据中心',
       },
     ],
   },
@@ -181,23 +180,21 @@ export const STAGES: Stage[] = [
       '每笔模拟成交都记录下来。',
     ],
     ex: [
-      { id: 's7-e0', text: '连续 12 周不间断执行', later: 'M5' },
+      { id: 's7-e0', text: '连续 12 周不间断执行', auto: true },
       {
         id: 's7-e1',
         text: '用这 3 个月的真实行情重跑回测，和模拟记录逐周对比',
       },
     ],
     pass: [
-      { id: 's7-p0', text: '连续 12 周没有漏执行', later: 'M5' },
+      { id: 's7-p0', text: '连续 12 周没有漏执行', auto: true },
       {
         id: 's7-p1',
         text: '模拟结果和同期回测重放的偏差能解释清楚，而且比较小',
       },
     ],
-    tools: [
-      { route: 'Coming', label: '模拟执行（M5）', params: { key: 'exec' } },
-    ],
-    note: '路线图原文：不用券商模拟盘，它的成交规则太宽松。这里提前做，是因为 App 本身就是一个按真实规则记录「假如成交」的工具。「连续 12 周」在 M5 模拟执行上线后自动判断，现在先手动勾。',
+    tools: [{ route: 'Portfolio', label: '组合与调仓' }],
+    note: '路线图原文：不用券商模拟盘，它的成交规则太宽松。这里提前做，是因为 App 本身就是一个按真实规则记录「假如成交」的工具。「连续 12 周」由每周执行报告自动判断。',
   },
 ];
 

@@ -33,6 +33,14 @@ export class Liquidity {
   private date = '';
   private used = new Map<string, number>();
 
+  clone(): Liquidity {
+    const copy = new Liquidity();
+    copy.t = this.t;
+    copy.date = this.date;
+    copy.used = new Map(this.used);
+    return copy;
+  }
+
   reset(snap: Snapshot): void {
     if (snap.t !== this.t || snap.date !== this.date) {
       this.t = snap.t;

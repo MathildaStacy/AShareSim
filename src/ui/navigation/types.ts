@@ -60,6 +60,10 @@ export type RootStackParamList = {
   DataLab: undefined;
   /** M5 才做的功能，先放说明页。 */
   Coming: { key: 'datacenter' | 'exec' };
+  Portfolio: undefined;
+  Strategy: { id?: number } | undefined;
+  Rebalance: { id?: number } | undefined;
+  DataCenter: undefined;
   // M4 AI
   Ai: undefined;
   AiThreads: undefined;

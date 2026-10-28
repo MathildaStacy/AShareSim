@@ -28,7 +28,7 @@ import {
   type NewsItem,
   type ResearchReport,
 } from './emNews';
-import { parseSinaEtfRank, sinaEtfRankUrl } from './sina';
+import { parseSinaEtfRank, sinaEtfRankUrl, parseSinaQuote } from './sina';
 import {
   minuteKlineUrl,
   parseKline,
@@ -63,6 +63,9 @@ export const defaultFetchText: FetchText = (url, timeoutMs) =>
     const xhr = new XMLHttpRequest();
     xhr.open('GET', url);
     xhr.timeout = timeoutMs;
+    if (url.startsWith('https://hq.sinajs.cn/')) {
+      xhr.setRequestHeader('Referer', 'https://finance.sina.com.cn/');
+    }
     xhr.onload = () => {
       if (xhr.status >= 200 && xhr.status < 300) {
         resolve(xhr.responseText);
@@ -234,6 +237,13 @@ export class MarketClient {
   ): Promise<RankItem[]> {
     const text = await this.get(rankUrl(board, sort, count + 5));
     return parseRank(JSON.parse(text)).slice(0, count);
+  }
+
+  async sinaQuote(code: string) {
+    return parseSinaQuote(
+      await this.get('https://hq.sinajs.cn/list=' + code),
+      code,
+    );
   }
 
   /** ETF 排行（新浪，见 sina.ts）。 */

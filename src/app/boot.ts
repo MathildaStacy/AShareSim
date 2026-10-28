@@ -20,6 +20,7 @@ import {
 } from '../sim/refresher';
 import { Simulator } from '../sim/simulator';
 import { syncLearn } from './learn';
+import { PortfolioService } from '../portfolio/service';
 import { nativeTracker } from './tracker';
 
 export interface AppCore {
@@ -88,10 +89,27 @@ async function doBoot(): Promise<AppCore> {
     }
   });
   sim.subscribeQuotes(() => useApp.setState(s => ({ tick: s.tick + 1 })));
+  const portfolio = new PortfolioService(db, sim, client);
+  let processingPortfolio = false;
   let phaseKey = '';
   refresher.onStatus(status => {
     const now = sim.now(),
       key = now.date + '|' + phaseAt(now.t) + '|' + status.window;
+    if (!processingPortfolio) {
+      processingPortfolio = true;
+      portfolio
+        .process()
+        .catch(e => {
+          useApp.setState({
+            lastEvents: [
+              { type: 'warning', message: '调仓跟踪失败：' + String(e) },
+            ],
+          });
+        })
+        .finally(() => {
+          processingPortfolio = false;
+        });
+    }
     const changed = key !== phaseKey;
     phaseKey = key;
     useApp.setState(s => ({ status, tick: s.tick + (changed ? 1 : 0) }));

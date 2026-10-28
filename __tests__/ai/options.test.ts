@@ -25,7 +25,7 @@ import type {
 } from '../../src/ai/types';
 import * as aiRepo from '../../src/data/aiRepo';
 import { openMemoryDb } from '../../src/data/drivers/nodeSqlite';
-import { migrate, migrations } from '../../src/data/migrations';
+import { migrate, migrations, SCHEMA_VERSION } from '../../src/data/migrations';
 import * as repo from '../../src/data/repos';
 import { sse } from './helpers/stream';
 
@@ -125,7 +125,7 @@ test('schema 3 升级保留旧 Key id、服务价格、历史和记忆；只迁�
     { kind: 'plan', text: '定投计划', sourceThreadId: threadId },
     '2026-10-27',
   );
-  expect(await migrate(db)).toEqual({ from: 3, to: 4 });
+  expect(await migrate(db)).toEqual({ from: 3, to: SCHEMA_VERSION });
   const ps = await loadProviders(db);
   expect(ps).toMatchObject([
     {
@@ -145,7 +145,10 @@ test('schema 3 升级保留旧 Key id、服务价格、历史和记忆；只迁�
   expect((await aiRepo.memories(db))[0].text).toBe('定投计划');
   await repo.setSetting(db, 'aiServices', []);
   expect(await loadProviders(db)).toEqual(ps);
-  expect(await migrate(db)).toEqual({ from: 4, to: 4 });
+  expect(await migrate(db)).toEqual({
+    from: SCHEMA_VERSION,
+    to: SCHEMA_VERSION,
+  });
   db.close();
 });
 

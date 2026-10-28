@@ -254,6 +254,11 @@ export function TradeScreen() {
       <ScrollView contentContainerStyle={s.pad}>
         <PhaseBar />
         <TradeAccountCard />
+        <Entry
+          title="组合与调仓"
+          sub="本周计划 · 执行报告"
+          onPress={() => nav.navigate('Portfolio')}
+        />
         <View style={s.grid}>
           {grid.map(g => (
             <Pressable
@@ -385,6 +390,11 @@ export function MeScreen() {
       <NavBar title="我的" />
       <ScrollView contentContainerStyle={s.pad}>
         <AccountCard />
+        <Entry
+          title="组合与调仓"
+          sub="本周计划 · 执行报告"
+          onPress={() => nav.navigate('Portfolio')}
+        />
         <View style={s.card}>
           <Entry
             title="银证转账"
@@ -449,10 +459,7 @@ export function MeScreen() {
             sub={archived ? '已归档 ' + archived + ' 个' : '还没有归档的账户'}
             onPress={() => nav.navigate('Accounts')}
           />
-          <Entry
-            title="重置账户"
-            onPress={() => setReset(true)}
-          />
+          <Entry title="重置账户" onPress={() => setReset(true)} />
         </View>
         <View style={s.card}>
           <Entry
@@ -460,14 +467,8 @@ export function MeScreen() {
             sub={aiSvc ?? '还没有配置：添加服务（Base URL、API Key、模型）'}
             onPress={() => nav.navigate('AiServices')}
           />
-          <Entry
-            title="AI 记忆"
-            onPress={() => nav.navigate('AiMemory')}
-          />
-          <Entry
-            title="调试页"
-            onPress={() => nav.navigate('Debug')}
-          />
+          <Entry title="AI 记忆" onPress={() => nav.navigate('AiMemory')} />
+          <Entry title="调试页" onPress={() => nav.navigate('Debug')} />
         </View>
       </ScrollView>
       <ResetDialog visible={reset} onClose={() => setReset(false)} />

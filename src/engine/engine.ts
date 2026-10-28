@@ -107,6 +107,18 @@ export class Engine {
 
   constructor(public state: AccountState, private deps: EngineDeps) {}
 
+  /** 独立事务副本：保留已消耗盘口，避免批量委托重复吃同一档流动性。 */
+  fork(): Engine {
+    const e = new Engine(JSON.parse(JSON.stringify(this.state)), this.deps);
+    e.snaps = new Map(this.snaps);
+    e.prevSnaps = new Map(this.prevSnaps);
+    e.liq = new Map([...this.liq].map(([code, l]) => [code, l.clone()]));
+    e.openVolume = new Map(this.openVolume);
+    e.preCloseVolume = new Map(this.preCloseVolume);
+    e.actions = this.actions.slice();
+    return e;
+  }
+
   // ---------- 查询 ----------
 
   snapshot(code: string): Snapshot | null {

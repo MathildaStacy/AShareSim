@@ -3,9 +3,10 @@ import { m0001 } from './0001_init';
 import { m0002 } from './0002_learn';
 import { m0003 } from './0003_ai';
 import { m0004 } from './0004_ai_options';
+import { m0005 } from './0005_portfolio';
 
 /** 按顺序排列；下标 + 1 就是存在 PRAGMA user_version 里的版本号。 */
-export const migrations: string[][] = [m0001, m0002, m0003, m0004];
+export const migrations: string[][] = [m0001, m0002, m0003, m0004, m0005];
 
 export const SCHEMA_VERSION = migrations.length;
 

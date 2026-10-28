@@ -76,13 +76,13 @@ const TOOLS: Tool[] = [
   { label: '账户分析', sub: 'Beta / Alpha', go: n => n.navigate('Analysis') },
   {
     label: '数据中心',
-    sub: 'M5',
-    go: n => n.navigate('Coming', { key: 'datacenter' }),
+    sub: '检查与核对',
+    go: n => n.navigate('DataCenter'),
   },
   {
-    label: '模拟执行',
-    sub: 'M5',
-    go: n => n.navigate('Coming', { key: 'exec' }),
+    label: '组合与调仓',
+    sub: '每周执行与复盘',
+    go: n => n.navigate('Portfolio'),
   },
 ];
 

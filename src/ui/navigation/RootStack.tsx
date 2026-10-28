@@ -24,6 +24,12 @@ import {
   AiServicesScreen,
   AiThreadsScreen,
 } from '../screens/AiScreens';
+import {
+  PortfolioScreen,
+  StrategyScreen,
+  RebalanceScreen,
+} from '../screens/PortfolioScreens';
+import { DataCenterScreen } from '../screens/DataCenterScreen';
 import { DebugScreen } from '../screens/DebugScreen';
 import { FillDetailScreen, OrderDetailScreen } from '../screens/DetailScreens';
 import { CalibrateScreen, FeesScreen } from '../screens/FeeScreens';
@@ -155,6 +161,10 @@ export function RootStack() {
       <Stack.Screen name="Auction" component={AuctionScreen} />
       <Stack.Screen name="Analysis" component={AnalysisScreen} />
       <Stack.Screen name="DataLab" component={DataLabScreen} />
+      <Stack.Screen name="Portfolio" component={PortfolioScreen} />
+      <Stack.Screen name="Strategy" component={StrategyScreen} />
+      <Stack.Screen name="Rebalance" component={RebalanceScreen} />
+      <Stack.Screen name="DataCenter" component={DataCenterScreen} />
       <Stack.Screen name="Coming" component={ComingScreen} />
       <Stack.Screen
         name="Ai"

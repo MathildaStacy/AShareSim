@@ -5,7 +5,7 @@
 /* eslint-disable no-bitwise -- UTF-8 和 base64 编码本来就是按位运算 */
 import type { Spec } from '../native/NativeDocumentStore';
 
-export type ExportMime = 'text/csv' | 'text/plain';
+export type ExportMime = 'text/csv' | 'text/plain' | 'application/json';
 
 /** 导出上限，和原生模块一致。 */
 export const MAX_EXPORT_BYTES = 10 * 1024 * 1024;
@@ -132,4 +132,13 @@ export async function cleanupExports(): Promise<void> {
   } catch {
     // 下次启动再清
   }
+}
+
+/** 系统文件选择器返回 UTF-8 CSV/JSON，取消返回 null。 */
+export async function importText(): Promise<string | null> {
+  const native = store();
+  if (!native?.pickText) {
+    throw new Error('这台设备暂不支持文件导入，请粘贴文件内容');
+  }
+  return native.pickText();
 }

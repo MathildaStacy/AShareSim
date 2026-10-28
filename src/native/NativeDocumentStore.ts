@@ -8,6 +8,7 @@ import { TurboModuleRegistry } from 'react-native';
 export interface Spec extends TurboModule {
   /** Android 上分享面板打开就返回 'opened'（拿不到用户最后保存没有）。 */
   writeAndShare(name: string, base64: string, mime: string): Promise<string>;
+  pickText(): Promise<string | null>;
   /** 清理上一次 App 进程留下的导出文件。 */
   cleanupExports(): Promise<void>;
 }

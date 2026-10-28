@@ -8,6 +8,8 @@
  *   必须在推进时间之前做，否则跨日时清算会先把委托撤掉。
  */
 import type { Db } from '../data/db';
+import { rebalances } from '../portfolio/repo';
+import { recordStockDay } from '../portfolio/datacenter';
 import * as repo from '../data/repos';
 import { isLive, newAccount } from '../engine/account';
 import { TradingCalendar, type DateStr } from '../engine/calendar';
@@ -58,7 +60,7 @@ export interface CatchUpReport {
 export type Listener = (events: EngineEvent[]) => void;
 
 export class Simulator {
-  readonly engine: Engine;
+  engine: Engine;
   private securities = new Map<string, Security & { type: string }>();
   private infos = new Map<string, QuoteInfo>();
   /** 每只代码（含指数）最新一次的行情，界面显示用。 */
@@ -68,6 +70,7 @@ export class Simulator {
   private quoteWatermarks = new Map<string, Snapshot | null>();
   private ingesting: Promise<void> = Promise.resolve();
   private watch = new Set<string>();
+  private pendingPortfolio: { code: string; date: string }[] = [];
   private dirty = false;
   private lastSave = 0;
   private listeners = new Set<Listener>();
@@ -115,7 +118,87 @@ export class Simulator {
       sim.watch.add(c);
     }
     sim.engine.setCorporateActions(await repo.corporateActions(db));
+    await sim.syncPortfolioCodes(db);
     return sim;
+  }
+
+  /** 交易和行情共用串行队列，批量调仓期间不插入单笔操作。 */
+  private serial<T>(work: () => Promise<T>): Promise<T> {
+    const next = this.ingesting.then(work);
+    this.ingesting = next.then(
+      () => undefined,
+      () => undefined,
+    );
+    return next;
+  }
+
+  /** 引擎副本、账户、调仓记录、事件同事务提交，写库失败不发布内存状态。 */
+  transact<T>(
+    work: (engine: Engine, tx: Db, events: EngineEvent[]) => Promise<T>,
+  ): Promise<T> {
+    return this.serial(async () => {
+      const engine = this.engine.fork();
+      const events = engine.advance(this.clock());
+      const now = beijingIso();
+      const result = await this.db.transaction(async tx => {
+        const value = await work(engine, tx, events);
+        await repo.saveAccountState(tx, this.accountId, engine.state, now);
+        await this.writeEvents(tx, events, engine.state.date, now);
+        return value;
+      });
+      this.engine = engine;
+      await this.syncPortfolioCodes(this.db);
+      this.dirty = false;
+      this.listeners.forEach(fn => fn(events));
+      return result;
+    });
+  }
+
+  private async writeEvents(
+    tx: Db,
+    events: EngineEvent[],
+    date: string,
+    ts: string,
+  ): Promise<void> {
+    for (const e of events) {
+      const eventDate =
+        'fill' in e
+          ? e.fill.date
+          : 'order' in e
+          ? e.order.date
+          : 'date' in e
+          ? e.date
+          : date;
+      await tx.run(
+        'INSERT INTO account_event(account_id,trade_date,ts,type,body) VALUES (?,?,?,?,?)',
+        [this.accountId, eventDate, ts, e.type, JSON.stringify(e)],
+      );
+      const d = describeEvent(e, c => this.securities.get(c) ?? null);
+      if (d) {
+        await repo.logActivity(tx, {
+          accountId: this.accountId,
+          tradeDate: eventDate,
+          ts,
+          ...d,
+        });
+      }
+    }
+  }
+
+  private async syncPortfolioCodes(db: Db): Promise<void> {
+    this.pendingPortfolio = (await rebalances(db, this.accountId))
+      .filter(r => r.status === 'executing')
+      .flatMap(r =>
+        r.plan.rows
+          .filter(
+            row =>
+              row.request?.side === 'B' &&
+              (r.attempts[row.code] ?? 0) < 2 &&
+              ((r.attempts[row.code] ?? 0) === 0 ||
+                r.strategy.retry === 'once'),
+          )
+          .map(row => ({ code: row.code, date: r.executionDate })),
+      );
   }
 
   // ---------- 查询 ----------
@@ -163,8 +246,9 @@ export class Simulator {
   /** 今天就可能成交的委托所在的证券（不含等到下一交易日才报送的预埋单），后台跟踪只看它们。 */
   activeOrderCodes(today: DateStr): string[] {
     return [
-      ...new Set(
-        this.engine.state.orders
+      ...new Set([
+        ...this.pendingPortfolio.filter(p => p.date === today).map(p => p.code),
+        ...this.engine.state.orders
           .filter(
             o =>
               isLive(o) &&
@@ -175,7 +259,7 @@ export class Simulator {
               ),
           )
           .map(o => o.code),
-      ),
+      ]),
     ];
   }
 
@@ -198,6 +282,7 @@ export class Simulator {
   recordedCodes(): Set<string> {
     return new Set([
       ...this.watch,
+      ...this.pendingPortfolio.map(p => p.code),
       ...this.heldCodes(),
       ...this.liveOrderCodes(),
     ]);
@@ -285,6 +370,9 @@ export class Simulator {
       ) {
         await repo.saveSnapshot(this.db, s);
       }
+      if (snapshotChanged && this.securities.has(s.code)) {
+        await recordStockDay(this.db, s, info.name, info.type);
+      }
       this.infos.set(s.code, info);
       this.quotes.set(s.code, q);
       this.quoteWatermarks.set(s.code, s);
@@ -310,7 +398,11 @@ export class Simulator {
   }
 
   /** 没有行情时推进时间：报送暂存委托、15:30 清算、跨日。 */
-  async tick(): Promise<EngineEvent[]> {
+  tick(): Promise<EngineEvent[]> {
+    return this.serial(() => this.tickNow());
+  }
+
+  private async tickNow(): Promise<EngineEvent[]> {
     const events = this.engine.advance(this.clock());
     await this.commit(events);
     return events;
@@ -328,7 +420,11 @@ export class Simulator {
     return this.clock();
   }
 
-  async placeOrder(req: OrderRequest): Promise<PlaceResult> {
+  placeOrder(req: OrderRequest): Promise<PlaceResult> {
+    return this.serial(() => this.placeOrderNow(req));
+  }
+
+  private async placeOrderNow(req: OrderRequest): Promise<PlaceResult> {
     const r = this.engine.placeOrder(this.clock(), req);
     if (!r.ok) {
       // 券商拦下的委托不生成委托记录，但要记进操作日志（AI 回答「刚才为什么下不了单」）
@@ -350,13 +446,21 @@ export class Simulator {
     return r;
   }
 
-  async cancelOrder(id: number): Promise<SimpleResult> {
+  cancelOrder(id: number): Promise<SimpleResult> {
+    return this.serial(() => this.cancelOrderNow(id));
+  }
+
+  private async cancelOrderNow(id: number): Promise<SimpleResult> {
     const r = this.engine.cancelOrder(this.clock(), id);
     await this.commit(r.events, true);
     return r;
   }
 
-  async deposit(fen: Fen): Promise<SimpleResult> {
+  deposit(fen: Fen): Promise<SimpleResult> {
+    return this.serial(() => this.depositNow(fen));
+  }
+
+  private async depositNow(fen: Fen): Promise<SimpleResult> {
     const r = this.engine.deposit(this.clock(), fen);
     if (r.ok) {
       await this.logTransfer('银行转证券 ' + (fen / 100).toFixed(2) + ' 元');
@@ -365,7 +469,11 @@ export class Simulator {
     return r;
   }
 
-  async withdraw(fen: Fen): Promise<SimpleResult> {
+  withdraw(fen: Fen): Promise<SimpleResult> {
+    return this.serial(() => this.withdrawNow(fen));
+  }
+
+  private async withdrawNow(fen: Fen): Promise<SimpleResult> {
     const r = this.engine.withdraw(this.clock(), fen);
     if (r.ok) {
       await this.logTransfer('证券转银行 ' + (fen / 100).toFixed(2) + ' 元');
@@ -435,9 +543,13 @@ export class Simulator {
    * 改费率：只对之后提交的委托生效（已有委托按各自提交时的费率）。why 写进操作日志，例如「按交割单校准」。
    * 没有变化时返回空数组，不记日志。
    */
-  async setFeeProfile(
+  setFeeProfile(profile: FeeProfile, why = '修改费率'): Promise<string[]> {
+    return this.serial(() => this.setFeeProfileNow(profile, why));
+  }
+
+  private async setFeeProfileNow(
     profile: FeeProfile,
-    why = '修改费率',
+    why: string,
   ): Promise<string[]> {
     const diff = feeDiff(this.engine.state.fee, profile);
     if (!diff.length) {
@@ -451,7 +563,11 @@ export class Simulator {
   }
 
   /** 改累计净入金上限（范围由设置页校验，见 sim/settings.ts）。 */
-  async setDepositCap(fen: Fen): Promise<void> {
+  setDepositCap(fen: Fen): Promise<void> {
+    return this.serial(() => this.setDepositCapNow(fen));
+  }
+
+  private async setDepositCapNow(fen: Fen): Promise<void> {
     const old = this.engine.state.depositCap;
     if (fen === old) {
       return;
@@ -469,7 +585,14 @@ export class Simulator {
    * 重置账户：旧账户（状态、委托、交割单、操作日志）原样归档、只读，未完成委托随旧账户归档、不再撮合。
    * 新账户从 0 元开始，沿用当前的费率设置和入金上限（这两项是「你的券商」的设置）。返回旧账户和新账户的 id。
    */
-  async resetAccount(): Promise<{ archived: number; current: number }> {
+  resetAccount(): Promise<{ archived: number; current: number }> {
+    return this.serial(() => this.resetAccountNow());
+  }
+
+  private async resetAccountNow(): Promise<{
+    archived: number;
+    current: number;
+  }> {
     const nowIso = beijingIso();
     const old = this.engine.state;
     const oldId = this.currentId;
@@ -511,6 +634,7 @@ export class Simulator {
     });
     this.engine.state = state;
     this.currentId = newId;
+    this.pendingPortfolio = [];
     this.afterFed.clear();
     this.dirty = false;
     this.listeners.forEach(fn => fn([]));
@@ -523,7 +647,11 @@ export class Simulator {
    * 15:05–15:30 用当日分时撮合盘后委托：腾讯快照的成交量收盘后就不变了，分时数据里 15:06–15:30 每分钟一个点，
    * 累计量包含盘后成交（2026-10-26 核对，见 TRADING_RULES.md §6.2）。只用已经走完的分钟。
    */
-  async ingestAfterHours(): Promise<EngineEvent[]> {
+  ingestAfterHours(): Promise<EngineEvent[]> {
+    return this.serial(() => this.ingestAfterHoursNow());
+  }
+
+  private async ingestAfterHoursNow(): Promise<EngineEvent[]> {
     const now = this.clock();
     if (now.t < AFTER_START || now.t > AFTER_END + 120) {
       return [];
@@ -735,17 +863,7 @@ export class Simulator {
       const state = this.engine.state;
       await this.db.transaction(async tx => {
         await repo.saveAccountState(tx, this.accountId, state, nowIso);
-        for (const e of events) {
-          const d = describeEvent(e, c => this.securities.get(c) ?? null);
-          if (d) {
-            await repo.logActivity(tx, {
-              accountId: this.accountId,
-              tradeDate: state.date,
-              ts: nowIso,
-              ...d,
-            });
-          }
-        }
+        await this.writeEvents(tx, events, state.date, nowIso);
       });
       this.dirty = false;
       this.lastSave = nowMs;
