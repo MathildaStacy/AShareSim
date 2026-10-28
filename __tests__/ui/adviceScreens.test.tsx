@@ -278,6 +278,41 @@ test('提案卡：风险限额拦下时执行按钮不可点，单只建议批�
   expect(core.sim.engine.state.orders).toHaveLength(0);
 });
 
+test('提案卡：目标不足一手时说明无需提交，执行入口不可点', async () => {
+  const core = await setup();
+  const p = await createProposal(core, {
+    threadId: null,
+    kind: 'rebalance',
+    items: [
+      {
+        code: 'sh600036',
+        name: '招商银行',
+        stance: 'buy',
+        weight: 0.0001,
+        priceLow: null,
+        priceHigh: null,
+      },
+    ],
+    horizonDays: 5,
+    benchmark: 'sh510300',
+    thesis: '保留现金',
+    invalidation: '仓位改变',
+  });
+  const Host = () => <ProposalCard id={p.id} onOpen={() => undefined} />;
+  const r = await render('Proposals', Host);
+  await r.press('批准并预检');
+  expect(r.text()).toContain('批量操作卡 · 0 笔委托');
+  expect(r.text()).toContain('本次无需提交委托');
+  expect(r.text()).not.toContain('全部通过，一次确认提交');
+  const [execute] = r.tree.root.findAll(
+    n =>
+      n.props.accessibilityRole === 'button' &&
+      n.findAll(c => c.props.children === '无需执行').length > 0,
+  );
+  expect(execute.props.accessibilityState).toEqual({ disabled: true });
+  expect(core.sim.engine.state.orders).toHaveLength(0);
+});
+
 test('提案与记分卡页：样本太少、提案列表', async () => {
   const core = await setup();
   await createProposal(core, {
@@ -300,6 +335,8 @@ test('提案与记分卡页：样本太少、提案列表', async () => {
   });
   const r = await render('Proposals', ProposalsScreen);
   expect(r.text()).toContain('AI 的提案');
+  expect(r.text()).toContain('暂无到期结果');
+  await r.press('记分卡怎么算');
   expect(r.text()).toContain('样本太少');
   expect(r.text()).toContain('#1 观望 招商银行');
   await act(async () => {
@@ -319,10 +356,14 @@ test('预设流程：内置三个；运行时模板放在附带内容里；记�
   expect(r.text()).toContain('个股体检');
   expect(r.text()).toContain('周度复盘');
   expect(r.text()).toContain('调仓前检查');
+  expect(r.text()).not.toContain('get_financials');
+  await r.press('步骤与输出格式');
+  expect(r.text()).toContain('get_financials');
+  await r.press('步骤与输出格式');
   const runs = r.tree.root.findAll(
     n =>
       n.props.accessibilityRole === 'button' &&
-      n.findAll(c => c.props.children === '运行').length > 0,
+      n.findAll(c => c.props.children === '运行个股体检').length > 0,
   );
   await act(async () => runs[0].props.onPress());
   expect(r.text()).toContain('要先填一只证券');

@@ -3,8 +3,10 @@
  */
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { ChevronRight } from 'lucide-react-native';
 import { useCallback, useState } from 'react';
 import {
+  KeyboardAvoidingView,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -36,7 +38,14 @@ import {
 } from '../../ai/flows';
 import { EFFORT_NAME } from '../../ai/models';
 import { beijingIso } from '../../market/clock';
-import { Button, Empty, NavBar, Note, SectionTitle } from '../components/ui';
+import {
+  Button,
+  Details,
+  Empty,
+  NavBar,
+  Note,
+  SectionTitle,
+} from '../components/ui';
 import { useAiContext, useCore, useViewLog } from '../hooks';
 import type { RootStackParamList } from '../navigation/types';
 import { color, num, PAD } from '../theme';
@@ -49,19 +58,22 @@ function ScoreBox({ title, l }: { title: string; l: ScoreLine }) {
   return (
     <View style={s.score}>
       <Text style={s.scoreTitle}>{title}</Text>
-      <Text style={[s.scoreBig, num]}>
-        {l.hitRate == null ? '—' : pctText(l.hitRate, false)}
-      </Text>
-      <Text style={s.sub}>命中率（已对账 {l.n} 条）</Text>
-      <Text style={[s.scoreMid, num]}>{pctText(l.avgExcess)}</Text>
-      <Text style={s.sub}>平均超额收益</Text>
+      {l.n ? (
+        <>
+          <Text style={[s.scoreBig, num]}>{pctText(l.hitRate, false)}</Text>
+          <Text style={s.sub}>命中率 · 已对账 {l.n} 条</Text>
+          <Text style={[s.scoreMid, num]}>
+            {'平均超额 ' + pctText(l.avgExcess)}
+          </Text>
+        </>
+      ) : (
+        <Text style={s.scoreEmpty}>暂无到期结果</Text>
+      )}
       <Text style={s.sub}>
         未到期 {l.pending} · 观望 {l.watch}
       </Text>
-      {l.thin ? (
-        <Text style={s.thin}>
-          样本太少（少于 {MIN_SCORE_SAMPLE} 条），不足以下结论
-        </Text>
+      {l.thin && l.n > 0 ? (
+        <Text style={s.thin}>样本太少 · 少于 {MIN_SCORE_SAMPLE} 条</Text>
       ) : null}
     </View>
   );
@@ -143,11 +155,15 @@ export function ProposalsScreen() {
             <ScoreBox title="我自己的决策" l={card.user} />
           </View>
         ) : null}
-        <Note style={s.note}>
-          {'到期按各自的基准对账：超额 = 方向 ×（标的收益 − 基准收益），用前复权收盘价，起点是提出当天的收盘。' +
-            '被你拒绝的提案也照样对账：记分卡看的是建议准不准。' +
-            (msg ? '\n' + msg : '')}
-        </Note>
+        {msg ? <Note style={s.note}>{msg}</Note> : null}
+        <Details title="记分卡怎么算">
+          <Text style={s.body}>
+            到期按各自的基准对账：超额 = 方向 ×（标的收益 −
+            基准收益），用前复权收盘价，起点是提出当天的收盘。
+            被拒绝的提案也会对账。已对账少于 {MIN_SCORE_SAMPLE}{' '}
+            条时，样本太少，不足以下结论。
+          </Text>
+        </Details>
         <View style={s.tabs}>
           {(
             [
@@ -190,12 +206,10 @@ export function ProposalsScreen() {
                     <Text style={s.sub}>
                       {p.createdAt.slice(0, 10) +
                         ' · ' +
-                        PROPOSAL_STATUS_NAME[p.status] +
-                        ' · ' +
-                        p.horizonDays +
-                        ' 个交易日，' +
-                        p.dueDate +
-                        ' 对账'}
+                        PROPOSAL_STATUS_NAME[p.status]}
+                    </Text>
+                    <Text style={s.sub}>
+                      {p.horizonDays + ' 个交易日 · ' + p.dueDate + ' 对账'}
                     </Text>
                     <Text style={s.sub} numberOfLines={2}>
                       {'理由：' + p.thesis}
@@ -210,6 +224,10 @@ export function ProposalsScreen() {
                       </Text>
                     ) : null}
                   </View>
+                  {p.threadId != null ||
+                  (p.rebalanceId != null && p.status === 'executed') ? (
+                    <ChevronRight size={18} color={color.ink2} />
+                  ) : null}
                 </Pressable>
               ))}
             </View>
@@ -264,6 +282,12 @@ const EMPTY_FLOW: Flow = {
   template: '',
   effort: 'low',
   needsCode: false,
+};
+
+const FLOW_PURPOSE: Record<string, string> = {
+  'stock-check': '结合行情、财务和近期事件，分析一只证券的机会与风险。',
+  'weekly-review': '回顾本周交易、费用和决策表现，找出下周要改进的事。',
+  'pre-rebalance': '检查持仓、资金与交易限制，确认调仓前要处理的问题。',
 };
 
 export function AiFlowsScreen() {
@@ -346,13 +370,14 @@ export function AiFlowsScreen() {
   };
 
   return (
-    <View style={s.page}>
+    <KeyboardAvoidingView style={s.page} behavior="height">
       <NavBar
         title="预设流程"
         back
         right={
           <Button
             small
+            style={s.headerButton}
             title="新建"
             onPress={() => setEdit({ ...EMPTY_FLOW, stepsText: '' })}
           />
@@ -363,8 +388,7 @@ export function AiFlowsScreen() {
         keyboardShouldPersistTaps="handled"
       >
         <Note style={s.note}>
-          一个流程 = 固定步骤（要调用哪些工具）+
-          输出模板。运行时在新对话里发一条带模板的提问，模板放在你的消息里，不改系统提示，所以不影响缓存。
+          选择流程，在新对话中生成分析。运行记录可随时回看。
         </Note>
         {error ? <Text style={s.error}>{error}</Text> : null}
         {edit ? (
@@ -407,6 +431,7 @@ export function AiFlowsScreen() {
               {edit.id ? (
                 <Button
                   title="删除"
+                  style={s.touchButton}
                   onPress={async () => {
                     await saveCustomFlows(
                       core,
@@ -417,9 +442,14 @@ export function AiFlowsScreen() {
                   }}
                 />
               ) : null}
-              <Button title="取消" onPress={() => setEdit(null)} />
+              <Button
+                title="取消"
+                style={s.touchButton}
+                onPress={() => setEdit(null)}
+              />
               <Button
                 title="保存"
+                style={s.touchButton}
                 tone="learn"
                 onPress={() => save().catch(e => setError(String(e)))}
               />
@@ -432,77 +462,86 @@ export function AiFlowsScreen() {
             <View key={f.id} style={s.card}>
               <View style={s.row}>
                 <View style={s.grow}>
-                  <Text style={s.title}>
+                  <Text style={s.flowTitle}>
                     {f.name + (f.builtin ? '' : ' · 自定义')}
                   </Text>
-                  <Text style={s.sub}>
-                    {f.steps.length +
-                      ' 步 · 建议思考强度 ' +
-                      (EFFORT_NAME[f.effort] ?? f.effort)}
-                  </Text>
-                  <Text style={s.sub} numberOfLines={2}>
-                    {f.steps.join(' → ')}
+                  <Text style={s.flowPurpose}>
+                    {FLOW_PURPOSE[f.id] ?? '按你设定的步骤和输出格式生成分析。'}
                   </Text>
                 </View>
                 {!f.builtin ? (
-                  <Text
-                    style={s.act}
+                  <Pressable
+                    style={s.editButton}
+                    accessibilityRole="button"
+                    accessibilityLabel={'编辑' + f.name}
                     onPress={() =>
                       setEdit({ ...f, stepsText: f.steps.join('\n') })
                     }
                   >
-                    编辑
-                  </Text>
+                    <Text style={s.act}>编辑</Text>
+                  </Pressable>
                 ) : null}
               </View>
               {f.needsCode ? (
                 <TextInput
                   accessibilityLabel={f.name + ' 证券'}
                   placeholder="证券代码或名称，例如 600036"
-                  placeholderTextColor={color.ink3}
+                  placeholderTextColor={color.ink2}
                   style={[s.input, s.inputPad]}
                   value={subject[f.id] ?? ''}
                   onChangeText={v => setSubject({ ...subject, [f.id]: v })}
                 />
               ) : null}
-              <View style={s.btnRow}>
+              <View style={s.flowRun}>
                 <Button
-                  title="运行"
+                  title={'运行' + f.name}
                   tone="learn"
-                  small
+                  style={s.touchButton}
                   disabled={!!busy}
                   onPress={() => run(f)}
                 />
               </View>
-              {mine.length ? (
-                <View>
-                  <Text style={[s.label, s.inputPad]}>
-                    历次运行（点开对比）
+              <Details title="步骤与输出格式">
+                <Text style={s.sub}>
+                  {'建议思考强度：' + (EFFORT_NAME[f.effort] ?? f.effort)}
+                </Text>
+                {f.steps.map((step, i) => (
+                  <Text key={i} style={s.flowStep}>
+                    {i + 1 + '. ' + step}
                   </Text>
+                ))}
+                <Text style={s.flowTitle}>输出格式</Text>
+                <Text style={s.body}>{f.template}</Text>
+              </Details>
+              {mine.length ? (
+                <Details title={'运行记录 · ' + mine.length + ' 次'}>
                   {mine.slice(0, 5).map(r => (
                     <Pressable
                       key={r.at}
-                      style={({ pressed }) => [s.row, pressed && s.pressed]}
+                      style={({ pressed }) => [
+                        s.historyRow,
+                        pressed && s.pressed,
+                      ]}
                       accessibilityRole="button"
                       onPress={() => {
                         loadThread(core, r.threadId).catch(() => undefined);
                         nav.navigate('Ai');
                       }}
                     >
-                      <Text style={s.sub}>
+                      <Text style={[s.sub, s.grow]}>
                         {r.at.slice(0, 16).replace('T', ' ') +
-                          (r.subject ? ' · ' + r.subject : '') +
-                          ' ›'}
+                          (r.subject ? ' · ' + r.subject : '')}
                       </Text>
+                      <ChevronRight size={18} color={color.ink2} />
                     </Pressable>
                   ))}
-                </View>
+                </Details>
               ) : null}
             </View>
           );
         })}
       </ScrollView>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -525,7 +564,47 @@ const s = StyleSheet.create({
   grow: { flex: 1 },
   title: { fontSize: 15, lineHeight: 21, color: color.ink },
   body: { fontSize: 14, lineHeight: 20, color: color.ink, marginTop: 2 },
-  sub: { fontSize: 12, lineHeight: 17, color: color.ink3, marginTop: 2 },
+  sub: { fontSize: 12, lineHeight: 18, color: color.ink2, marginTop: 2 },
+  flowTitle: {
+    fontSize: 16,
+    lineHeight: 24,
+    fontWeight: '600',
+    color: color.ink,
+  },
+  flowPurpose: {
+    fontSize: 14,
+    lineHeight: 21,
+    color: color.ink2,
+    marginTop: 4,
+  },
+  flowStep: {
+    fontSize: 13,
+    lineHeight: 20,
+    color: color.ink2,
+    marginVertical: 4,
+  },
+  flowRun: {
+    alignItems: 'flex-end',
+    paddingHorizontal: PAD,
+    paddingTop: 12,
+    paddingBottom: 4,
+  },
+  headerButton: { minWidth: 48, minHeight: 48, height: 'auto' },
+  touchButton: { minHeight: 48, height: 'auto', paddingVertical: 12 },
+  editButton: {
+    minWidth: 48,
+    minHeight: 48,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  historyRow: {
+    minHeight: 48,
+    paddingVertical: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
   review: { fontSize: 13, lineHeight: 19, color: color.learn, marginTop: 4 },
   scores: { flexDirection: 'row', gap: 8, padding: 10 },
   score: { flex: 1, backgroundColor: color.card, borderRadius: 8, padding: 12 },
@@ -536,11 +615,24 @@ const s = StyleSheet.create({
     color: color.ink,
     fontWeight: '600',
   },
-  scoreMid: { fontSize: 18, lineHeight: 24, color: color.ink, marginTop: 6 },
+  scoreMid: { fontSize: 13, lineHeight: 20, color: color.ink, marginTop: 6 },
+  scoreEmpty: {
+    fontSize: 14,
+    lineHeight: 22,
+    color: color.ink,
+    marginVertical: 4,
+  },
   thin: { fontSize: 12, lineHeight: 17, color: color.warnInk, marginTop: 6 },
-  tabs: { flexDirection: 'row', paddingHorizontal: PAD, gap: 8, marginTop: 8 },
+  tabs: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    paddingHorizontal: PAD,
+    gap: 8,
+    marginTop: 8,
+  },
   tab: {
-    minHeight: 40,
+    minHeight: 48,
+    paddingVertical: 10,
     paddingHorizontal: 14,
     justifyContent: 'center',
     borderRadius: 20,
@@ -558,7 +650,7 @@ const s = StyleSheet.create({
   input: {
     marginHorizontal: PAD,
     marginTop: 6,
-    minHeight: 44,
+    minHeight: 48,
     borderWidth: 1,
     borderColor: color.line,
     borderRadius: 6,
@@ -572,6 +664,7 @@ const s = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'flex-end',
     gap: 10,
+    flexWrap: 'wrap',
     paddingHorizontal: PAD,
     marginTop: 10,
   },

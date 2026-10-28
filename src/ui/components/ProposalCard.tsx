@@ -4,7 +4,13 @@
  * 状态存在 ai_proposal 表里（不改发给模型的历史），这里按 id 现读。
  */
 import { useCallback, useEffect, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import {
+  Pressable,
+  StyleSheet,
+  Text,
+  useWindowDimensions,
+  View,
+} from 'react-native';
 import {
   decideProposal,
   executeProposal,
@@ -41,6 +47,10 @@ export function ProposalCard({
   onOpen: (route: string, params?: object) => void;
 }) {
   const core = useCore();
+  const { width, fontScale } = useWindowDimensions();
+  const compact = width / fontScale < 360;
+  const rowStyle = [s.row, compact && s.stackRow];
+  const valueStyle = [s.v, num, compact && s.stackValue];
   const version = useApp(st => st.version);
   const [p, setP] = useState<Proposal | null>(null);
   const [run, setRun] = useState<Rebalance | null>(null);
@@ -79,6 +89,7 @@ export function ProposalCard({
   const rebalance = p.kind === 'rebalance';
   const expired = p.accountId !== core.sim.accountId && p.status !== 'executed';
   const rows = run?.plan.rows ?? [];
+  const requestCount = rows.filter(r => r.request).length;
   const blocked = rows.filter(r => r.check && !r.check.ok);
   const fundsOnly =
     blocked.length > 0 &&
@@ -102,9 +113,9 @@ export function ProposalCard({
           PROPOSAL_STATUS_NAME[p.status]}
       </Text>
       {p.items.map(i => (
-        <View key={i.code} style={s.row}>
+        <View key={i.code} style={rowStyle}>
           <Text style={s.k}>{STANCE_NAME[i.stance] + ' ' + i.name}</Text>
-          <Text style={[s.v, num]}>
+          <Text style={valueStyle}>
             {[
               i.weight != null
                 ? (rebalance ? '目标 ' : '仓位 ') + pct(i.weight)
@@ -127,15 +138,11 @@ export function ProposalCard({
             ' 留现金'}
         </Text>
       ) : null}
-      <View style={s.row}>
-        <Text style={s.k}>期限</Text>
-        <Text style={[s.v, num]}>
-          {p.horizonDays +
-            ' 个交易日 · ' +
-            p.dueDate +
-            ' 对账 · 基准 ' +
-            p.benchmark}
+      <View style={s.meta}>
+        <Text style={[s.note, num]}>
+          {p.horizonDays + ' 个交易日 · ' + p.dueDate + ' 对账'}
         </Text>
+        <Text style={s.note}>{'基准 ' + p.benchmark}</Text>
       </View>
       <Text style={s.label}>理由</Text>
       <Text style={s.body}>{p.thesis}</Text>
@@ -166,20 +173,17 @@ export function ProposalCard({
       {rebalance && p.status === 'approved' && run ? (
         <View style={s.batch}>
           <Text style={s.batchTitle}>
-            {'批量操作卡 · ' +
-              rows.filter(r => r.request).length +
-              ' 笔委托 · 调仓计划 #' +
-              run.id}
+            {'批量操作卡 · ' + requestCount + ' 笔委托 · 调仓计划 #' + run.id}
           </Text>
           {rows.map(r => (
             <View key={r.code} style={s.batchRow}>
-              <View style={s.row}>
+              <View style={rowStyle}>
                 <Text style={s.k}>
                   {r.request
                     ? (r.request.side === 'B' ? '买入 ' : '卖出 ') + r.name
                     : r.name}
                 </Text>
-                <Text style={[s.v, num]}>
+                <Text style={valueStyle}>
                   {r.request
                     ? r.request.qty.toLocaleString('zh-CN') +
                       ' @' +
@@ -202,9 +206,9 @@ export function ProposalCard({
               ) : null}
             </View>
           ))}
-          <View style={s.row}>
+          <View style={rowStyle}>
             <Text style={s.k}>买入需冻结</Text>
-            <Text style={[s.v, num]}>
+            <Text style={valueStyle}>
               {formatFen(run.plan.buyNeed) +
                 ' / 可用 ' +
                 formatFen(run.plan.available) +
@@ -212,21 +216,25 @@ export function ProposalCard({
             </Text>
           </View>
           <Text style={s.note}>
-            {'按策略「' +
-              run.strategy.name +
-              '」v' +
-              run.strategy.version +
-              (run.strategy.retry === 'once'
-                ? ' 执行：9:25 未成交的买单 9:30 后按卖一价补报一次，14:50 撤销剩余。'
-                : ' 执行：不补单，14:50 撤销剩余。') +
-              '预检于 ' +
-              run.plan.date +
-              '。按上述限价和数量提交，执行时用最新行情校验；要改价或改量请重新预检。'}
+            {requestCount
+              ? '按策略「' +
+                run.strategy.name +
+                '」v' +
+                run.strategy.version +
+                (run.strategy.retry === 'once'
+                  ? ' 执行：9:25 未成交的买单 9:30 后按卖一价补报一次，14:50 撤销剩余。'
+                  : ' 执行：不补单，14:50 撤销剩余。') +
+                '预检于 ' +
+                run.plan.date +
+                '。按上述限价和数量提交，执行时用最新行情校验；要改价或改量请重新预检。'
+              : '预检于 ' + run.plan.date}
           </Text>
           <CheckBar
             ok={!blocked.length}
             text={
-              blocked.length
+              !requestCount
+                ? '本次无需提交委托'
+                : blocked.length
                 ? fundsOnly
                   ? '资金不够同时买：可以先卖后买（卖单成交后再报买单）'
                   : blocked.length + ' 笔不能提交，条件变了点「重新预检」'
@@ -247,8 +255,12 @@ export function ProposalCard({
                 <Button
                   style={s.btn}
                   tone="buy"
-                  title={fundsOnly ? '先卖后买' : '执行'}
-                  disabled={busy || (!!blocked.length && !fundsOnly)}
+                  title={
+                    !requestCount ? '无需执行' : fundsOnly ? '先卖后买' : '执行'
+                  }
+                  disabled={
+                    busy || !requestCount || (!!blocked.length && !fundsOnly)
+                  }
                   onPress={act(async () => {
                     try {
                       await executeProposal(
@@ -350,6 +362,9 @@ const s = StyleSheet.create({
     paddingVertical: 4,
     gap: 16,
   },
+  stackRow: { flexDirection: 'column', gap: 2 },
+  stackValue: { textAlign: 'left' },
+  meta: { marginTop: 6, marginBottom: 4 },
   k: { fontSize: 14, lineHeight: 22, color: c.secondary, flexShrink: 1 },
   v: {
     flexShrink: 1,

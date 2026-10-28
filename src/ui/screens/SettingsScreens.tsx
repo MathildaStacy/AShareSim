@@ -217,8 +217,7 @@ export function SettingsScreen() {
         <View style={s.card}>
           <SectionTitle title="风险限额" />
           <Text style={s.riskNote}>
-            在交易引擎的校验里执行：下单页、AI
-            操作卡和调仓预检都会拦下超限的买入，卖出不拦。现在：
+            仅限制买入，卖出不拦。当前：
             {riskText(risk)}
           </Text>
           <FieldRow
@@ -247,7 +246,7 @@ export function SettingsScreen() {
           <View style={s.btnRow}>
             <Button
               title="保存风险限额"
-              small
+              style={s.riskSave}
               tone="buy"
               disabled={!riskDirty}
               onPress={saveRisk}
@@ -504,10 +503,11 @@ export function PowerGuideScreen() {
 }
 
 const s = StyleSheet.create({
+  riskSave: { minHeight: 48, height: 'auto', paddingVertical: 12 },
   riskNote: {
     fontSize: 12,
     lineHeight: 18,
-    color: color.ink3,
+    color: color.ink2,
     paddingHorizontal: PAD,
     paddingBottom: 6,
   },
