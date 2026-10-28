@@ -247,12 +247,14 @@ export function Button({
   tone = 'ghost',
   small,
   disabled,
+  style,
 }: {
   title: string;
   onPress: () => void;
   tone?: 'ghost' | 'buy' | 'sell' | 'learn' | 'plain';
   small?: boolean;
   disabled?: boolean;
+  style?: StyleProp<ViewStyle>;
 }) {
   const bg =
     tone === 'buy'
@@ -269,10 +271,12 @@ export function Button({
     <Pressable
       onPress={onPress}
       disabled={disabled}
+      accessibilityState={{ disabled: !!disabled }}
       accessibilityRole="button"
       style={({ pressed }) => [
         s.btn,
         small && s.btnSm,
+        style,
         { backgroundColor: bg },
         tone === 'ghost' && s.btnGhost,
         (pressed || disabled) && { opacity: disabled ? 0.45 : 0.8 },

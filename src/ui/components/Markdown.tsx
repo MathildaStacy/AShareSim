@@ -102,8 +102,10 @@ function Table({
 export function Markdown({
   text,
   onLink,
+  secondary = false,
 }: {
   text: string;
+  secondary?: boolean;
   onLink: (href: string) => void;
 }) {
   const blocks = useMemo(() => parseMarkdown(text), [text]);
@@ -121,6 +123,7 @@ export function Markdown({
                   s.h,
                   b.level === 1 ? s.h1 : b.level === 2 ? s.h2 : s.h3,
                   i === 0 && s.firstHeading,
+                  secondary && s.secondary,
                 ]}
               >
                 <Inline inl={b.inl} onLink={onLink} />
@@ -145,7 +148,7 @@ export function Markdown({
                 >
                   {b.marker}
                 </Text>
-                <Text selectable style={s.liText}>
+                <Text selectable style={[s.liText, secondary && s.secondary]}>
                   <Inline inl={b.inl} onLink={onLink} />
                 </Text>
               </View>
@@ -170,7 +173,10 @@ export function Markdown({
           case 'quote':
             return (
               <View key={i} style={s.quote}>
-                <Text selectable style={s.quoteText}>
+                <Text
+                  selectable
+                  style={[s.quoteText, secondary && s.secondary]}
+                >
                   <Inline inl={b.inl} onLink={onLink} />
                 </Text>
               </View>
@@ -179,7 +185,7 @@ export function Markdown({
             return <View key={i} style={s.hr} />;
           default:
             return (
-              <Text key={i} selectable style={s.p}>
+              <Text key={i} selectable style={[s.p, secondary && s.secondary]}>
                 <Inline inl={b.inl} onLink={onLink} />
               </Text>
             );
@@ -191,6 +197,12 @@ export function Markdown({
 
 const mono = Platform.OS === 'ios' ? 'Menlo' : 'monospace';
 const s = StyleSheet.create({
+  secondary: {
+    fontSize: 13,
+    lineHeight: 20,
+    color: c.secondary,
+    marginBottom: 8,
+  },
   p: { fontSize: 16, lineHeight: 27, color: c.ink, marginBottom: 14 },
   h: { fontWeight: '600', color: c.ink, marginTop: 24, marginBottom: 10 },
   h1: { fontSize: 22, lineHeight: 32 },

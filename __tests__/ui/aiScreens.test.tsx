@@ -261,7 +261,7 @@ test('提问：回答、用到的工具、操作卡、执行；上下文条和�
   });
   const t = r.text();
   expect(t).toContain('帮我 42.30 买 100 股招商银行');
-  expect(t).toContain('附带：个股 · 招商银行');
+  expect(t).toContain('已附带上下文：页面 个股 · 招商银行');
   expect(t).toContain('操作卡 #1 · 买入 招商银行');
   expect(t).toContain('预校验：校验通过');
   expect(t).toContain('42.30 元');
@@ -320,7 +320,7 @@ test('navigate 预填：下单页的价格和数量、转账页的金额', async
   expect(ctxText()).toContain('输入金额：5000 元');
 });
 
-test('查询过程默认折叠、展开后可追溯，错误直接可见；向上读时提供回到最新入口', async () => {
+test('处理过程默认折叠、展开后可追溯，异常数量可见；向上读时提供回到最新入口', async () => {
   const r = await render('Ai', AiScreen);
   await act(async () => {
     useChat.setState({
@@ -348,12 +348,14 @@ test('查询过程默认折叠、展开后可追溯，错误直接可见；向�
       ],
     });
   });
-  expect(r.text()).toContain('已查询 1 项数据');
+  expect(r.text()).toContain('工具记录 2 项');
   expect(r.text()).not.toContain('读取 账户和持仓');
+  expect(r.text()).toContain('异常 1 项');
+  expect(r.text()).not.toContain('行情查询失败，请重试');
+  await r.press('处理过程');
   expect(r.text()).toContain('行情查询失败，请重试');
-  await r.press('查询详情');
   expect(r.text()).toContain('读取 账户和持仓');
-  await r.press('查询详情');
+  await r.press('处理过程');
   expect(r.text()).not.toContain('读取 账户和持仓');
   const list = r.tree.root.findAll(
     n => n.props.onScrollBeginDrag && n.props.onScroll,
@@ -370,6 +372,18 @@ test('查询过程默认折叠、展开后可追溯，错误直接可见；向�
   });
   expect(r.text()).toContain('回到最新回复');
   await r.press('回到最新回复');
+  expect(r.text()).not.toContain('回到最新回复');
+  // 收起明细导致原生滚动位置被夹到末尾，也应隐藏按钮，不依赖一次新的手势。
+  await act(async () => {
+    list.props.onScrollEndDrag();
+    list.props.onScroll({
+      nativeEvent: {
+        contentSize: { height: 1000 },
+        contentOffset: { y: 400 },
+        layoutMeasurement: { height: 600 },
+      },
+    });
+  });
   expect(r.text()).not.toContain('回到最新回复');
   await act(async () => {
     r.tree.unmount();
@@ -498,7 +512,7 @@ test('聊天模型、搜索、思考跟随对话；虚线搜索可引导选择�
   });
 });
 
-test('来源和正文编号可点击；隐藏思考保留可展开内容，历史费用使用回答时的价格', async () => {
+test('来源和正文编号可点击；隐藏原始思考且保留公开摘要，历史费用使用回答时的价格', async () => {
   const { Linking } = require('react-native');
   const open = jest.spyOn(Linking, 'openURL').mockResolvedValue(undefined);
   const r = await render('Ai', AiScreen);
@@ -510,11 +524,20 @@ test('来源和正文编号可点击；隐藏思考保留可展开内容，历�
           threadId: useChat.getState().threadId ?? 1,
           role: 'assistant',
           parts: [{ t: 'text', text: '建议持有。' }],
-          raw: null,
+          raw: {
+            protocol: 'openai',
+            model: 'test-model',
+            items: [
+              {
+                type: 'reasoning',
+                summary: [{ type: 'summary_text', text: '**公开处理摘要**' }],
+              },
+            ],
+          },
           compacted: false,
           createdAt: '',
           ui: {
-            thinking: '公开思考摘要',
+            thinking: '内部推理不可展示',
             price: {
               input: 1000,
               cacheRead: 100,
@@ -543,13 +566,15 @@ test('来源和正文编号可点击；隐藏思考保留可展开内容，历�
   });
   expect(r.text()).toContain('1 个来源');
   expect(r.text()).not.toContain('实际返回的公告');
-  expect(r.text()).not.toContain('公开思考摘要');
+  expect(r.text()).not.toContain('公开处理摘要');
   await r.press('查看来源');
   expect(r.text()).toContain('实际返回的公告');
   await r.press('用量详情');
   expect(r.text()).toContain('$0.0003');
-  await r.press('思考过程');
-  expect(r.text()).toContain('公开思考摘要');
+  await r.press('处理过程');
+  expect(r.text()).not.toContain('内部推理不可展示');
+  expect(r.text()).not.toContain('**公开处理摘要**');
+  expect(r.text()).toContain('公开处理摘要');
   const citation = r.tree.root.findAll(
     n =>
       n.props.accessibilityRole === 'link' &&
@@ -705,7 +730,7 @@ test('流式结束帧只有用量时，正文仍在屏幕上并能从历史重�
     await done;
   });
   expect(r.text()).toContain('你正在查看中证1000指数页面');
-  expect(r.text()).toContain('197 tokens');
+  expect(r.text()).toContain('197 词元');
   expect(r.text()).not.toContain('没有可显示的正文');
   const id = useChat.getState().threadId!;
   await act(async () => {
@@ -716,4 +741,71 @@ test('流式结束帧只有用量时，正文仍在屏幕上并能从历史重�
   await r.press('用量详情');
   expect(r.text()).toContain('缓存读 3,712');
   setAiDeps({ fetch: fetchMock });
+});
+
+test('流式更新跟随底部；拖动历史、展开过程和流式落库不抢走阅读位置', async () => {
+  const r = await render('Ai', AiScreen);
+  const { ScrollView } = require('react-native');
+  const list = r.tree.root
+    .findAllByType(ScrollView)
+    .find(n => n.props.onScrollBeginDrag)!;
+  const toEnd = list.instance.scrollToEnd as jest.Mock;
+  const sample = (id: number, text: string) => ({
+    id,
+    threadId: 5,
+    role: 'assistant' as const,
+    parts: [{ t: 'text' as const, text }],
+    raw: null,
+    compacted: false,
+    createdAt: '',
+    ui: { search: { queries: ['测试检索'], sources: [], citations: [] } },
+  });
+  await r.press('新对话');
+  await act(async () =>
+    useChat.setState({
+      busy: '正在回答',
+      messages: [
+        { ...sample(1, '提问'), role: 'user', ui: { question: '提问' } },
+        sample(-1, '第一段'),
+      ],
+    }),
+  );
+  toEnd.mockClear();
+  await act(async () => list.props.onContentSizeChange(400, 900));
+  expect(toEnd).toHaveBeenCalled();
+  await act(async () => {
+    list.props.onScrollBeginDrag();
+    list.props.onScroll({
+      nativeEvent: {
+        contentSize: { height: 2000 },
+        contentOffset: { y: 200 },
+        layoutMeasurement: { height: 600 },
+      },
+    });
+    list.props.onScrollEndDrag();
+  });
+  toEnd.mockClear();
+  await r.press('处理过程');
+  await act(async () => {
+    useChat.setState(state => ({
+      messages: [state.messages[0], sample(-1, '第一段\n\n第二段')],
+    }));
+  });
+  await act(async () => list.props.onContentSizeChange(400, 2100));
+  expect(toEnd).not.toHaveBeenCalled();
+  await act(async () =>
+    useChat.setState(state => ({
+      busy: null,
+      messages: [state.messages[0], sample(2, '第一段\n\n第二段')],
+    })),
+  );
+  await act(async () => list.props.onContentSizeChange(400, 2200));
+  expect(toEnd).not.toHaveBeenCalled();
+  expect(
+    r.tree.root.findAll(
+      n => n.props.accessibilityLabel === '处理过程' && n.props.onPress,
+    )[0].props.accessibilityState.expanded,
+  ).toBe(true);
+  await r.press('回到最新回复');
+  expect(toEnd).toHaveBeenCalledWith({ animated: true });
 });

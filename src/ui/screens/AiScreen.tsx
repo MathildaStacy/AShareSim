@@ -12,17 +12,14 @@ import {
   SquarePen,
   Share2,
   Brain,
-  Check,
   ChevronDown,
-  ChevronUp,
   Globe,
   Menu,
   Square,
-  X,
 } from 'lucide-react-native';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
+  Keyboard,
   KeyboardAvoidingView,
   Linking,
   Modal,
@@ -34,6 +31,7 @@ import {
   Text,
   TextInput,
   View,
+  useWindowDimensions,
   type ScrollViewInstance,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -85,7 +83,8 @@ import {
   SearchUnavailable,
 } from '../components/AiOptions';
 import { Markdown } from '../components/Markdown';
-import { Button, IconButton } from '../components/ui';
+import { ChatProcess, conversationTurns } from '../components/ChatProcess';
+import { Button } from '../components/ui';
 import { useCore } from '../hooks';
 import type { RootStackParamList } from '../navigation/types';
 import { color, num } from '../theme';
@@ -107,7 +106,7 @@ export function usageText(
     u.cacheReported
       ? '缓存读 ' + fmtInt(u.cacheRead) + ' · 写 ' + fmtInt(u.cacheWrite)
       : '该服务没有报告缓存数据',
-    '输出 ' + fmtInt(u.output) + ' tokens',
+    '输出 ' + fmtInt(u.output) + ' 词元',
   ];
   if (svc?.price) {
     parts.push(
@@ -156,10 +155,26 @@ export function AiScreen() {
   } | null>(null);
   const scroll = useRef<ScrollViewInstance>(null);
   const scrollKey = useRef('');
+  const viewport = useRef({ height: 0, offset: 0 });
   const followEnd = useRef(true);
   const userScrolling = useRef(false);
   const [atEnd, setAtEnd] = useState(true);
-  const [composerHeight, setComposerHeight] = useState(120);
+  const [keyboardVisible, setKeyboardVisible] = useState(false);
+  const { width, fontScale } = useWindowDimensions();
+  const stackedControls = width < 360 || fontScale > 1.2;
+  useEffect(() => {
+    const show = Keyboard.addListener('keyboardDidShow', () =>
+      setKeyboardVisible(true),
+    );
+    const hide = Keyboard.addListener('keyboardDidHide', () =>
+      setKeyboardVisible(false),
+    );
+    return () => {
+      show.remove();
+      hide.remove();
+    };
+  }, []);
+  const bottomInset = keyboardVisible ? 8 : Math.max(insets.bottom, 8);
   const page = source ? source.get() : null;
   const pageName = page?.name ?? null;
 
@@ -332,6 +347,7 @@ export function AiScreen() {
       : null;
   };
   const live = useMemo(() => messages.filter(m => !m.compacted), [messages]);
+  const turns = useMemo(() => conversationTurns(live), [live]);
   const tail = live[live.length - 1];
   const scrollVersion = [
     thread?.id,
@@ -350,16 +366,21 @@ export function AiScreen() {
     >
       <View style={[s.header, { paddingTop: insets.top }]}>
         <View style={s.headerRow}>
-          <IconButton label="返回" onPress={() => nav.goBack()}>
+          <Pressable
+            style={s.headerButton}
+            accessibilityRole="button"
+            accessibilityLabel="返回"
+            onPress={() => nav.goBack()}
+          >
             <ChevronLeft size={23} color={c.ink} />
-          </IconButton>
+          </Pressable>
           <Pressable
             style={s.headerTitle}
             onPress={() => nav.navigate('AiContext')}
             accessibilityRole="button"
             accessibilityLabel="查看上下文"
             accessibilityHint={
-              '页面：' +
+              '来源页面：' +
               (pageName ?? '无') +
               '，操作 ' +
               actCount +
@@ -369,7 +390,7 @@ export function AiScreen() {
               (est
                 ? '，预计 ' +
                   fmtInt(est.total + qTokens) +
-                  ' tokens，缓存 ' +
+                  ' 词元，缓存 ' +
                   fmtInt(est.cached)
                 : '')
             }
@@ -378,10 +399,11 @@ export function AiScreen() {
               {thread?.title ?? 'AI 助手'}
             </Text>
             <View style={s.headerMeta}>
-              <Text style={s.ctxText} numberOfLines={1}>
-                {(pageName ?? '上下文') +
+              <Text style={s.ctxText}>
+                {'来源页面：' +
+                  (pageName ?? '无页面') +
                   (est && svc
-                    ? ' · ' + ((est.total + qTokens) / 1000).toFixed(1) + 'k'
+                    ? ' · 预计输入 ' + fmtInt(est.total + qTokens) + ' 词元'
                     : '')}
               </Text>
               <ChevronDown size={12} color={c.secondary} />
@@ -405,9 +427,14 @@ export function AiScreen() {
           >
             <SquarePen size={20} color={busy ? c.muted : c.ink} />
           </Pressable>
-          <IconButton label="AI 菜单" onPress={() => setMenu(true)}>
+          <Pressable
+            style={s.headerButton}
+            accessibilityRole="button"
+            accessibilityLabel="AI 菜单"
+            onPress={() => setMenu(true)}
+          >
             <Menu color={c.ink} size={21} />
-          </IconButton>
+          </Pressable>
         </View>
       </View>
       <ScrollView
@@ -415,38 +442,58 @@ export function AiScreen() {
         style={s.list}
         contentContainerStyle={s.listPad}
         keyboardDismissMode="on-drag"
-        onLayout={() => {
+        onLayout={event => {
+          viewport.current.height = event.nativeEvent.layout.height;
           if (followEnd.current) {
-            requestAnimationFrame(() =>
-              scroll.current?.scrollToEnd({ animated: false }),
-            );
+            requestAnimationFrame(() => {
+              if (followEnd.current && !userScrolling.current) {
+                scroll.current?.scrollToEnd({ animated: false });
+              }
+            });
           }
         }}
-        onContentSizeChange={() => {
+        onContentSizeChange={(_width, height) => {
+          if (viewport.current.height > 0) {
+            setAtEnd(
+              height - viewport.current.offset - viewport.current.height < 60,
+            );
+          }
           // 只跟随新消息和新增正文；展开查询、操作卡重排时保留阅读位置。
           if (scrollKey.current === scrollVersion) {
             return;
           }
           scrollKey.current = scrollVersion;
-          if (followEnd.current) {
-            userScrolling.current = false;
+          if (followEnd.current && !userScrolling.current) {
             scroll.current?.scrollToEnd({ animated: false });
           }
         }}
         onScroll={({ nativeEvent: e }) => {
-          if (!userScrolling.current) {
-            return;
-          }
+          viewport.current = {
+            height: e.layoutMeasurement.height,
+            offset: e.contentOffset.y,
+          };
           const nearEnd =
             e.contentSize.height -
               e.contentOffset.y -
               e.layoutMeasurement.height <
             60;
-          followEnd.current = nearEnd;
+          if (userScrolling.current) {
+            followEnd.current = nearEnd;
+          }
           setAtEnd(nearEnd);
         }}
         onScrollBeginDrag={() => {
           userScrolling.current = true;
+          followEnd.current = false;
+        }}
+        onScrollEndDrag={() => {
+          userScrolling.current = false;
+        }}
+        onMomentumScrollBegin={() => {
+          userScrolling.current = true;
+        }}
+        onMomentumScrollEnd={() => {
+          userScrolling.current = false;
         }}
         scrollEventThrottle={32}
         keyboardShouldPersistTaps="handled"
@@ -455,6 +502,7 @@ export function AiScreen() {
           <View style={s.setup}>
             <View style={s.setupBtn}>
               <Button
+                style={s.actionButton}
                 title="配置供应商与模型"
                 tone="learn"
                 onPress={() => nav.navigate('AiServices')}
@@ -488,73 +536,87 @@ export function AiScreen() {
             {'较早的 ' + thread.compactedCount + ' 条消息已压缩成摘要'}
           </Text>
         ) : null}
-        {live.map((m, i) => (
-          <MessageView
-            key={m.id}
-            m={m}
-            last={i === live.length - 1 || live[i + 1].role === 'user'}
-            usage={
-              !(
-                busy && !live.slice(i + 1).some(next => next.role === 'user')
-              ) &&
-              m.role !== 'user' &&
-              (i === live.length - 1 || live[i + 1].role === 'user')
-                ? answerUsage(live, firstOfAnswer(live, i))
-                : null
-            }
-            svc={messageService(m)}
-            accountId={core.sim.accountId}
-            onLink={onLink}
-            onSearch={q => retrySearch(q).catch(e => setError(String(e)))}
-            searchBusy={!!busy}
-            onCard={(toolId, act) =>
-              act === 'run'
-                ? runCard(core, m.id, toolId)
-                : cancelCard(core, m.id, toolId)
-            }
-            onMemory={(toolId, act) => memoryAction(core, m.id, toolId, act)}
-            onNav={n =>
-              (nav.navigate as (r: string, p?: object) => void)(
-                TAB_ROUTES.has(n.route) ? 'Tabs' : n.route,
-                TAB_ROUTES.has(n.route) ? { screen: n.route } : n.params,
-              )
-            }
-          />
-        ))}
-        {busy ? (
-          <View style={s.busy}>
-            <ActivityIndicator color={c.accent} size="small" />
-            <Text style={s.busyText}>{busy}</Text>
+        {turns.map((turn, turnIndex) => (
+          <View key={turn.key} style={s.turn}>
+            {(() => {
+              const renderMessage = (m: StoredMessage) => (
+                <MessageView
+                  m={m}
+                  usage={
+                    m.role !== 'user' &&
+                    m === turn.answer[turn.answer.length - 1] &&
+                    !(busy && turnIndex === turns.length - 1)
+                      ? answerUsage(turn.answer, 0)
+                      : null
+                  }
+                  svc={messageService(m)}
+                  accountId={core.sim.accountId}
+                  onLink={onLink}
+                  onSearch={q => retrySearch(q).catch(e => setError(String(e)))}
+                  searchBusy={!!busy}
+                  onCard={(toolId, act) =>
+                    act === 'run'
+                      ? runCard(core, m.id, toolId)
+                      : cancelCard(core, m.id, toolId)
+                  }
+                  onMemory={(toolId, act) =>
+                    memoryAction(core, m.id, toolId, act)
+                  }
+                  onNav={n =>
+                    (nav.navigate as (r: string, p?: object) => void)(
+                      TAB_ROUTES.has(n.route) ? 'Tabs' : n.route,
+                      TAB_ROUTES.has(n.route) ? { screen: n.route } : n.params,
+                    )
+                  }
+                />
+              );
+              return (
+                <>
+                  {turn.question ? renderMessage(turn.question) : null}
+                  <ChatProcess
+                    messages={turn.answer}
+                    onInteract={() => {
+                      followEnd.current = false;
+                    }}
+                    busy={turnIndex === turns.length - 1 ? busy : null}
+                    onLink={onLink}
+                  />
+                  {turn.answer.map((m, i) => (
+                    <View key={i}>{renderMessage(m)}</View>
+                  ))}
+                </>
+              );
+            })()}
           </View>
+        ))}
+        {!turns.length && busy ? (
+          <ChatProcess messages={[]} busy={busy} onLink={onLink} />
         ) : null}
         {error ? <Text style={s.error}>{error}</Text> : null}
       </ScrollView>
-      {!atEnd && live.length ? (
-        <Pressable
-          style={[s.latest, { bottom: composerHeight + 10 }]}
-          accessibilityRole="button"
-          accessibilityLabel="回到最新回复"
-          onPress={() => {
-            followEnd.current = true;
-            userScrolling.current = false;
-            setAtEnd(true);
-            scroll.current?.scrollToEnd({ animated: true });
-          }}
-        >
-          <ChevronDown size={19} color={c.secondary} />
-        </Pressable>
-      ) : null}
-      <View
-        style={[s.bottom, { paddingBottom: Math.max(insets.bottom, 8) }]}
-        onLayout={e => setComposerHeight(e.nativeEvent.layout.height)}
-      >
+      <View style={[s.bottom, { paddingBottom: bottomInset }]}>
+        {!atEnd && live.length ? (
+          <Pressable
+            style={s.latest}
+            accessibilityRole="button"
+            accessibilityLabel="回到最新回复"
+            onPress={() => {
+              followEnd.current = true;
+              userScrolling.current = false;
+              setAtEnd(true);
+              scroll.current?.scrollToEnd({ animated: true });
+            }}
+          >
+            <ChevronDown size={19} color={c.secondary} />
+          </Pressable>
+        ) : null}
         {rebuild && !busy ? (
           <View style={s.cacheWarning}>
             <Text style={s.cacheText}>
               {rebuild.reason +
                 '：下次预计重建约 ' +
                 fmtInt(rebuild.tokens) +
-                ' tokens 的缓存'}
+                ' 词元的缓存'}
             </Text>
             <Pressable
               style={s.revert}
@@ -584,18 +646,23 @@ export function AiScreen() {
             placeholderTextColor={c.muted}
             style={s.input}
             multiline
-            hitSlop={4}
+            hitSlop={8}
             textAlignVertical="top"
             selectionColor={c.accent}
             editable={!!svc}
             accessibilityLabel="问 AI"
           />
-          <View style={s.toolbar}>
+          <View style={[s.toolbar, stackedControls && s.toolbarWrap]}>
             <Pressable
-              style={[s.control, s.modelControl]}
+              style={[
+                s.control,
+                s.modelControl,
+                stackedControls && s.modelFull,
+              ]}
               onPress={() => setSheet('model')}
               disabled={!!busy}
               accessibilityLabel="选择模型"
+              accessibilityState={{ disabled: !!busy }}
               accessibilityValue={{ text: svc?.model ?? '未选择' }}
               accessibilityRole="button"
             >
@@ -610,7 +677,17 @@ export function AiScreen() {
               disabled={!!busy || !svc}
               accessibilityRole="button"
               accessibilityLabel="联网搜索"
-              accessibilityState={{ selected: config?.search ?? false }}
+              accessibilityState={{
+                selected: config?.search ?? false,
+                disabled: !!busy || !svc,
+              }}
+              accessibilityValue={{
+                text: !availability.ok
+                  ? '当前模型不可用'
+                  : config?.search
+                  ? '已开启'
+                  : '已关闭',
+              }}
             >
               <View
                 style={[
@@ -623,7 +700,9 @@ export function AiScreen() {
                   color={config?.search ? c.accent : c.secondary}
                 />
               </View>
-              {config?.search ? <View style={s.searchDot} /> : null}
+              <Text style={s.controlText}>
+                {config?.search ? '联网开' : '联网关'}
+              </Text>
             </Pressable>
             <Pressable
               style={s.control}
@@ -631,21 +710,26 @@ export function AiScreen() {
               disabled={!!busy || !svc}
               accessibilityRole="button"
               accessibilityLabel="思考强度"
+              accessibilityState={{
+                selected: !!config && config.effort !== 'off',
+                disabled: !!busy || !svc,
+              }}
               accessibilityValue={{
                 text: config ? EFFORT_NAME[config.effort] : '未选择',
               }}
             >
               <Brain size={19} color={c.secondary} />
               <Text style={s.controlText}>
-                {config ? EFFORT_NAME[config.effort] : ''}
+                {'思考' + (config ? EFFORT_NAME[config.effort] : '未选')}
               </Text>
             </Pressable>
             <Pressable
-              style={[s.send]}
+              style={[s.send, stackedControls && s.sendEnd]}
               onPress={busy ? stop : () => send(text)}
               disabled={!busy && (!text.trim() || !svc)}
               accessibilityRole="button"
               accessibilityLabel={busy ? '停止' : '发送'}
+              accessibilityState={{ disabled: !busy && (!text.trim() || !svc) }}
             >
               <View
                 style={[
@@ -726,15 +810,6 @@ export function AiScreen() {
   );
 }
 
-/** 第 i 条所在的回答从哪条开始（提问之后的第一条）。 */
-function firstOfAnswer(msgs: StoredMessage[], i: number): number {
-  let k = i;
-  while (k > 0 && msgs[k - 1].role !== 'user') {
-    k--;
-  }
-  return k;
-}
-
 function MessageView({
   m,
   usage,
@@ -748,7 +823,6 @@ function MessageView({
   searchBusy,
 }: {
   m: StoredMessage;
-  last: boolean;
   usage: Usage | null;
   svc: AiService | null;
   accountId: number;
@@ -759,10 +833,7 @@ function MessageView({
   onSearch: (q: string) => void;
   searchBusy: boolean;
 }) {
-  const [showQueries, setShowQueries] = useState(false);
   const [showSources, setShowSources] = useState(false);
-  const [showThinking, setShowThinking] = useState(false),
-    [showSearch, setShowSearch] = useState(false);
   if (m.role === 'user') {
     const ui = m.ui ?? {};
     return (
@@ -780,146 +851,68 @@ function MessageView({
               {ui.question}
             </Text>
           </View>
-          <Text style={s.attach}>
-            {'附带：' +
-              (ui.page ?? '没有页面') +
-              ' · ' +
-              (ui.actions ?? 0) +
-              ' 条操作'}
-          </Text>
+          {ui.page !== undefined || ui.actions !== undefined ? (
+            <Text style={s.attach}>
+              {'已附带上下文：' +
+                [
+                  ui.page
+                    ? '页面 ' + ui.page
+                    : ui.page === null
+                    ? '未附带页面'
+                    : '',
+                  ui.actions !== undefined
+                    ? '最近操作记录 ' + ui.actions + ' 条'
+                    : '',
+                ]
+                  .filter(Boolean)
+                  .join(' · ')}
+            </Text>
+          ) : null}
         </View>
       </View>
     );
   }
   if (m.role === 'tool') {
     const tools = m.ui?.tools ?? [];
-    const isQuery = (t: ToolUi) => !t.card && !t.memory && !t.nav && !t.error;
-    const queries = tools.filter(isQuery);
+    const visibleTools = tools.filter(t => t.card || t.memory || t.nav);
+    if (!visibleTools.length && !usage) {
+      return null;
+    }
     return (
       <View style={s.toolBlock}>
-        {queries.length ? (
-          <Pressable
-            style={s.toolSummary}
-            accessibilityRole="button"
-            accessibilityLabel="查询详情"
-            accessibilityState={{ expanded: showQueries }}
-            onPress={() => setShowQueries(v => !v)}
-          >
-            <Check size={14} color={c.secondary} />
-            <Text style={s.toolSummaryText}>
-              {'已查询 ' + queries.length + ' 项数据'}
-            </Text>
-            {showQueries ? (
-              <ChevronUp size={15} color={color.ink2} />
-            ) : (
-              <ChevronDown size={15} color={color.ink2} />
-            )}
-          </Pressable>
-        ) : null}
-        {tools
-          .filter(t => showQueries || !isQuery(t))
-          .map(t => (
-            <View key={t.id}>
-              {t.card ? (
-                <CardView
-                  card={t.card}
-                  expired={t.card.accountId !== accountId}
-                  onRun={() => onCard(t.id, 'run')}
-                  onCancel={() => onCard(t.id, 'cancel')}
-                  onLesson={id => onLink('lesson:' + id)}
-                />
-              ) : t.memory ? (
-                <MemoryView mm={t.memory} onAct={a => onMemory(t.id, a)} />
-              ) : t.nav ? (
-                <Pressable
-                  onPress={() => onNav(t.nav!)}
-                  accessibilityRole="button"
-                >
-                  <Text style={s.tool}>{'↗ ' + t.label}</Text>
-                </Pressable>
-              ) : (
-                <View style={s.toolLine}>
-                  {t.error ? (
-                    <X size={15} color={color.up} />
-                  ) : (
-                    <Check size={14} color={c.secondary} />
-                  )}
-                  <Text style={[s.tool, s.toolLabel, t.error && s.toolBad]}>
-                    {t.label}
-                  </Text>
-                </View>
-              )}
-            </View>
-          ))}
+        {visibleTools.map(t => (
+          <View key={t.id}>
+            {t.card ? (
+              <CardView
+                card={t.card}
+                expired={t.card.accountId !== accountId}
+                onRun={() => onCard(t.id, 'run')}
+                onCancel={() => onCard(t.id, 'cancel')}
+                onLesson={id => onLink('lesson:' + id)}
+              />
+            ) : t.memory ? (
+              <MemoryView mm={t.memory} onAct={a => onMemory(t.id, a)} />
+            ) : t.nav ? (
+              <Pressable
+                style={s.navAction}
+                onPress={() => onNav(t.nav!)}
+                accessibilityRole="button"
+              >
+                <Text style={s.tool}>{'↗ ' + t.label}</Text>
+              </Pressable>
+            ) : null}
+          </View>
+        ))}
         {usage ? <AnswerDetails m={m} usage={usage} svc={svc} text="" /> : null}
       </View>
     );
   }
   const text = m.parts.map(p => (p.t === 'text' ? p.text : '')).join('\n');
-  if (
-    !text &&
-    !m.ui?.thinking &&
-    !m.ui?.search &&
-    !m.ui?.notice &&
-    !m.ui?.error &&
-    !usage
-  ) {
+  if (!text && !m.ui?.notice && !m.ui?.error && !usage) {
     return null;
   }
   return (
     <View style={s.aiBlock}>
-      {m.ui?.thinking ? (
-        <>
-          <Pressable
-            style={s.toolSummary}
-            onPress={() => setShowThinking(v => !v)}
-            accessibilityRole="button"
-            accessibilityLabel="思考过程"
-            accessibilityState={{ expanded: showThinking }}
-          >
-            <Brain size={14} color={c.secondary} />
-            <Text style={s.toolSummaryText}>
-              {m.id === -1 ? '正在思考' : '思考摘要'}
-            </Text>
-            <ChevronDown size={14} color={color.ink2} />
-          </Pressable>
-          {showThinking ? (
-            <Text style={s.thinking} selectable>
-              {m.ui.thinking}
-            </Text>
-          ) : null}
-        </>
-      ) : null}
-      {m.ui?.search ? (
-        <>
-          <Pressable
-            style={s.toolSummary}
-            onPress={() => setShowSearch(v => !v)}
-            accessibilityRole="button"
-            accessibilityLabel="搜索详情"
-            accessibilityState={{ expanded: showSearch }}
-          >
-            <Globe size={14} color={c.secondary} />
-            <Text style={s.toolSummaryText}>
-              {(m.ui.search.queries.length
-                ? '搜索 ' + m.ui.search.queries.length + ' 个查询 · '
-                : '') +
-                m.ui.search.sources.length +
-                ' 个网页'}
-            </Text>
-            <ChevronDown size={14} color={color.ink2} />
-          </Pressable>
-          {showSearch ? (
-            <View>
-              <Text style={s.thinking}>
-                {m.ui.search.queries.length
-                  ? m.ui.search.queries.map(q => '搜索：' + q).join('\n')
-                  : '供应商未返回搜索词'}
-              </Text>
-            </View>
-          ) : null}
-        </>
-      ) : null}
       {text ? (
         <Markdown
           text={citedText(text, m.ui?.search)}
@@ -1010,8 +1003,9 @@ function AnswerDetails({
         >
           <Text style={[s.detailsText, num]} numberOfLines={1}>
             {(model ? prettyModel(model) + ' · ' : '') +
+              '输出 ' +
               fmtInt(usage.output) +
-              ' tokens'}
+              ' 词元'}
           </Text>
           <ChevronDown size={13} color={c.muted} />
         </Pressable>
@@ -1094,18 +1088,24 @@ function CardView({
         <CheckBar ok={card.check.ok} text={'预校验：' + card.check.text} />
       </View>
       {card.check.lesson ? (
-        <Text style={s.cardLink} onPress={() => onLesson(card.check.lesson!)}>
-          看规则课 ›
-        </Text>
+        <Pressable
+          style={s.navAction}
+          onPress={() => onLesson(card.check.lesson!)}
+          accessibilityRole="button"
+          accessibilityLabel="查看规则课"
+        >
+          <Text style={s.cardLink}>看规则课 ›</Text>
+        </Pressable>
       ) : null}
       {card.note ? <Text style={s.cardNote}>{card.note}</Text> : null}
       {pending ? (
         <View style={s.cardBtns}>
           <View style={s.grow}>
-            <Button title="取消" onPress={onCancel} />
+            <Button style={s.actionButton} title="取消" onPress={onCancel} />
           </View>
           <View style={s.grow}>
             <Button
+              style={s.actionButton}
               title="执行"
               tone={
                 card.tool === 'place_order' && card.title.startsWith('卖出')
@@ -1168,18 +1168,27 @@ function MemoryView({
       <Text style={s.memText}>{'🧠 ' + head + what}</Text>
       {mm.status === 'pending' ? (
         <View style={s.memBtns}>
-          <Button small title="不用" onPress={() => onAct('decline')} />
           <Button
-            small
+            style={s.actionButton}
+            title="不用"
+            onPress={() => onAct('decline')}
+          />
+          <Button
+            style={s.actionButton}
             tone="learn"
             title={mm.op === 'add' ? '记住' : '忘记'}
             onPress={() => onAct('confirm')}
           />
         </View>
       ) : mm.status === 'done' ? (
-        <Text style={s.memUndo} onPress={() => onAct('undo')}>
-          撤销
-        </Text>
+        <Pressable
+          style={s.memUndo}
+          onPress={() => onAct('undo')}
+          accessibilityRole="button"
+          accessibilityLabel="撤销记忆变更"
+        >
+          <Text style={s.tool}>撤销</Text>
+        </Pressable>
       ) : null}
     </View>
   );
@@ -1235,6 +1244,12 @@ function AiMenu({
 
 const s = StyleSheet.create({
   page: { flex: 1, backgroundColor: c.page },
+  actionButton: {
+    minHeight: 48,
+    minWidth: 48,
+    height: 'auto',
+    paddingVertical: 12,
+  },
   header: { paddingHorizontal: 6, backgroundColor: c.page },
   headerRow: { flexDirection: 'row', alignItems: 'center', minHeight: 62 },
   headerButton: {
@@ -1260,9 +1275,10 @@ const s = StyleSheet.create({
   ctxText: { fontSize: 12, lineHeight: 18, color: c.secondary, flexShrink: 1 },
   list: { flex: 1 },
   listPad: {
-    paddingHorizontal: 20,
+    paddingHorizontal: 16,
     paddingTop: 16,
-    paddingBottom: 28,
+    // 输入区在正常 flex 布局内，列表高度已扣除它；只留阅读间距，避免重复占位。
+    paddingBottom: 16,
     maxWidth: 760,
     width: '100%',
     alignSelf: 'center',
@@ -1315,7 +1331,8 @@ const s = StyleSheet.create({
     flexShrink: 1,
     textAlign: 'center',
   },
-  userWrap: { alignItems: 'flex-end', marginTop: 8, marginBottom: 24 },
+  turn: { marginBottom: 16 },
+  userWrap: { alignItems: 'flex-end', marginTop: 8, marginBottom: 16 },
   userBubble: {
     maxWidth: '92%',
     backgroundColor: c.user,
@@ -1325,16 +1342,9 @@ const s = StyleSheet.create({
   },
   userText: { color: c.ink, fontSize: 16, lineHeight: 26 },
   attach: { fontSize: 11, lineHeight: 17, color: c.muted, marginTop: 6 },
-  aiBlock: { padding: 0, marginBottom: 20 },
+  aiBlock: { padding: 0, marginBottom: 8 },
   toolBlock: { marginBottom: 8 },
   tool: { fontSize: 13, lineHeight: 21, color: c.secondary, marginBottom: 6 },
-  toolLine: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 8,
-    paddingVertical: 3,
-  },
-  toolLabel: { flex: 1 },
   toolSummary: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1351,8 +1361,8 @@ const s = StyleSheet.create({
   },
   latest: {
     position: 'absolute',
-    left: '50%',
-    marginLeft: -24,
+    right: 16,
+    top: -56,
     width: 48,
     height: 48,
     alignItems: 'center',
@@ -1363,7 +1373,6 @@ const s = StyleSheet.create({
     borderColor: c.line,
     zIndex: 2,
   },
-  toolBad: { color: color.up },
   answerActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   detailsToggle: {
     flexDirection: 'row',
@@ -1394,13 +1403,6 @@ const s = StyleSheet.create({
     marginBottom: 6,
   },
   error: { fontSize: 14, lineHeight: 22, color: color.up, marginVertical: 8 },
-  busy: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 12,
-    gap: 10,
-  },
-  busyText: { fontSize: 13, lineHeight: 21, color: c.secondary, flex: 1 },
   card: {
     borderWidth: 1,
     borderColor: c.line,
@@ -1458,13 +1460,12 @@ const s = StyleSheet.create({
     gap: 10,
   },
   memText: { flex: 1, fontSize: 13, lineHeight: 21, color: c.secondary },
-  memBtns: { flexDirection: 'row', gap: 8 },
+  memBtns: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   memUndo: {
-    fontSize: 13,
-    color: c.ink,
-    paddingHorizontal: 4,
+    minWidth: 48,
     minHeight: 48,
-    textAlignVertical: 'center',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   bottom: {
     backgroundColor: c.page,
@@ -1482,15 +1483,19 @@ const s = StyleSheet.create({
     backgroundColor: c.paper,
   },
   input: {
-    minHeight: 40,
+    minHeight: 36,
     maxHeight: 132,
     paddingHorizontal: 10,
-    paddingVertical: 7,
+    paddingVertical: 6,
     fontSize: 16,
     lineHeight: 24,
     color: c.ink,
   },
-  toolbar: { flexDirection: 'row', alignItems: 'center', gap: 2 },
+  toolbar: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  toolbarWrap: { flexWrap: 'wrap' },
+  modelFull: { flexBasis: '100%' },
+  sendEnd: { marginLeft: 'auto' },
+  navAction: { minHeight: 48, justifyContent: 'center' },
   control: {
     minHeight: 48,
     minWidth: 48,
@@ -1525,15 +1530,6 @@ const s = StyleSheet.create({
     borderStyle: 'dashed',
     borderRadius: 14,
   },
-  searchDot: {
-    position: 'absolute',
-    right: 10,
-    top: 9,
-    width: 4,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: c.accent,
-  },
   linkText: { fontSize: 13, lineHeight: 21, color: c.ink },
   send: {
     width: 48,
@@ -1567,15 +1563,6 @@ const s = StyleSheet.create({
     alignItems: 'center',
   },
   revertText: { fontSize: 12, fontWeight: '600', color: color.warnInk },
-  thinking: {
-    fontSize: 14,
-    lineHeight: 23,
-    color: c.secondary,
-    backgroundColor: c.soft,
-    padding: 14,
-    borderRadius: 12,
-    marginBottom: 12,
-  },
   sources: { marginBottom: 4 },
   source: { minHeight: 48, justifyContent: 'center', paddingVertical: 8 },
   sourceText: {
