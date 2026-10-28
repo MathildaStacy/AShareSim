@@ -16,7 +16,7 @@ import type {
 } from './types';
 import { evidenceOf } from './evidence';
 import { contentText, normalizeResponseItem } from './messageText';
-import { searchMethod } from './models';
+import { anthropicSearchType, searchMethod } from './models';
 
 export interface ToolDef {
   name: string;
@@ -200,7 +200,13 @@ function anthropicBody(input: RequestInput): Record<string, unknown> {
     ...cc,
     tools: [
       ...(input.service.search && !input.noTools
-        ? [{ type: 'web_search_20250305', name: 'web_search', max_uses: 3 }]
+        ? [
+            {
+              type: anthropicSearchType(input.service.model),
+              name: 'web_search',
+              max_uses: 3,
+            },
+          ]
         : []),
       ...input.tools.map(t => ({
         name: t.name,
@@ -492,7 +498,14 @@ export function headersOf(
 
 // ---------- 响应 ----------
 
-export type Stop = 'end' | 'tool' | 'max_tokens' | 'refusal' | 'other';
+/** pause：Anthropic 服务端工具一轮跑太久（pause_turn），原样追加后再请求一次就能接着跑（§13.1）。 */
+export type Stop =
+  | 'end'
+  | 'tool'
+  | 'pause'
+  | 'max_tokens'
+  | 'refusal'
+  | 'other';
 
 export interface ParsedResponse {
   parts: Part[];
@@ -614,6 +627,8 @@ function parseAnthropic(model: string, json: any): ParsedResponse {
   const stop: Stop =
     json.stop_reason === 'tool_use'
       ? 'tool'
+      : json.stop_reason === 'pause_turn'
+      ? 'pause'
       : json.stop_reason === 'max_tokens'
       ? 'max_tokens'
       : json.stop_reason === 'refusal'

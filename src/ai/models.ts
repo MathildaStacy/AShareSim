@@ -300,6 +300,18 @@ export type SearchMethod =
   | 'openrouter'
   | 'chat-options'
   | null;
+/**
+ * Anthropic 联网搜索工具的版本（AI_ASSISTANT §13.1）：带动态过滤的新版只在这些模型上有；
+ * 更早的模型和认不出的中转模型名用基础版。
+ */
+export function anthropicSearchType(model: string): string {
+  return /^claude-(?:opus-(?:5-5|5|4-8|4-7|4-6)|sonnet-(?:5-5|5|4-6))(?:-|$)/.test(
+    bareModel(model),
+  )
+    ? 'web_search_20260209'
+    : 'web_search_20250305';
+}
+
 export function searchMethod(
   p: Pick<AiProvider, 'kind' | 'protocol'>,
 ): SearchMethod {
@@ -382,7 +394,8 @@ export const sameConfig = (
   a.providerId === b.providerId &&
   a.model === b.model &&
   a.effort === b.effort &&
-  a.search === b.search;
+  a.search === b.search &&
+  !!a.mcp === !!b.mcp;
 
 export function resolvedService(
   providers: AiProvider[],
@@ -409,6 +422,7 @@ export function resolvedService(
     price: m.price,
     effort: cfg.effort,
     search: cfg.search,
+    mcp: !!cfg.mcp && capabilities.tools !== false,
     capabilities,
     providerKind: p.kind,
   };
@@ -437,7 +451,8 @@ export function configLabel(
     ' · 思考' +
     EFFORT_NAME[cfg.effort] +
     ' · 搜索' +
-    (cfg.search ? '开' : '关')
+    (cfg.search ? '开' : '关') +
+    (cfg.mcp ? ' · 外部工具开' : '')
   );
 }
 
@@ -454,6 +469,9 @@ export function configChanges(
   }
   if (a.search !== b.search) {
     changes.push((b.search ? '开启' : '关闭') + '搜索');
+  }
+  if (!!a.mcp !== !!b.mcp) {
+    changes.push((b.mcp ? '开启' : '关闭') + '外部工具');
   }
   return changes.join('、');
 }

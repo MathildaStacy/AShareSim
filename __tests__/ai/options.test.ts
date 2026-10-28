@@ -371,8 +371,24 @@ test('搜索参数按协议适配；后台摘要强制移除搜索，不按问�
     true,
   );
   expect((buildRequest(input(a)).body.tools as any[])[0]).toMatchObject({
-    type: 'web_search_20250305',
+    type: 'web_search_20260209',
+    name: 'web_search',
   });
+  // 新版搜索工具只在 Opus 4.6+ / Sonnet 4.6+ 上有；Haiku、更早的模型、认不出的中转模型名用基础版
+  for (const [id, type] of [
+    ['claude-sonnet-4-6', 'web_search_20260209'],
+    ['anthropic/claude-opus-4-7', 'web_search_20260209'],
+    ['claude-opus-5', 'web_search_20260209'],
+    ['claude-haiku-5-5', 'web_search_20250305'],
+    ['claude-sonnet-4-5', 'web_search_20250305'],
+    ['my-relay-model', 'web_search_20250305'],
+  ]) {
+    const svc = service(provider('anthropic', id, 'anthropic'), 'low');
+    expect(
+      (buildRequest(input({ ...svc, search: true })).body.tools as any[])[0]
+        .type,
+    ).toBe(type);
+  }
   const o = service(
     provider('openai', 'gpt-6.1-sol', 'openai'),
     'medium',

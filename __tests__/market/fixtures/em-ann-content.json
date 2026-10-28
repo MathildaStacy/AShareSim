@@ -1,0 +1,64 @@
+{
+ "data": {
+  "art_code": "AN202610231830844845",
+  "attach_list": [
+   {
+    "attach_size": 130,
+    "attach_type": "0",
+    "attach_url": "https://pdf.dfcfw.com/pdf/H2_AN202610231830844845_1.pdf?1792791503000.pdf",
+    "seq": 1
+   }
+  ],
+  "attach_list_ch": [
+   {
+    "attach_size": 130,
+    "attach_type": "0",
+    "attach_url": "https://pdf.dfcfw.com/pdf/H2_AN202610231830844845_1.pdf?1792791503000.pdf",
+    "seq": 1
+   }
+  ],
+  "attach_list_en": [],
+  "attach_size": "130",
+  "attach_type": "0",
+  "attach_url": "https://pdf.dfcfw.com/pdf/H2_AN202610231830844845_1.pdf?1792791503000.pdf",
+  "attach_url_web": "https://pdf.dfcfw.com/pdf/H2_AN202610231830844845_1.pdf?1792791503000.pdf",
+  "eitime": "2026-10-23 17:20:12",
+  "extend": {},
+  "is_ai_summary": 0,
+  "is_rich": 0,
+  "is_rich2": 0,
+  "language": "0",
+  "notice_content": "\nA 股简称：招商银行             A 股代码：600036        公告编号：2026-041\n              招商银行股份有限公司\n\n    关于召开2026年第三季度业绩说明会的公告\n\n  本公司董事会及全体董事保证本公告内容不存在任何虚假记载、误导性陈述或者重大遗漏，并对其内容的真实性、准确性和完整性承担法律责任。\n重要内容提示：\n 会议召开时间：北京时间2026年11月2日（星期一）上午9:30-11:00\n 会议召开方式：网络音频会议\n 会议接入方式：\n\n  中文：https://webcasting.bizconf.cn/live/watch/l880a8al\n\n  英文：https://webcasting.bizconf.cn/live/watch/o9nvxn8m\n   投资者可将相关问题通过电子邮件方式发送至招商银行股份有限公司（简称本公\n  司）2026年第三季度业绩说明会（简称业绩说明会）问题收集邮箱：\n  query@cmbchina.com。邮件收取截止时间为北京时间2026年11月2日（星期一）\n  上午10:30。本公司将于业绩说明会上对投资者普遍关注的问题进行回答。\n\n  一、业绩说明会类型\n\n  为了便于广大投资者更全面深入地了解本公司2026年第三季度业绩和经营情况，本公司拟通过网络音频会议方式召开业绩说明会，就投资者普遍关注的问题与投资者进行交流。\n\n  二、业绩说明会召开的时间、方式\n\n  （一）会议召开时间：北京时间2026年11月2日（星期一）上午9:30-11:00\n\n  （二）会议召开方式：网络音频会议\n\n  三、参加人员\n\n  本公司副行长、财务负责人兼董事会秘书彭家文先生，独立非执行董事及总行有关部门负责人等将参加业绩说明会。\n\n\n  四、投资者参加方式\n\n  （一）投资者可于北京时间2026年11月2日上午9:30-11:00通过以下网址参加业绩说明会。\n\n  中文：https://webcasting.bizconf.cn/live/watch/l880a8al\n\n  英文：htt",
+  "notice_date": "2026-10-24 00:00:00",
+  "notice_title": "招商银行:招商银行股份有限公司关于召开2026年第三季度业绩说明会的公告",
+  "page_size": 1,
+  "page_size_ch": 0,
+  "page_size_cht": 0,
+  "page_size_en": 0,
+  "security": [
+   {
+    "market_uni": "",
+    "short_name": "招商银行",
+    "stock": "02939"
+   },
+   {
+    "market_uni": "1",
+    "short_name": "招商银行",
+    "short_name_ch": "招商银行",
+    "short_name_cht": "招商銀行",
+    "short_name_en": "CMB",
+    "stock": "600036"
+   },
+   {
+    "market_uni": "116",
+    "short_name": "招商银行",
+    "short_name_ch": "招商银行",
+    "short_name_cht": "招商銀行",
+    "short_name_en": "CMB",
+    "stock": "03968"
+   }
+  ],
+  "short_name": "招商银行"
+ },
+ "success": 1
+}

@@ -803,7 +803,7 @@ describe('每个对话的模型 / 思考 / 搜索', () => {
     });
     replies = [{ json: textReply('已经开启搜索') }];
     await ask(core, { question: '招商银行最近有什么新闻？', page: null });
-    expect(sent.at(-1)!.body.tools[0].type).toBe('web_search_20250305');
+    expect(sent.at(-1)!.body.tools[0].type).toBe('web_search_20260209');
     expect(useChat.getState().messages.at(-1)?.ui?.searchOffer).toBeUndefined();
   });
 });
@@ -1009,5 +1009,120 @@ describe('空结束快照与历史恢复', () => {
     );
     expect(stored?.parts).toBe('[]');
     expect(JSON.parse(stored!.raw)).toEqual(raw);
+  });
+});
+
+describe('资讯和外部内容（M4.1）', () => {
+  const paused = (text: string) => ({
+    model: SVC.model,
+    stop_reason: 'pause_turn',
+    content: [
+      { type: 'text', text },
+      {
+        type: 'server_tool_use',
+        id: 'srv_' + ++tu,
+        name: 'web_search',
+        input: { query: '招商银行 最新' },
+      },
+    ],
+    usage: { input_tokens: 30, output_tokens: 10 },
+  });
+
+  test('pause_turn：原样追加后接着请求，暂停不算错误', async () => {
+    const core = await setup();
+    replies = [
+      { json: paused('我先搜一下。') },
+      { json: textReply('搜完了，结论是……') },
+    ];
+    await ask(core, { question: '招商银行最近怎么样', page: null });
+    expect(sent).toHaveLength(2);
+    // 第二次请求以暂停的 assistant 内容结尾，没有额外的「继续」提问
+    const msgs = sent[1].body.messages;
+    const last = msgs[msgs.length - 1];
+    expect(last.role).toBe('assistant');
+    expect(last.content.map((c: any) => c.type)).toEqual([
+      'text',
+      'server_tool_use',
+    ]);
+    const shown = useChat
+      .getState()
+      .messages.filter(m => m.role === 'assistant');
+    expect(shown.every(m => !m.ui?.error)).toBe(true);
+    expect(shown.at(-1)!.parts).toEqual([
+      { t: 'text', text: '搜完了，结论是……' },
+    ]);
+  });
+
+  test('pause_turn 连续超过 3 次：停下并说明', async () => {
+    const core = await setup();
+    replies = [1, 2, 3, 4].map(i => ({ json: paused('第 ' + i + ' 段') }));
+    await ask(core, { question: '查查新闻', page: null });
+    expect(sent).toHaveLength(4);
+    expect(useChat.getState().messages.at(-1)!.ui?.error).toContain(
+      '暂停了 3 次',
+    );
+  });
+
+  test('资讯工具结果包在 <external> 里；之后生成的操作卡标「本轮读过外部内容」', async () => {
+    const core = await setup();
+    const { parseAnnList } = require('../../src/market/emNews');
+    (core.client as any).announcements = async () =>
+      parseAnnList(JSON.parse(fx('em-ann-600036.json')));
+    replies = [
+      { json: toolReply('get_announcements', { code: '600036', n: 3 }) },
+      {
+        json: toolReply('place_order', {
+          code: '510300',
+          side: 'B',
+          price: 4.17,
+          qty: 1000,
+        }),
+      },
+      { json: textReply('确认后会买入。') },
+    ];
+    await ask(core, { question: '看看公告然后帮我买 1000 份', page: null });
+    const out = sent[1].body.messages.at(-1).content[0].content as string;
+    expect(out).toContain('<external source="东方财富·公告列表"');
+    expect(out).toContain(
+      '2026-10-24 [其他] 招商银行股份有限公司关于召开2026年第三季度业绩说明会的公告 | AN202610231830844845',
+    );
+    const rows = toolRows(useChat.getState().messages);
+    expect(rows[0].ui!.tools![0].label).toBe(
+      '读取 招商银行 公告列表（东方财富）',
+    );
+    const card = rows[1].ui!.tools![0].card!;
+    expect(card.external).toEqual(['招商银行 公告列表（东方财富）']);
+  });
+
+  test('没读外部内容的回答，操作卡不标', async () => {
+    const core = await setup();
+    replies = [
+      {
+        json: toolReply('place_order', {
+          code: '510300',
+          side: 'B',
+          price: 4.17,
+          qty: 1000,
+        }),
+      },
+      { json: textReply('确认后会买入。') },
+    ];
+    await ask(core, { question: '买 1000 份', page: null });
+    const card = toolRows(useChat.getState().messages)[0].ui!.tools![0].card!;
+    expect(card.external).toBeUndefined();
+  });
+});
+
+test('模型自行请求 MCP 时，对话开关关闭就拦截', async () => {
+  const core = await setup();
+  replies = [
+    { json: toolReply('mcp_call', { tool: 'tushare__income', args: {} }) },
+    { json: textReply('需要先开启外部工具。') },
+  ];
+  await ask(core, { question: '查询利润表', page: null });
+  const rows = toolRows(useChat.getState().messages);
+  expect(rows[0].ui!.tools![0]).toMatchObject({
+    error: true,
+    label: '外部工具未开启',
   });
 });

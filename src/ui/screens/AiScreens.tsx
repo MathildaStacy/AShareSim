@@ -514,8 +514,8 @@ export function AiContextScreen() {
             </Text>
           )}
           <Text style={s.para}>
-            会让缓存失效：换服务或模型、改思考强度、压缩对话、超过 5
-            分钟没提问（Anthropic；OpenAI 约 30 分钟）。
+            会让缓存失效：换服务或模型、改思考强度、开关搜索或外部工具、压缩对话、超过
+            5 分钟没提问（Anthropic；OpenAI 约 30 分钟）。
             {'\n'}
             不会：换页面、开关页面上下文、调操作条数、新增记忆（从下一个对话开始生效）。
           </Text>

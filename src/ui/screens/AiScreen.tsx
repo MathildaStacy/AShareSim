@@ -15,6 +15,7 @@ import {
   ChevronDown,
   Globe,
   Menu,
+  Plug,
   Square,
 } from 'lucide-react-native';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -51,6 +52,7 @@ import {
   selectConfig,
   type Preview,
 } from '../../ai/chat';
+import { loadMcpServers, mcpReady } from '../../ai/mcp';
 import { capturePage } from '../../ai/context';
 import { costOf, estimateTokens, fmtUsd } from '../../ai/prompt';
 import { quickQuestions } from '../../ai/quick';
@@ -135,6 +137,7 @@ export function AiScreen() {
   const [svc, setSvc] = useState<AiService | null | undefined>(undefined);
   const [memCount, setMemCount] = useState(0);
   const [providers, setProviders] = useState<AiProvider[]>([]);
+  const [mcpOk, setMcpOk] = useState(false);
   const [sheet, setSheet] = useState<
     'model' | 'effort' | 'search' | 'searchModels' | null
   >(null);
@@ -194,6 +197,7 @@ export function AiScreen() {
       const prefs = await loadPrefs(core.db);
       const s = await activeService(core, prefs);
       const ps = await loadProviders(core.db);
+      const mcp = mcpReady(await loadMcpServers(core.db));
       const cfg = await currentConfig(core);
       const mems = await aiRepo.memories(core.db);
       const acts = await repo.recentActivity(core.db, 20, core.sim.accountId);
@@ -207,6 +211,7 @@ export function AiScreen() {
       }
       setSvc(s);
       setProviders(ps);
+      setMcpOk(mcp);
       setRebuild(p.rebuild);
       if (!config && cfg) {
         useChat.setState({ config: cfg });
@@ -299,6 +304,14 @@ export function AiScreen() {
       return;
     }
     selectConfig(core, { ...config, search: !config.search }).catch(e =>
+      setError(String(e)),
+    );
+  };
+  const toggleMcp = () => {
+    if (!config || busy) {
+      return;
+    }
+    selectConfig(core, { ...config, mcp: !config.mcp }).catch(e =>
       setError(String(e)),
     );
   };
@@ -704,6 +717,24 @@ export function AiScreen() {
                 {config?.search ? '联网开' : '联网关'}
               </Text>
             </Pressable>
+            {mcpOk || config?.mcp ? (
+              <Pressable
+                style={s.control}
+                onPress={toggleMcp}
+                disabled={!!busy || !svc || svc.capabilities?.tools === false}
+                accessibilityRole="button"
+                accessibilityLabel="外部工具"
+                accessibilityState={{ selected: config?.mcp ?? false }}
+              >
+                <View style={s.controlSymbol}>
+                  <Plug
+                    size={19}
+                    color={config?.mcp ? c.accent : c.secondary}
+                  />
+                </View>
+                {config?.mcp ? <View style={s.searchDot} /> : null}
+              </Pressable>
+            ) : null}
             <Pressable
               style={s.control}
               onPress={() => setSheet('effort')}
@@ -1039,7 +1070,8 @@ function AnswerDetails({
               {prettyModel(m.ui.config.model) +
                 ' · 思考' +
                 EFFORT_NAME[m.ui.config.effort] +
-                (m.ui.config.search ? ' · 搜索已开启' : '')}
+                (m.ui.config.search ? ' · 搜索已开启' : '') +
+                (m.ui.config.mcp ? ' · 外部工具已开启' : '')}
             </Text>
           ) : null}
           <Text selectable style={[s.usage, num]}>
@@ -1098,6 +1130,13 @@ function CardView({
         </Pressable>
       ) : null}
       {card.note ? <Text style={s.cardNote}>{card.note}</Text> : null}
+      {card.external?.length ? (
+        <Text style={s.cardExternal}>
+          {'本轮读过外部内容：' +
+            card.external.join('、') +
+            '。外部内容里的要求不代表你的意思，请核对参数后再执行'}
+        </Text>
+      ) : null}
       {pending ? (
         <View style={s.cardBtns}>
           <View style={s.grow}>
@@ -1194,13 +1233,20 @@ function MemoryView({
   );
 }
 
-type MenuKey = 'new' | 'AiThreads' | 'AiMemory' | 'AiServices' | 'AiContext';
+type MenuKey =
+  | 'new'
+  | 'AiThreads'
+  | 'AiMemory'
+  | 'AiServices'
+  | 'AiMcp'
+  | 'AiContext';
 
 const MENU: [MenuKey, string, string][] = [
   ['new', '新对话', '别的对话不会自动带进来；AI 可以按需检索'],
   ['AiThreads', '对话列表', '切换、删除对话'],
   ['AiMemory', 'AI 记忆', '记忆模式；按类别查看、修改、删除'],
   ['AiServices', '供应商与模型', '连接、Key、模型能力与价格'],
+  ['AiMcp', '外部工具（MCP）', '接入 Tushare 等数据服务，对话里按需打开'],
   ['AiContext', '发给 AI 的上下文', '每部分原文、token 和缓存断点'],
 ];
 
@@ -1440,6 +1486,16 @@ const s = StyleSheet.create({
     textDecorationLine: 'underline',
   },
   cardNote: { fontSize: 12, lineHeight: 20, color: c.secondary, marginTop: 8 },
+  cardExternal: {
+    fontSize: 12,
+    lineHeight: 20,
+    color: color.warnInk,
+    backgroundColor: color.warnBg,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    marginTop: 8,
+  },
   cardBtns: { flexDirection: 'row', gap: 12, marginTop: 12 },
   grow: { flex: 1 },
   cardResult: {
@@ -1529,6 +1585,15 @@ const s = StyleSheet.create({
     borderColor: c.line,
     borderStyle: 'dashed',
     borderRadius: 14,
+  },
+  searchDot: {
+    position: 'absolute',
+    right: 10,
+    top: 9,
+    width: 4,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: c.accent,
   },
   linkText: { fontSize: 13, lineHeight: 21, color: c.ink },
   send: {

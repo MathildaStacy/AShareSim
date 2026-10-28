@@ -299,7 +299,7 @@ test('对话列表、AI 记忆、上下文页', async () => {
   });
   const ctx = await render('AiContext', AiContextScreen);
   const ct = ctx.text();
-  expect(ct).toContain('工具定义（23 个）');
+  expect(ct).toContain('工具定义（27 个）');
   expect(ct).toContain('断点 1（所有对话共用）');
   expect(ct).toContain('实际请求结构（JSON）');
   expect(ct).not.toContain('sk-ui-secret');
@@ -808,4 +808,99 @@ test('流式更新跟随底部；拖动历史、展开过程和流式落库不�
   ).toBe(true);
   await r.press('回到最新回复');
   expect(toEnd).toHaveBeenCalledWith({ animated: true });
+});
+
+test('外部工具（MCP）：添加 Tushare、连接获取工具、写工具不能启用、token 不进设置；对话里出现开关', async () => {
+  core = await setup();
+  newThread();
+  useChat.setState({ busy: null });
+  const provider = emptyProvider('anthropic');
+  provider.models = [{ id: 'claude-sonnet-4-6', enabled: true, price: null }];
+  await saveProviders(core.db, [provider]);
+  const { setMcpDeps, loadMcpServers, mcpTokens } = require('../../src/ai/mcp');
+  const {
+    AiMcpScreen,
+    AiMcpServerScreen,
+  } = require('../../src/ui/screens/AiMcpScreens');
+  const tools = JSON.parse(
+    readFileSync(join(__dirname, '../ai/fixtures/tushare-tools.json'), 'utf8'),
+  );
+  const auth: string[] = [];
+  setMcpDeps({
+    fetch: async (_url: string, init: any) => {
+      const body = JSON.parse(init.body);
+      auth.push(init.headers.Authorization);
+      const result =
+        body.method === 'initialize'
+          ? { protocolVersion: '2025-06-18', instructions: 'Tushare' }
+          : body.method === 'tools/list'
+          ? { tools }
+          : body.method === 'tools/call'
+          ? { content: [{ type: 'text', text: 'cal_date\n20261028' }] }
+          : null;
+      return {
+        status: body.id == null ? 202 : 200,
+        headers: { get: () => 'text/event-stream' },
+        text: async () =>
+          body.id == null
+            ? ''
+            : 'event: message\ndata: ' +
+              JSON.stringify({ jsonrpc: '2.0', id: body.id, result }) +
+              '\n\n',
+      };
+    },
+  });
+  const r = await render('AiMcpServer', AiMcpServerScreen, {});
+  await r.press('添加 Tushare');
+  expect(r.text()).toContain('https://api.tushare.pro/mcp/');
+  await r.press('保存');
+  expect(r.text()).toContain('先点「连接并获取工具」');
+  await r.type('token', 'ts-token-abcd9876');
+  await r.press('连接并获取工具');
+  expect(auth.every(a => a === 'Bearer ts-token-abcd9876')).toBe(true);
+  expect(r.text()).toContain(
+    '连接成功：9 个工具，其中 2 个会改外部数据，不能启用',
+  );
+  expect(r.text()).toContain('工具 · 启用 7 / 7');
+  expect(r.text()).toContain('会改外部数据，不能启用');
+  await r.press('启用工具 income');
+  expect(r.text()).toContain('工具 · 启用 6 / 7');
+  await r.press('启用工具 p_delete'); // 不能启用
+  expect(r.text()).toContain('工具 · 启用 6 / 7');
+  expect(ctxText()).toContain('会改外部数据的 2 个（不能启用）');
+  expect(ctxText()).not.toContain('ts-token');
+  await r.press('保存');
+  const [srv] = await loadMcpServers(core.db);
+  expect(srv).toMatchObject({
+    name: 'Tushare',
+    slug: 'tushare',
+    tokenTail: '9876',
+  });
+  expect(srv.tools.find((t: any) => t.name === 'income').enabled).toBe(false);
+  expect(await mcpTokens().get(srv.id)).toBe('ts-token-abcd9876');
+  const settings = JSON.stringify(
+    await repo.getSetting(core.db, 'mcpServers', []),
+  );
+  expect(settings).not.toContain('ts-token-abcd9876');
+  const acts = await repo.recentActivity(core.db, 5, core.sim.accountId);
+  expect(JSON.stringify(acts)).not.toContain('ts-token-abcd9876');
+
+  const list = await render('AiMcp', AiMcpScreen);
+  expect(list.text()).toContain('6 / 9 个工具启用 · token 已保存');
+
+  const ai = await render('Ai', AiScreen);
+  await ai.press('外部工具');
+  expect(useChat.getState().config?.mcp).toBe(true);
+
+  const edit = await render('AiMcpServer', AiMcpServerScreen, { id: srv.id });
+  await edit.type('地址', 'https://other.example/mcp?api_key=hidden-secret');
+  expect(ctxText()).not.toContain('hidden-secret');
+  await edit.press('保存');
+  expect(edit.text()).toContain('地址不能包含认证信息');
+  await edit.type('地址', 'https://other.example/mcp');
+  await edit.press('保存');
+  expect(edit.text()).toContain('先点「连接并获取工具」');
+  expect((await loadMcpServers(core.db))[0].url).toBe(
+    'https://api.tushare.pro/mcp/',
+  );
 });

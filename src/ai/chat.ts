@@ -45,6 +45,8 @@ import {
 import { executeCard as execCard } from './tools/actions';
 import { TOOL_DEFS } from './tools/defs';
 import { runTool } from './tools/index';
+import { EXTERNAL_TOOLS } from './external';
+import { MCP_TOOL_DEFS } from './mcp';
 import { phaseName } from './tools/read';
 import type {
   AiPrefs,
@@ -70,6 +72,8 @@ import { combineSearch } from './evidence';
 
 /** 一个问题里最多几轮工具调用（§7）。 */
 export const MAX_TOOL_ROUNDS = 6;
+/** pause_turn 之后自动接着请求的次数上限（§13.1）。 */
+export const MAX_PAUSE_RESUMES = 3;
 /** 压缩后保留最近几轮问答（约 8 条消息，§4）。 */
 export const KEEP_EXCHANGES = 4;
 
@@ -502,6 +506,9 @@ export async function ask(core: AppCore, input: AskInput): Promise<void> {
     progress = { ...next, search: combineSearch(searchHistory, next.search) };
     paint();
   };
+  let pauses = 0;
+  // 这一轮回答读过的外部内容；之后生成的操作卡都标出来（§13.3）
+  const externalRead = new Set<string>();
   try {
     for (let round = 0; ; round++) {
       partialText = '';
@@ -525,8 +532,12 @@ export async function ask(core: AppCore, input: AskInput): Promise<void> {
         searchHistory,
         parsed.search ?? progress.search,
       );
+      // 服务端工具跑太久暂停了：原样存下，下一次请求以这条 assistant 结尾，服务端会接着跑
+      const paused = parsed.stop === 'pause' && pauses < MAX_PAUSE_RESUMES;
       const incompleteCalls =
-        parsed.stop !== 'tool' && parsed.parts.some(p => p.t === 'call');
+        parsed.stop !== 'tool' &&
+        parsed.stop !== 'pause' &&
+        parsed.parts.some(p => p.t === 'call');
       const calls =
         parsed.stop !== 'tool'
           ? []
@@ -558,15 +569,20 @@ export async function ask(core: AppCore, input: AskInput): Promise<void> {
               (svc.search && !search && needsFreshInformation(question)
                 ? '已允许搜索，但供应商未返回检索记录和来源，无法核验是否实际搜索。'
                 : undefined),
-            error:
-              parsed.stop === 'max_tokens'
-                ? '回答太长被截断了（输出上限）'
-                : parsed.stop === 'refusal'
-                ? '模型拒绝回答'
-                : !calls.length &&
-                  !parsed.parts.some(p => p.t === 'text' && p.text.trim())
-                ? EMPTY_ANSWER_ERROR
-                : undefined,
+            error: paused
+              ? undefined
+              : parsed.stop === 'pause'
+              ? '联网搜索暂停了 ' +
+                MAX_PAUSE_RESUMES +
+                ' 次仍没有完成，可以换个问法再问'
+              : parsed.stop === 'max_tokens'
+              ? '回答太长被截断了（输出上限）'
+              : parsed.stop === 'refusal'
+              ? '模型拒绝回答'
+              : !calls.length &&
+                !parsed.parts.some(p => p.t === 'text' && p.text.trim())
+              ? EMPTY_ANSWER_ERROR
+              : undefined,
           },
         },
         beijingIso(),
@@ -584,6 +600,21 @@ export async function ask(core: AppCore, input: AskInput): Promise<void> {
         },
       });
       await loadThread(core, threadId);
+      if (
+        search &&
+        (search.sources.length || search.calls || search.queries.length)
+      ) {
+        externalRead.add('联网搜索');
+      }
+      if (paused && !signal.aborted) {
+        pauses++;
+        round--; // 暂停不算工具轮数
+        if (search) {
+          searchHistory = { ...search, citations: [] };
+        }
+        useChat.setState({ busy: '联网搜索还在进行…' });
+        continue;
+      }
       if (!calls.length) {
         break;
       }
@@ -663,6 +694,19 @@ export async function ask(core: AppCore, input: AskInput): Promise<void> {
               },
             };
           }
+        } else if (
+          (c.name === 'mcp_call' || c.name === 'mcp_search') &&
+          !svc.mcp
+        ) {
+          out = {
+            output: '当前对话未开启外部工具，未执行',
+            ui: {
+              id: c.id,
+              name: c.name,
+              label: '外部工具未开启',
+              error: true,
+            },
+          };
         } else if (svc.capabilities?.tools === false) {
           out = {
             output: '当前模型未启用 App 工具，未执行',
@@ -680,6 +724,7 @@ export async function ask(core: AppCore, input: AskInput): Promise<void> {
               threadId,
               memoryMode: prefs.memoryMode,
               nextCardNo: () => ++cardNo,
+              signal,
             },
             c.id,
             c.name,
@@ -697,9 +742,25 @@ export async function ask(core: AppCore, input: AskInput): Promise<void> {
           navs.push(out.ui.nav);
         }
       }
+      // 同一轮里并行调用的资讯工具也算：模型生成卡的时候可能已经看过别的结果
+      uis.forEach((u, i) => {
+        if (
+          EXTERNAL_TOOLS.has(calls[i]?.name) &&
+          (!u.error ||
+            (resultParts[i]?.t === 'result' &&
+              resultParts[i].output.includes('<external ')))
+        ) {
+          externalRead.add(externalLabel(u));
+        }
+      });
+      const marked = uis.map(u =>
+        u.card && externalRead.size
+          ? { ...u, card: { ...u.card, external: [...externalRead] } }
+          : u,
+      );
       await aiRepo.addMessage(
         core.db,
-        { threadId, role: 'tool', parts: resultParts, ui: { tools: uis } },
+        { threadId, role: 'tool', parts: resultParts, ui: { tools: marked } },
         beijingIso(),
       );
       await loadThread(core, threadId);
@@ -759,6 +820,10 @@ export async function ask(core: AppCore, input: AskInput): Promise<void> {
   }
 }
 
+/** 「读取 招商银行 公告列表（东方财富）」→「招商银行 公告列表（东方财富）」。 */
+const externalLabel = (u: ToolUi) =>
+  u.label.replace(/^(读取|阅读|搜索|调用)\s*/, '');
+
 async function addError(core: AppCore, threadId: number, error: string) {
   await aiRepo.addMessage(
     core.db,
@@ -808,11 +873,19 @@ export async function buildFor(
 }
 
 export function modelTools(svc: AiService, noTools = false) {
+  const app =
+    svc.capabilities?.tools === false
+      ? []
+      : svc.mcp
+      ? [...TOOL_DEFS, ...MCP_TOOL_DEFS].sort((a, b) =>
+          a.name < b.name ? -1 : 1,
+        )
+      : TOOL_DEFS;
   return [
     ...(!noTools && svc.search && svc.providerKind === 'moonshot'
       ? [SEARCH_TOOL]
       : []),
-    ...(svc.capabilities?.tools === false ? [] : TOOL_DEFS),
+    ...app,
   ];
 }
 

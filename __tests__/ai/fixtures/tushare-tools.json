@@ -1,0 +1,662 @@
+[
+ {
+  "name": "stock_basic",
+  "description": "/数据接口/沪深股票/基础数据/股票列表-获取基础信息数据，包括股票代码、名称、上市日期、退市日期等。单次最多返回 10000 条。更新：早9:10，晚18点",
+  "inputSchema": {
+   "type": "object",
+   "properties": {
+    "name": {
+     "description": "名称",
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "integer"
+      }
+     ]
+    },
+    "is_hs": {
+     "description": "是否沪深港通标的，N否 H沪股通 S深股通",
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "integer"
+      }
+     ]
+    },
+    "market": {
+     "description": "市场类别",
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "integer"
+      }
+     ]
+    },
+    "ts_code": {
+     "description": "TS股票代码",
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "integer"
+      }
+     ]
+    },
+    "exchange": {
+     "description": "交易所 SSE上交所 SZSE深交所 BSE北交所",
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "integer"
+      }
+     ]
+    },
+    "list_status": {
+     "description": "上市状态 L上市 D退市 G过会未交易 P暂停上市",
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "integer"
+      }
+     ]
+    },
+    "fields": {
+     "type": "array",
+     "items": {
+      "type": "string"
+     },
+     "description": "指定返回字段，不传则返回默认字段。\n默认字段: ts_code, symbol, name, area, industry, cnspell, market, list_date, act_name, act_ent_type\n额外可选字段:\n  is_hs: 是否沪深港通标的，N否 H沪股通 S深股通\n  enname: 英文全称\n  exchange: 交易所代码\n  fullname: 股票全称\n  curr_type: 交易货币\n  delist_date: 退市日期\n  list_status: 上市状态 L上市 D退市 P暂停上市"
+    }
+   },
+   "required": []
+  }
+ },
+ {
+  "name": "trade_cal",
+  "description": "/数据接口/沪深股票/基础数据/交易日历-获取各大交易所交易日历数据,默认提取的是上交所。单次最多返回 120000 条。更新：每年年底国家披露次年假期后",
+  "inputSchema": {
+   "type": "object",
+   "properties": {
+    "is_open": {
+     "description": "是否交易 0休市 1交易",
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "integer"
+      }
+     ]
+    },
+    "cal_date": {
+     "description": "日历日期",
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "integer"
+      }
+     ]
+    },
+    "end_date": {
+     "description": "结束日期",
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "integer"
+      }
+     ]
+    },
+    "exchange": {
+     "description": "交易所 SSE上交所,SZSE深交所,CFFEX 中金所,SHFE 上期所,CZCE 郑商所,DCE 大商所,INE 上能源",
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "integer"
+      }
+     ]
+    },
+    "start_date": {
+     "description": "开始日期",
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "integer"
+      }
+     ]
+    },
+    "fields": {
+     "type": "array",
+     "items": {
+      "type": "string"
+     },
+     "description": "指定返回字段，不传则返回默认字段。\n默认字段: exchange, cal_date, is_open, pretrade_date\n额外可选字段:\n  （所有字段均为默认返回，无需指定）"
+    }
+   },
+   "required": []
+  }
+ },
+ {
+  "name": "income",
+  "description": "/数据接口/沪深股票/财务数据/利润表-获取上市公司财务利润表数据。单次最多返回 500 条。更新：财报披露当日晚21点，最晚次日",
+  "inputSchema": {
+   "type": "object",
+   "properties": {
+    "period": {
+     "description": "报告期",
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "integer"
+      }
+     ]
+    },
+    "is_calc": {
+     "type": "integer",
+     "description": "是否计算报表"
+    },
+    "ts_code": {
+     "description": "股票代码",
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "integer"
+      }
+     ]
+    },
+    "ann_date": {
+     "description": "公告日期（格式：YYYYMMDD，下同）",
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "integer"
+      }
+     ]
+    },
+    "end_date": {
+     "description": "公告日结束日期",
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "integer"
+      }
+     ]
+    },
+    "comp_type": {
+     "description": "公司类型",
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "integer"
+      }
+     ]
+    },
+    "f_ann_date": {
+     "description": "实际公告日期",
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "integer"
+      }
+     ]
+    },
+    "start_date": {
+     "description": "公告日开始日期",
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "integer"
+      }
+     ]
+    },
+    "report_type": {
+     "description": "报告类型",
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "integer"
+      }
+     ]
+    },
+    "fields": {
+     "type": "array",
+     "items": {
+      "type": "string"
+     },
+     "description": "指定返回字段，不传则返回默认字段。\n默认字段: ts_code, ann_date, f_ann_date, end_date, report_type, comp_type, end_type, basic_eps, diluted_eps, total_revenue, revenue, int_income, prem_earned, comm_income, n_commis_income, n_oth_income, n_oth_b_income, prem_income, out_prem, une_prem_reser, reins_income, n_sec_tb_income, n_sec_uw_income, n_asset_mg_income, oth_b_income, fv_value_chg_gain, invest_income, ass_invest_income, forex_gain, total_cogs, oper_cost, int_exp, comm_exp, biz_tax_surchg, sell_exp, admin_exp, fin_exp, assets_impair_loss, prem_refund, compens_payout, reser_insur_liab, div_payt, reins_exp, oper_exp, compens_payout_refu, insur_reser_refu, reins_cost_refund, other_bus_cost, operate_profit, non_oper_income, non_oper_exp, nca_disploss, total_profit, income_tax, n_income, n_income_attr_p, minority_gain, oth_compr_income, t_compr_income, compr_inc_attr_p, compr_inc_attr_m_s, ebit, ebitda, insurance_exp, undist_profit, distable_profit, rd_exp, fin_exp_int_exp, fin_exp_int_inc, transfer_surplus_rese, transfer_housing_imprest, transfer_oth, adj_lossgain, withdra_legal_surplus, withdra_legal_pubfund, withdra_biz_devfund, withdra_rese_fund, withdra_oth_ersu, workers_welfare, distr_profit_shrhder, prfshare_payable_dvd, comshare_payable_dvd, capit_comstock_div, continued_net_profit, update_flag\n额外可选字段:\n  oth_income: 其他收益\n  total_opcost: 营业总成本2\n  end_net_profit: 终止经营净利润\n  credit_impa_loss: 信用减值损失\n  asset_disp_income: 资产处置收益\n  amodcost_fin_assets: 以摊余成本计量的金融资产终止确认收益\n  oth_impair_loss_assets: 其他资产减值损失\n  net_after_nr_lp_correct: 扣除非经常性损益后的净利润（更正前）\n  net_expo_hedging_benefits: 净敞口套期收益"
+    }
+   },
+   "required": [
+    "ts_code"
+   ]
+  }
+ },
+ {
+  "name": "ggt_top10",
+  "description": "获取港股通每日成交数据，其中包括沪市、深市详细数据，每天18~20点之间完成当日更新。单次最多返回 300 条。更新：每日18:30~19:30之间。参数约束：ts_code：当 trade_date 为空时必填",
+  "inputSchema": {
+   "type": "object",
+   "properties": {
+    "ts_code": {
+     "description": "股票代码",
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "integer"
+      }
+     ]
+    },
+    "end_date": {
+     "description": "结束日期",
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "integer"
+      }
+     ]
+    },
+    "start_date": {
+     "description": "开始日期",
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "integer"
+      }
+     ]
+    },
+    "trade_date": {
+     "description": "交易日期",
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "integer"
+      }
+     ]
+    },
+    "market_type": {
+     "description": "市场类型 2：港股通（沪） 4：港股通（深）",
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "integer"
+      }
+     ]
+    },
+    "fields": {
+     "type": "array",
+     "items": {
+      "type": "string"
+     },
+     "description": "指定返回字段，不传则返回默认字段。\n默认字段: trade_date, ts_code, name, close, p_change, rank, market_type, amount, net_amount, sh_amount, sh_net_amount, sh_buy, sh_sell, sz_amount, sz_net_amount, sz_buy, sz_sell\n额外可选字段:\n  （所有字段均为默认返回，无需指定）"
+    }
+   },
+   "required": []
+  }
+ },
+ {
+  "name": "margin_detail",
+  "description": "/数据接口/沪深股票/两融及转融通/融资融券交易明细-获取沪深两市每日融资融券明细。单次最多返回 6000 条。更新：每日早8:30更新上一交易日数据（交易所规则）",
+  "inputSchema": {
+   "type": "object",
+   "properties": {
+    "ts_code": {
+     "description": "TS代码",
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "integer"
+      }
+     ]
+    },
+    "end_date": {
+     "description": "结束日期",
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "integer"
+      }
+     ]
+    },
+    "start_date": {
+     "description": "开始日期",
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "integer"
+      }
+     ]
+    },
+    "trade_date": {
+     "description": "交易日期",
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "integer"
+      }
+     ]
+    },
+    "fields": {
+     "type": "array",
+     "items": {
+      "type": "string"
+     },
+     "description": "指定返回字段，不传则返回默认字段。\n默认字段: trade_date, ts_code, rzye, rqye, rzmre, rqyl, rzche, rqchl, rqmcl, rzrqye\n额外可选字段:\n  name: 股票名称"
+    }
+   },
+   "required": []
+  }
+ },
+ {
+  "name": "fina_indicator",
+  "description": "/数据接口/沪深股票/财务数据/财务指标数据-获取上市公司财务指标数据，为避免服务器压力，现阶段每次请求最多返回100条记录，可通过设置日期多次请求获取更多数据。单次最多返回 100 条。更新：随财报披露T+1入库",
+  "inputSchema": {
+   "type": "object",
+   "properties": {
+    "period": {
+     "description": "报告期",
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "integer"
+      }
+     ]
+    },
+    "ts_code": {
+     "description": "股票代码",
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "integer"
+      }
+     ]
+    },
+    "ann_date": {
+     "description": "公告日期",
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "integer"
+      }
+     ]
+    },
+    "end_date": {
+     "description": "报告期结束日期",
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "integer"
+      }
+     ]
+    },
+    "start_date": {
+     "description": "报告期开始日期",
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "integer"
+      }
+     ]
+    },
+    "update_flag": {
+     "description": "更新标志",
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "integer"
+      }
+     ]
+    },
+    "fields": {
+     "type": "array",
+     "items": {
+      "type": "string"
+     },
+     "description": "指定返回字段，不传则返回默认字段。\n默认字段: ts_code, ann_date, end_date, eps, dt_eps, total_revenue_ps, revenue_ps, capital_rese_ps, surplus_rese_ps, undist_profit_ps, extra_item, profit_dedt, gross_margin, current_ratio, quick_ratio, cash_ratio, ar_turn, ca_turn, fa_turn, assets_turn, op_income, ebit, ebitda, fcff, fcfe, current_exint, noncurrent_exint, interestdebt, netdebt, tangible_asset, working_capital, networking_capital, invest_capital, retained_earnings, diluted2_eps, bps, ocfps, retainedps, cfps, ebit_ps, fcff_ps, fcfe_ps, netprofit_margin, grossprofit_margin, cogs_of_sales, expense_of_sales, profit_to_gr, saleexp_to_gr, adminexp_of_gr, finaexp_of_gr, impai_ttm, gc_of_gr, op_of_gr, ebit_of_gr, roe, roe_waa, roe_dt, roa, npta, roic, roe_yearly, roa2_yearly, debt_to_assets, assets_to_eqt, dp_assets_to_eqt, ca_to_assets, nca_to_assets, tbassets_to_totalassets, int_to_talcap, eqt_to_talcapital, currentdebt_to_debt, longdeb_to_debt, ocf_to_shortdebt, debt_to_eqt, eqt_to_debt, eqt_to_interestdebt, tangibleasset_to_debt, tangasset_to_intdebt, tangibleasset_to_netdebt, ocf_to_debt, turn_days, roa_yearly, roa_dp, fixed_assets, profit_to_op, q_saleexp_to_gr, q_gc_to_gr, q_roe, q_dt_roe, q_npta, q_ocf_to_sales, basic_eps_yoy, dt_eps_yoy, cfps_yoy, op_yoy, ebt_yoy, netprofit_yoy, dt_netprofit_yoy, ocf_yoy, roe_yoy, bps_yoy, assets_yoy, eqt_yoy, tr_yoy, or_yoy, q_sales_yoy, q_op_qoq, equity_yoy\n额外可选字段:\n  daa: 折旧与摊销\n  q_eps: 每股收益(单季度)\n  rd_exp: 研发费用\n  roe_avg: 平均净资产收益率(增发条件)\n  inv_turn: 存货周转率\n  q_gr_qoq: 营业总收入环比增长率(%)(单季度)\n  q_gr_yoy: 营业总收入同比增长率(%)(单季度)\n  q_op_yoy: 营业利润同比增长率(%)(单季度)\n  ocf_to_or: 经营活动产生的现金流量净额/营业收入\n  op_to_ebt: 营业利润／利润总额\n  nop_to_ebt: 非营业利润／利润总额\n  op_to_debt: 营业利润／负债合计\n  q_dtprofit: 扣除非经常损益后的单季度净利润\n  q_op_to_gr: 营业利润／营业总收入(单季度)\n  q_opincome: 经营活动单季度净收益\n  tax_to_ebt: 所得税/利润总额\n  arturn_days: 应收账款周转天数\n  q_ocf_to_or: 经营活动产生的现金流量净额／经营活动净收益(单季度)\n  q_sales_qoq: 营业收入环比增长率(%)(单季度)\n  roic_yearly: 年化投入资本回报率\n  update_flag: 更新标识\n  invturn_days: 存货周转天数\n  q_profit_qoq: 净利润环比增长率(%)(单季度)\n  q_profit_yoy: 净利润同比增长率(%)(单季度)\n  non_op_profit: 非营业利润\n  ocf_to_profit: 经营活动产生的现金流量净额／营业利润\n  op_to_liqdebt: 营业利润／流动负债\n  total_fa_trun: 固定资产合计周转率\n  ebitda_to_debt: 息税折旧摊销前利润/负债合计\n  interst_income: 利息费用\n  ocf_to_netdebt: 经营活动产生的现金流量净额/净债务\n  q_exp_to_sales: 销售期间费用率(单季度)\n  q_investincome: 价值变动单季度净收益\n  q_profit_to_gr: 净利润／营业总收入(单季度)\n  cash_to_liqdebt: 货币资金／流动负债\n  ocf_to_opincome: 经营活动产生的现金流量净额/经营活动净收益\n  opincome_of_ebt: 经营活动净收益/利润总额\n  q_finaexp_to_gr: 财务费用／营业总收入 (单季度)\n  q_netprofit_qoq: 归属母公司股东的净利润环比增长率(%)(单季度)\n  q_netprofit_yoy: 归属母公司股东的净利润同比增长率(%)(单季度)\n  salescash_to_or: 销售商品提供劳务收到的现金/营业收入\n  ebit_to_interest: 已获利息倍数(EBIT/利息费用)\n  q_adminexp_to_gr: 管理费用／营业总收入 (单季度)\n  capitalized_to_da: 资本支出/折旧和摊销\n  profit_prefin_exp: 扣除财务费用前营业利润\n  q_gsprofit_margin: 销售毛利率(单季度)\n  q_opincome_to_ebt: 经营活动净收益／利润总额(单季度)\n  q_salescash_to_or: 销售商品提供劳务收到的现金／营业收入(单季度)\n  dtprofit_to_profit: 扣除非经常损益后的净利润/净利润\n  n_op_profit_of_ebt: 营业外收支净额/利润总额\n  q_impair_to_gr_ttm: 资产减值损失／营业总收入(单季度)\n  q_netprofit_margin: 销售净利率(单季度)\n  valuechange_income: 价值变动净收益\n  investincome_of_ebt: 价值变动净收益/利润总额\n  ocf_to_interestdebt: 经营活动产生的现金流量净额/带息债务\n  q_dtprofit_to_profit: 扣除非经常损益后的净利润／净利润(单季度)\n  q_investincome_to_ebt: 价值变动净收益／利润总额(单季度)\n  longdebt_to_workingcapital: 长期债务与营运资金比率\n  cash_to_liqdebt_withinterest: 货币资金／带息流动负债"
+    }
+   },
+   "required": [
+    "ts_code"
+   ]
+  }
+ },
+ {
+  "name": "index_weight",
+  "description": "/数据接口/指数专题/指数成分和权重-获取各类指数成分和权重，**月度数据** ，建议输入参数里开始日期和结束日分别输入当月第一天和最后一天的日期。单次最多返回 7000 条。更新：每月最后一天19:00。参数约束：index_code：当 trade_date 为空时必填",
+  "inputSchema": {
+   "type": "object",
+   "properties": {
+    "ts_code": {
+     "description": "股票成分代码",
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "integer"
+      }
+     ]
+    },
+    "end_date": {
+     "description": "结束日期",
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "integer"
+      }
+     ]
+    },
+    "index_code": {
+     "description": "指数代码",
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "integer"
+      }
+     ]
+    },
+    "start_date": {
+     "description": "开始日期",
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "integer"
+      }
+     ]
+    },
+    "trade_date": {
+     "description": "交易日期",
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "integer"
+      }
+     ]
+    },
+    "fields": {
+     "type": "array",
+     "items": {
+      "type": "string"
+     },
+     "description": "指定返回字段，不传则返回默认字段。\n默认字段: index_code, con_code, trade_date, weight\n额外可选字段:\n  （所有字段均为默认返回，无需指定）"
+    }
+   },
+   "required": []
+  }
+ },
+ {
+  "name": "p_save",
+  "description": "/数据接口/股票数据/自选股组合/自选股组合保存-创建或修改自选股组合",
+  "inputSchema": {
+   "type": "object",
+   "properties": {
+    "desc": {
+     "description": "组合描述",
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "integer"
+      }
+     ]
+    },
+    "name": {
+     "description": "组合名称",
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "integer"
+      }
+     ]
+    },
+    "items": {
+     "type": "array",
+     "items": {
+      "type": "object",
+      "required": [
+       "ts_code"
+      ],
+      "properties": {
+       "desc": {
+        "type": "string",
+        "description": "成分的描述"
+       },
+       "name": {
+        "type": "string",
+        "description": "成分的名称"
+       },
+       "weight": {
+        "type": "number",
+        "description": "成分的权重，例如：0.1"
+       },
+       "ts_code": {
+        "type": "string",
+        "description": "成分的ts_code（例如:股票代码）"
+       },
+       "ts_type": {
+        "type": "string",
+        "description": "成分的类型（例如:股票、基金、指数等）"
+       }
+      }
+     },
+     "description": "成份列表"
+    },
+    "fields": {
+     "type": "array",
+     "items": {
+      "type": "string"
+     },
+     "description": "指定返回字段，不传则返回默认字段。\n默认字段: id, ts_code, ts_type, name, desc, weight, create_time, update_time\n额外可选字段:\n  （所有字段均为默认返回，无需指定）"
+    }
+   },
+   "required": [
+    "name",
+    "items"
+   ]
+  }
+ },
+ {
+  "name": "p_delete",
+  "description": "/数据接口/自选组合/组合删除-删除自选股组合。单次最多返回 200 条",
+  "inputSchema": {
+   "type": "object",
+   "properties": {
+    "name": {
+     "description": "组合名称",
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "integer"
+      }
+     ]
+    },
+    "fields": {
+     "type": "array",
+     "items": {
+      "type": "string"
+     },
+     "description": "指定返回字段，不传则返回默认字段。\n默认字段: status\n额外可选字段:\n  （所有字段均为默认返回，无需指定）"
+    }
+   },
+   "required": [
+    "name"
+   ]
+  }
+ }
+]

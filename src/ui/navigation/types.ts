@@ -67,6 +67,9 @@ export type RootStackParamList = {
   AiServices: undefined;
   /** 没有 id 是添加服务。 */
   AiService: { id?: string } | undefined;
+  AiMcp: undefined;
+  /** 没有 id 是添加外部工具。 */
+  AiMcpServer: { id?: string } | undefined;
   AiContext: undefined;
 };
 

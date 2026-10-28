@@ -11,6 +11,8 @@ import type { AiPrefs, MemoryKind, ToolUi } from '../types';
 import { MEMORY_KIND_NAME } from '../types';
 import { previewCard } from './actions';
 import { CARD_TOOLS, NAV_ROUTES } from './defs';
+import { EXTERNAL_TOOLS, external } from '../external';
+import { mcpCall, mcpSearch } from '../mcp';
 import {
   activityText,
   conversationsText,
@@ -31,6 +33,13 @@ import {
   tradesText,
 } from './read';
 import { LESSONS } from '../../learn/lessons';
+import {
+  announcementBody,
+  announcementsText,
+  asOfOf,
+  newsText,
+  researchText,
+} from './news';
 
 export interface ToolEnv {
   core: AppCore;
@@ -38,6 +47,7 @@ export interface ToolEnv {
   memoryMode: AiPrefs['memoryMode'];
   /** 下一张操作卡的编号。 */
   nextCardNo: () => number;
+  signal?: AbortSignal;
 }
 
 export interface ToolOutcome {
@@ -59,6 +69,9 @@ const KLINE_NAME: Record<string, string> = {
   m60: '60 分钟 K',
   minute: '分时',
 };
+
+const asOfLabel = (args: Record<string, unknown>) =>
+  args.as_of ? '，截至 ' + String(args.as_of) : '';
 
 const MEMORY_KINDS: MemoryKind[] = [
   'background',
@@ -87,7 +100,9 @@ export async function runTool(
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     return {
-      output: '工具执行出错：' + msg,
+      output: EXTERNAL_TOOLS.has(name)
+        ? external({ source: name }, '工具执行出错：' + msg)
+        : '工具执行出错：' + msg,
       ui: { id, name, label: name + ' 出错：' + msg, error: true },
     };
   }
@@ -157,6 +172,84 @@ async function dispatch(
         await financeText(core, r, n),
         '读取 ' + r.name + ' 近 ' + n + ' 期财务指标（东方财富）',
       );
+    }
+    case 'get_announcements': {
+      const r = await needCode(env, args);
+      const asOf = asOfOf(args.as_of);
+      return ok(
+        await announcementsText(
+          core,
+          r,
+          clampInt(args.n, 20, 50),
+          String(args.type ?? 'all'),
+          asOf,
+        ),
+        '读取 ' + r.name + ' 公告列表（东方财富' + asOfLabel(args) + '）',
+      );
+    }
+    case 'read_announcement': {
+      const page = clampInt(args.page, 1, 999);
+      const a = await announcementBody(
+        core,
+        String(args.art_code ?? '').trim(),
+        page,
+        args.as_of ? asOfOf(args.as_of) : null,
+      );
+      return ok(
+        a.output,
+        '阅读 公告「' + a.title + '」' + (page > 1 ? '第 ' + page + ' 页' : ''),
+      );
+    }
+    case 'get_research': {
+      const r = await needCode(env, args);
+      return ok(
+        await researchText(
+          core,
+          r,
+          clampInt(args.n, 10, 30),
+          asOfOf(args.as_of),
+        ),
+        '读取 ' + r.name + ' 研报（东方财富' + asOfLabel(args) + '）',
+      );
+    }
+    case 'search_news': {
+      const kw = String(args.keyword ?? '').trim();
+      if (!kw) {
+        throw new Error('keyword 不能为空');
+      }
+      return ok(
+        await newsText(
+          core,
+          kw.slice(0, 50),
+          clampInt(args.n, 10, 20),
+          args.as_of ? asOfOf(args.as_of) : null,
+        ),
+        '搜索 新闻「' + kw + '」（东方财富' + asOfLabel(args) + '）',
+      );
+    }
+    case 'mcp_search': {
+      const q = String(args.query ?? '').trim();
+      return ok(
+        await mcpSearch(core.db, q, clampInt(args.n, 5, 10)),
+        q ? '查找 外部工具「' + q + '」' : '列出 外部工具',
+      );
+    }
+    case 'mcp_call': {
+      const r = await mcpCall(
+        core.db,
+        String(args.tool ?? ''),
+        args.args,
+        env.signal,
+      );
+      return {
+        output: r.output,
+        ui: {
+          id,
+          name,
+          label: '调用 ' + r.label + (r.error ? '（返回错误）' : ''),
+          error: r.error,
+        },
+      };
     }
     case 'get_positions':
       return ok(positionsText(core), '读取 账户和持仓');

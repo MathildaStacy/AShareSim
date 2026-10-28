@@ -76,6 +76,8 @@ export interface ConversationConfig {
   model: string;
   effort: Effort;
   search: boolean;
+  /** 外部工具（MCP，§13.4）：打开时多两个工具 mcp_search / mcp_call。 */
+  mcp?: boolean;
 }
 
 /** 美元 / 百万 tokens，存成千分之一美元的整数（3 美元 = 3000）。 */
@@ -105,6 +107,7 @@ export interface AiService {
   providerKind?: ProviderKind;
   capabilities?: ModelCapabilities;
   search?: boolean;
+  mcp?: boolean;
 }
 
 // ---------- 消息 ----------
@@ -174,6 +177,8 @@ export interface ActionCard {
   /** 生成时的预校验：通过 / 不通过的原因。 */
   check: { ok: boolean; text: string; lesson?: string };
   note?: string;
+  /** 这一轮回答读过的外部内容（资讯、联网搜索、MCP），卡上提示「本轮读过外部内容」（§13.3）。 */
+  external?: string[];
   /** 生成时的账户；重置账户后旧卡失效。 */
   accountId: number;
   status: CardStatus;

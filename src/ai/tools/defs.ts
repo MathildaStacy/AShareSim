@@ -1,13 +1,21 @@
 /**
- * AI 的工具（AI_ASSISTANT.md §8）：23 个，按名字排序，任何设置下都不增减（工具列表变了缓存就失效）。
+ * AI 的工具（AI_ASSISTANT.md §8、§13.2）：27 个，按名字排序，任何设置下都不增减（工具列表变了缓存就失效）。
  * 读取类直接执行；记忆类按记忆模式执行；操作 App 的除 navigate 外都只生成操作卡。
+ * 外部工具（MCP）打开时另加 mcp_search / mcp_call 两个（mcp.ts），按对话开关。
  */
+import { ANN_TYPES } from '../../market/emNews';
 import type { ToolDef } from '../protocol';
 
 const CODE = {
   type: 'string',
   description:
     '证券代码，带或不带交易所前缀都行（sh600036 / 600036 / 510300），也可以是名称（招商银行）',
+};
+
+const AS_OF = {
+  type: 'string',
+  description:
+    '截止日期 YYYY-MM-DD，只返回这天及以前发布的（复盘过去某天时用，避免用到当时还不知道的消息）；不给 = 今天',
 };
 
 const obj = (
@@ -60,6 +68,7 @@ export const NAV_ROUTES: Record<string, { label: string; params: string }> = {
   DataLab: { label: '数据练习', params: '' },
   AiMemory: { label: 'AI 记忆', params: '' },
   AiServices: { label: '供应商与模型', params: '' },
+  AiMcp: { label: '外部工具（MCP）', params: '' },
 };
 
 export const TOOL_DEFS: ToolDef[] = [
@@ -82,6 +91,20 @@ export const TOOL_DEFS: ToolDef[] = [
       n: { type: 'integer', description: '条数，默认 20，最多 100' },
       kinds: { type: 'array', items: { type: 'string' } },
     }),
+  },
+  {
+    name: 'get_announcements',
+    description:
+      '公司公告列表（东方财富，从新到旧）：日期、分类、标题、art_code、链接。type 按大类筛：all 全部 / report 财务报告（年报季报、业绩预告、分红实施）/ financing 融资 / risk 风险提示（停牌、异常波动）/ info 信息变更 / major 重大事项 / restructure 资产重组 / holding 持股变动（增减持）。ETF、指数没有公告。',
+    schema: obj(
+      {
+        code: CODE,
+        n: { type: 'integer', description: '条数，默认 20，最多 50' },
+        type: { type: 'string', enum: Object.keys(ANN_TYPES) },
+        as_of: AS_OF,
+      },
+      ['code'],
+    ),
   },
   {
     name: 'get_company_profile',
@@ -151,6 +174,19 @@ export const TOOL_DEFS: ToolDef[] = [
     schema: obj({ code: CODE }, ['code']),
   },
   {
+    name: 'get_research',
+    description:
+      '个股研报（东方财富，近 2 年，从新到旧）：发布日期、机构、评级、标题、对今年起 3 个年度的 EPS 和 PE 预测、链接。看机构观点和盈利预测时用。',
+    schema: obj(
+      {
+        code: CODE,
+        n: { type: 'integer', description: '篇数，默认 10，最多 30' },
+        as_of: AS_OF,
+      },
+      ['code'],
+    ),
+  },
+  {
     name: 'get_rule',
     description:
       '交易规则：topic 给规则课 id 或关键词（如 fee、价格笼子），返回规则课讲解和小测答案要点；code 给证券代码，返回这只证券的规则卡（板块、涨跌幅、申报单位、价格笼子、现在能否撤单、可卖数量）。都不给时返回规则课列表。',
@@ -212,6 +248,19 @@ export const TOOL_DEFS: ToolDef[] = [
     ),
   },
   {
+    name: 'read_announcement',
+    description:
+      '读一条公告的正文（纯文本，按页，每页约 5,000 字）。art_code 用 get_announcements 查到的。年报、半年报全文只有 PDF 链接，改读摘要。',
+    schema: obj(
+      {
+        art_code: { type: 'string' },
+        page: { type: 'integer', description: '第几页，默认 1' },
+        as_of: AS_OF,
+      },
+      ['art_code'],
+    ),
+  },
+  {
     name: 'remember',
     description:
       '记住一条关于用户的长期信息（背景、偏好、计划、约定）。不要记持仓、成交、资金、费率、行情。',
@@ -235,6 +284,19 @@ export const TOOL_DEFS: ToolDef[] = [
     name: 'search_conversations',
     description: '在其他对话的标题、摘要和消息里检索关键词。',
     schema: obj({ query: { type: 'string' } }, ['query']),
+  },
+  {
+    name: 'search_news',
+    description:
+      '搜财经新闻（东方财富）：时间、媒体、标题、摘要、链接。keyword 写公司名、行业或事件（例如「招商银行 分红」）。行业动态、政策解读这类再用联网搜索补。',
+    schema: obj(
+      {
+        keyword: { type: 'string' },
+        n: { type: 'integer', description: '条数，默认 10，最多 20' },
+        as_of: AS_OF,
+      },
+      ['keyword'],
+    ),
   },
   {
     name: 'set_fee_profile',

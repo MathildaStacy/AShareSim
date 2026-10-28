@@ -14,6 +14,20 @@ import {
   type CorporateActionRow,
   type FinancePeriod,
 } from './eastmoney';
+import {
+  annContentUrl,
+  annListUrl,
+  newsUrl,
+  parseAnnContent,
+  parseAnnList,
+  parseNews,
+  parseResearch,
+  researchUrl,
+  type Announcement,
+  type AnnouncementText,
+  type NewsItem,
+  type ResearchReport,
+} from './emNews';
 import { parseSinaEtfRank, sinaEtfRankUrl } from './sina';
 import {
   minuteKlineUrl,
@@ -92,8 +106,13 @@ export interface Traffic {
 /** 一次请求最多带多少只代码（腾讯接口 URL 太长会被拒）。 */
 const QUOTE_CHUNK = 60;
 
+/** 资讯接口同一个请求在内存里缓存 10 分钟（§13.2），最多留 60 条。 */
+const FEED_TTL_MS = 10 * 60_000;
+const FEED_MAX = 60;
+
 export class MarketClient {
   traffic: Traffic = { date: '', requests: 0, bytes: 0 };
+  private feed = new Map<string, { at: number; text: string }>();
 
   constructor(
     private fetchText: FetchText = defaultFetchText,
@@ -109,6 +128,24 @@ export class MarketClient {
     this.traffic.requests++;
     this.traffic.bytes += utf8Bytes(text) + OVERHEAD_BYTES;
     return text;
+  }
+
+  private async cachedGet<T>(
+    url: string,
+    parse: (text: string) => T,
+  ): Promise<T> {
+    const hit = this.feed.get(url);
+    if (hit && Date.now() - hit.at < FEED_TTL_MS) {
+      return parse(hit.text);
+    }
+    const text = await this.get(url);
+    const parsed = parse(text);
+    this.feed.delete(url);
+    this.feed.set(url, { at: Date.now(), text });
+    if (this.feed.size > FEED_MAX) {
+      this.feed.delete(this.feed.keys().next().value!);
+    }
+    return parsed;
   }
 
   async quotes(codes: string[]): Promise<Quote[]> {
@@ -242,5 +279,55 @@ export class MarketClient {
   /** 最近几期主要财务指标（东方财富），从新到旧。 */
   async financials(code: string, periods: number): Promise<FinancePeriod[]> {
     return parseFinance(JSON.parse(await this.get(financeUrl(code, periods))));
+  }
+
+  // ---------- 资讯（东方财富，M4.1） ----------
+
+  /** 公告列表，从新到旧；asOf 只要这天及以前发布的。 */
+  async announcements(
+    code: string,
+    n: number,
+    type?: string,
+    asOf?: string,
+  ): Promise<{ total: number; items: Announcement[] }> {
+    const result = await this.cachedGet(
+      annListUrl(code.slice(2), n, type, asOf),
+      text => parseAnnList(JSON.parse(text)),
+    );
+    return {
+      ...result,
+      items: result.items.filter(i => i.date && (!asOf || i.date <= asOf)),
+    };
+  }
+
+  async announcementText(
+    artCode: string,
+    page: number,
+  ): Promise<AnnouncementText> {
+    return this.cachedGet(annContentUrl(artCode, page), text =>
+      parseAnnContent(JSON.parse(text)),
+    );
+  }
+
+  async research(
+    code: string,
+    n: number,
+    asOf: string,
+  ): Promise<{ total: number; year: number; items: ResearchReport[] }> {
+    const result = await this.cachedGet(
+      researchUrl(code.slice(2), n, asOf),
+      text => parseResearch(JSON.parse(text)),
+    );
+    return {
+      ...result,
+      items: result.items.filter(i => i.date && i.date <= asOf),
+    };
+  }
+
+  async news(
+    keyword: string,
+    n: number,
+  ): Promise<{ total: number; items: NewsItem[] }> {
+    return this.cachedGet(newsUrl(keyword, n), parseNews);
   }
 }

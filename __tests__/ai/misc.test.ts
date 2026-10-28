@@ -20,11 +20,11 @@ import {
 const fx = (name: string) =>
   JSON.parse(readFileSync(join(__dirname, '../market/fixtures', name), 'utf8'));
 
-test('工具列表固定 23 个，按名字排序，名字不重复', () => {
+test('工具列表固定 27 个，按名字排序，名字不重复', () => {
   const names = TOOL_DEFS.map(t => t.name);
-  expect(names).toHaveLength(23);
+  expect(names).toHaveLength(27);
   expect(names).toEqual([...names].sort());
-  expect(new Set(names).size).toBe(23);
+  expect(new Set(names).size).toBe(27);
   expect(NAV_ROUTES.Ai).toBeUndefined(); // 不能从 AI 打开 AI 页
 });
 
