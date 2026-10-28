@@ -84,6 +84,11 @@ const TOOLS: Tool[] = [
     sub: '每周执行与复盘',
     go: n => n.navigate('Portfolio'),
   },
+  {
+    label: '回放练习',
+    sub: '周末也能练 · 盲测',
+    go: n => n.navigate('Replay'),
+  },
 ];
 
 export function LearnScreen() {

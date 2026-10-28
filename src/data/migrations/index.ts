@@ -5,6 +5,7 @@ import { m0003 } from './0003_ai';
 import { m0004 } from './0004_ai_options';
 import { m0005 } from './0005_portfolio';
 import { m0006 } from './0006_advice';
+import { m0007 } from './0007_replay';
 
 /** 按顺序排列；下标 + 1 就是存在 PRAGMA user_version 里的版本号。 */
 export const migrations: string[][] = [
@@ -14,6 +15,7 @@ export const migrations: string[][] = [
   m0004,
   m0005,
   m0006,
+  m0007,
 ];
 
 export const SCHEMA_VERSION = migrations.length;

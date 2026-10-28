@@ -26,7 +26,7 @@ import {
   oppositeLevels,
   type FillPlan,
 } from './matching';
-import { riskValidation, type RiskLimits } from './risk';
+import { hasRiskLimits, riskOf, riskValidation, type RiskLimits } from './risk';
 import { ruleOf, type Security } from './securities';
 import {
   CLOSE,
@@ -64,6 +64,44 @@ import {
 export interface Now {
   date: DateStr;
   t: Sec;
+}
+
+/**
+ * 引擎的一次输入（M6 回放）。按顺序重新喂给同一状态的引擎，得到同样的事件。
+ * 行情只记会改变状态的：这只证券有未完成委托，或者它推进时间时报送 / 清算了委托。
+ */
+export type EngineInput =
+  | { kind: 'advance'; now: Now }
+  | {
+      kind: 'place';
+      now: Now;
+      req: OrderRequest;
+      /** 下单时引擎里这只证券的最新快照和当日竞价成交量记录（没存进快照库的证券靠它重放）。 */
+      snap: Snapshot | null;
+      memo: MarketMemo;
+      sec: Security | null;
+      /** 设了风险限额时，持仓证券的最新快照（单票上限按它们的现价算总资产）。 */
+      held?: Snapshot[];
+    }
+  | { kind: 'cancel'; now: Now; id: number }
+  | { kind: 'deposit' | 'withdraw'; now: Now; fen: Fen }
+  | { kind: 'fee'; profile: FeeProfile }
+  | { kind: 'cap'; fen: Fen }
+  | { kind: 'risk'; limits: RiskLimits }
+  | { kind: 'actions'; actions: CorporateAction[] }
+  | { kind: 'prime'; snap: Snapshot }
+  | { kind: 'snap'; snap: Snapshot };
+
+/** 引擎内存里按日记下的竞价成交量基准（9:25 后第一个快照的量、14:57 前最后一个快照的量）。 */
+export interface MarketMemo {
+  open?: number;
+  preClose?: number;
+}
+
+/** 输入记录器：begin 在每个带日期的输入开始前调用（还没改状态），record 记下这次输入。 */
+export interface EngineRecorder {
+  begin(date: DateStr, engine: Engine): void;
+  record(input: EngineInput): void;
 }
 
 export interface EngineDeps {
@@ -105,6 +143,10 @@ export class Engine {
   private preCloseVolume = new Map<string, number>();
   private actions: CorporateAction[] = [];
   private events: EngineEvent[] = [];
+  /** 时间推进改了状态（跨日、报送、清算）就加 1，用来判断这次输入要不要记下来。 */
+  private changes = 0;
+  /** M6：记录每次输入，回放和核对用。fork 出来的副本不继承，由调用方另外设置。 */
+  recorder: EngineRecorder | null = null;
 
   constructor(public state: AccountState, private deps: EngineDeps) {}
 
@@ -126,6 +168,34 @@ export class Engine {
     return this.snaps.get(code) ?? null;
   }
 
+  /** 引擎里每只证券的最新快照（回放的起点要原样带上）。 */
+  snapshots(): Snapshot[] {
+    return [...this.snaps.values()];
+  }
+
+  memo(code: string, date: DateStr): MarketMemo {
+    const key = code + '@' + date;
+    const m: MarketMemo = {};
+    if (this.openVolume.has(key)) {
+      m.open = this.openVolume.get(key);
+    }
+    if (this.preCloseVolume.has(key)) {
+      m.preClose = this.preCloseVolume.get(key);
+    }
+    return m;
+  }
+
+  /** 回放时恢复下单那一刻的竞价成交量基准（这只证券之前的快照没有记下来时用）。 */
+  restoreMemo(code: string, date: DateStr, m: MarketMemo): void {
+    const key = code + '@' + date;
+    if (m.open != null) {
+      this.openVolume.set(key, m.open);
+    }
+    if (m.preClose != null) {
+      this.preCloseVolume.set(key, m.preClose);
+    }
+  }
+
   lastPrice(code: string): number | null {
     const s = this.snaps.get(code);
     return s ? s.last ?? s.prevClose : null;
@@ -140,22 +210,36 @@ export class Engine {
    * 之后补撮合（分时数据）和实时快照才有比较的基准。
    */
   primeSnapshot(snap: Snapshot): void {
+    this.recorder?.record({ kind: 'prime', snap });
     this.snaps.set(snap.code, snap);
     this.prevSnaps.set(snap.code, snap);
   }
 
   setCorporateActions(actions: CorporateAction[]): void {
-    this.actions = actions
+    const sorted = actions
       .slice()
       .sort((a, b) => (a.exDate < b.exDate ? -1 : 1));
+    if (JSON.stringify(sorted) !== JSON.stringify(this.actions)) {
+      this.recorder?.record({ kind: 'actions', actions: sorted });
+    }
+    this.actions = sorted;
+  }
+
+  corporateActions(): CorporateAction[] {
+    return this.actions;
   }
 
   // ---------- 时间推进 ----------
 
   /** 把引擎时间推进到 now：报送暂存委托、日终清算、跨日处理（扣红利税、除权除息）。 */
   advance(now: Now): EngineEvent[] {
+    this.recorder?.begin(now.date, this);
     this.events = [];
+    const before = this.changes;
     this.advanceTo(now);
+    if (this.changes !== before) {
+      this.recorder?.record({ kind: 'advance', now });
+    }
     return this.flush();
   }
 
@@ -192,6 +276,7 @@ export class Engine {
   /** 交易日开始：扣上一交易日卖出产生的红利税、处理除权除息、发放到账的红利。 */
   private openDay(d: DateStr): void {
     const s = this.state;
+    this.changes++;
     s.date = d;
     s.settled = false;
     for (const p of s.pendingDivTax.filter(x => x.sellDate < d)) {
@@ -312,6 +397,7 @@ export class Engine {
 
   /** 券商把暂存委托报送交易所。 */
   private send(o: Order, d: DateStr): void {
+    this.changes++;
     const sec = this.sec(o.code);
     const snap = this.todaySnap(o.code, d);
     o.status = '已报';
@@ -341,6 +427,7 @@ export class Engine {
   /** 日终清算：撤销当日未成交委托，当日卖出回款变为可取。 */
   private settle(): void {
     const s = this.state;
+    this.changes++;
     let n = 0;
     for (const o of s.orders) {
       const waitingFuture =
@@ -358,6 +445,8 @@ export class Engine {
   // ---------- 资金 ----------
 
   deposit(now: Now, fen: Fen): SimpleResult {
+    this.recorder?.begin(now.date, this);
+    this.recorder?.record({ kind: 'deposit', now, fen });
     this.events = [];
     this.advanceTo(now);
     const s = this.state;
@@ -381,6 +470,8 @@ export class Engine {
   }
 
   withdraw(now: Now, fen: Fen): SimpleResult {
+    this.recorder?.begin(now.date, this);
+    this.recorder?.record({ kind: 'withdraw', now, fen });
     this.events = [];
     this.advanceTo(now);
     const s = this.state;
@@ -409,16 +500,19 @@ export class Engine {
 
   /** 改费率：只对之后提交的委托生效，已有委托按各自提交时的费率（Order.feeProfile）。 */
   setFeeProfile(profile: FeeProfile): void {
+    this.recorder?.record({ kind: 'fee', profile: { ...profile } });
     this.state.fee = { ...profile };
   }
 
   /** 改累计净入金上限（范围由调用方校验）。 */
   setDepositCap(fen: Fen): void {
+    this.recorder?.record({ kind: 'cap', fen });
     this.state.depositCap = fen;
   }
 
   /** 改风险限额（范围由调用方用 invalidRisk 校验）。 */
   setRiskLimits(r: RiskLimits): void {
+    this.recorder?.record({ kind: 'risk', limits: { ...r } });
     this.state.risk = { ...r };
   }
 
@@ -508,6 +602,22 @@ export class Engine {
   }
 
   placeOrder(now: Now, req: OrderRequest): PlaceResult {
+    this.recorder?.begin(now.date, this);
+    this.recorder?.record({
+      kind: 'place',
+      now,
+      req: { ...req },
+      snap: this.snaps.get(req.code) ?? null,
+      memo: this.memo(req.code, now.date),
+      sec: this.deps.security(req.code),
+      ...(hasRiskLimits(riskOf(this.state))
+        ? {
+            held: [...new Set(this.state.lots.map(l => l.code))]
+              .map(c => this.snaps.get(c))
+              .filter((x): x is Snapshot => !!x),
+          }
+        : {}),
+    });
     this.events = [];
     this.advanceTo(now);
     const s = this.state;
@@ -601,6 +711,8 @@ export class Engine {
   }
 
   cancelOrder(now: Now, id: number): SimpleResult {
+    this.recorder?.begin(now.date, this);
+    this.recorder?.record({ kind: 'cancel', now, id });
     this.events = [];
     this.advanceTo(now);
     const o = this.state.orders.find(x => x.id === id);
@@ -666,9 +778,18 @@ export class Engine {
 
   /** 喂入一个快照：先推进时间，再撮合这只证券的委托。 */
   onSnapshot(snap: Snapshot): EngineEvent[] {
+    this.recorder?.begin(snap.date, this);
     this.events = [];
+    const before = this.changes;
     this.advanceTo({ date: snap.date, t: snap.t });
     const code = snap.code;
+    if (
+      this.recorder &&
+      (this.changes !== before ||
+        this.state.orders.some(o => o.code === code && isLive(o)))
+    ) {
+      this.recorder.record({ kind: 'snap', snap });
+    }
     const prevAny = this.prevSnaps.get(code);
     const prev = prevAny && prevAny.date === snap.date ? prevAny : null;
     this.snaps.set(code, snap);

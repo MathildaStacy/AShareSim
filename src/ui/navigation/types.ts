@@ -78,6 +78,12 @@ export type RootStackParamList = {
   // M5.5
   AiFlows: undefined;
   Proposals: undefined;
+  // M6 回放
+  Replay: undefined;
+  /** blind：从「盲测回放」进来，日期已经随机选好、默认隐藏。 */
+  ReplayNew: { date: string; blind?: boolean };
+  ReplayRun: { id: number };
+  ReplayVerify: { date: string };
 };
 
 export type RootScreenProps<K extends keyof RootStackParamList> =

@@ -6,6 +6,8 @@
  * - 快照：自选、持仓、有未完成委托的证券，每个实时快照都存下来（M6 回放用；补撮合也用它定起点）。
  * - 补撮合（catchUp）：App 启动或从后台回来时，有未完成委托就用分时数据把中断的那段补上，再推进时间。
  *   必须在推进时间之前做，否则跨日时清算会先把委托撤掉。
+ * - 输入日志（M6，replay/journal.ts）：引擎的每次输入和账户状态同一个事务写进 engine_input，
+ *   回放核对时按顺序重放，和 account_event 逐笔比对。
  */
 import type { Db } from '../data/db';
 import { rebalances } from '../portfolio/repo';
@@ -26,12 +28,7 @@ import {
   type PlaceResult,
   type SimpleResult,
 } from '../engine/engine';
-import {
-  invalidRisk,
-  riskOf,
-  riskText,
-  type RiskLimits,
-} from '../engine/risk';
+import { invalidRisk, riskOf, riskText, type RiskLimits } from '../engine/risk';
 import { classify, isSTName, type Security } from '../engine/securities';
 import { AFTER_END, AFTER_START, CLOSE, T, type Sec } from '../engine/session';
 import type { EngineEvent, Snapshot } from '../engine/types';
@@ -41,6 +38,7 @@ import { beijingIso, beijingNow } from '../market/clock';
 import type { MarketClient } from '../market/client';
 import { baseFromPrevClose, gapSnapshots, mergeByTime } from '../market/replay';
 import type { Quote, QuoteInfo } from '../market/tencent';
+import { JournalWriter } from '../replay/journal';
 import { describeEvent } from './describe';
 import { feeDiff } from './feeForm';
 
@@ -82,6 +80,7 @@ export class Simulator {
   private listeners = new Set<Listener>();
   /** 盘后固定价格交易：每只证券已经喂到哪一分钟（code@date → 秒）。 */
   private afterFed = new Map<string, Sec>();
+  private journal: JournalWriter;
 
   private constructor(
     private db: Db,
@@ -95,6 +94,7 @@ export class Simulator {
       calendar,
       security: code => this.securities.get(code) ?? null,
     });
+    this.journal = new JournalWriter(calendar);
   }
 
   /** 打开（第一次启动时新建）当前账户。 */
@@ -125,6 +125,9 @@ export class Simulator {
     }
     sim.engine.setCorporateActions(await repo.corporateActions(db));
     await sim.syncPortfolioCodes(db);
+    // 引擎内存从空开始：从库里读出的状态就是这一段输入的起点
+    sim.journal.seed(sim.engine, clock().date, 'open');
+    sim.engine.recorder = sim.journal;
     return sim;
   }
 
@@ -144,14 +147,24 @@ export class Simulator {
   ): Promise<T> {
     return this.serial(async () => {
       const engine = this.engine.fork();
-      const events = engine.advance(this.clock());
-      const now = beijingIso();
-      const result = await this.db.transaction(async tx => {
-        const value = await work(engine, tx, events);
-        await repo.saveAccountState(tx, this.accountId, engine.state, now);
-        await this.writeEvents(tx, events, engine.state.date, now);
-        return value;
-      });
+      const mark = this.journal.mark();
+      engine.recorder = this.journal;
+      let result: T;
+      const events: EngineEvent[] = [];
+      try {
+        events.push(...engine.advance(this.clock()));
+        const now = beijingIso();
+        result = await this.db.transaction(async tx => {
+          const value = await work(engine, tx, events);
+          await repo.saveAccountState(tx, this.accountId, engine.state, now);
+          await this.writeEvents(tx, events, engine.state.date, now);
+          await this.journal.flush(tx, this.accountId);
+          return value;
+        });
+      } catch (e) {
+        this.journal.rollback(mark);
+        throw e;
+      }
       this.engine = engine;
       await this.syncPortfolioCodes(this.db);
       this.dirty = false;
@@ -375,6 +388,7 @@ export class Simulator {
         this.securities.has(s.code)
       ) {
         await repo.saveSnapshot(this.db, s);
+        this.journal.markSaved(s);
       }
       if (snapshotChanged && this.securities.has(s.code)) {
         await recordStockDay(this.db, s, info.name, info.type);
@@ -634,6 +648,7 @@ export class Simulator {
     }
     await this.db.transaction(async tx => {
       await repo.saveAccountState(tx, oldId, old, nowIso);
+      await this.journal.flush(tx, oldId);
       await repo.archiveAccount(tx, oldId, nowIso);
       const n = (await repo.allAccounts(tx)).length;
       newId = await repo.createAccount(
@@ -661,6 +676,7 @@ export class Simulator {
     });
     this.engine.state = state;
     this.currentId = newId;
+    this.journal.seed(this.engine, this.clock().date, 'reset');
     this.pendingPortfolio = [];
     this.afterFed.clear();
     this.dirty = false;
@@ -873,7 +889,11 @@ export class Simulator {
         return; // 网络不好时下次再拉
       }
     }
-    this.engine.setCorporateActions(await repo.corporateActions(this.db));
+    const actions = await repo.corporateActions(this.db);
+    await this.serial(async () => {
+      this.engine.setCorporateActions(actions);
+      await this.commit([]);
+    });
     await repo.setSetting(this.db, 'corpActionsFetched', today);
   }
 
@@ -891,9 +911,13 @@ export class Simulator {
       await this.db.transaction(async tx => {
         await repo.saveAccountState(tx, this.accountId, state, nowIso);
         await this.writeEvents(tx, events, state.date, nowIso);
+        await this.journal.flush(tx, this.accountId);
       });
       this.dirty = false;
       this.lastSave = nowMs;
+    } else if (this.journal.pending) {
+      // 只有排队量之类的变化：输入照样落库（状态按 15 秒节流），重启时以库里的状态为新起点
+      await this.db.transaction(tx => this.journal.flush(tx, this.accountId));
     }
     if (events.length) {
       this.listeners.forEach(fn => fn(events));

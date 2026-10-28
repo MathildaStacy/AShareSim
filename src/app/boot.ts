@@ -21,6 +21,7 @@ import {
 import { Simulator } from '../sim/simulator';
 import { syncLearn } from './learn';
 import { PortfolioService } from '../portfolio/service';
+import { pruneJournal } from '../replay/journal';
 import { nativeTracker } from './tracker';
 
 export interface AppCore {
@@ -133,6 +134,7 @@ async function housekeeping(core: AppCore): Promise<void> {
     return;
   }
   await repo.pruneSnapshots(core.db, core.refresher.settings.snapshotKeepDays);
+  await pruneJournal(core.db);
   await repo.pruneActivity(core.db, beijingIso(Date.now() - 90 * 86400_000));
   await repo.setSetting(core.db, 'housekeeping', today);
 }

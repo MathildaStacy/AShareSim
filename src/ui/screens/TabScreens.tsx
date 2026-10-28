@@ -259,6 +259,11 @@ export function TradeScreen() {
           sub="本周计划 · 执行报告"
           onPress={() => nav.navigate('Portfolio')}
         />
+        <Entry
+          title="回放练习"
+          sub="重放录下的某一天 · 盲测"
+          onPress={() => nav.navigate('Replay')}
+        />
         <View style={s.grid}>
           {grid.map(g => (
             <Pressable

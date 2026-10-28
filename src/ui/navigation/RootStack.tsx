@@ -31,6 +31,12 @@ import {
   RebalanceScreen,
 } from '../screens/PortfolioScreens';
 import { DataCenterScreen } from '../screens/DataCenterScreen';
+import {
+  ReplayNewScreen,
+  ReplayScreen,
+  ReplayVerifyScreen,
+} from '../screens/ReplayScreens';
+import { ReplayRunScreen } from '../screens/ReplayRunScreen';
 import { DebugScreen } from '../screens/DebugScreen';
 import { FillDetailScreen, OrderDetailScreen } from '../screens/DetailScreens';
 import { CalibrateScreen, FeesScreen } from '../screens/FeeScreens';
@@ -166,6 +172,10 @@ export function RootStack() {
       <Stack.Screen name="Strategy" component={StrategyScreen} />
       <Stack.Screen name="Rebalance" component={RebalanceScreen} />
       <Stack.Screen name="DataCenter" component={DataCenterScreen} />
+      <Stack.Screen name="Replay" component={ReplayScreen} />
+      <Stack.Screen name="ReplayNew" component={ReplayNewScreen} />
+      <Stack.Screen name="ReplayRun" component={ReplayRunScreen} />
+      <Stack.Screen name="ReplayVerify" component={ReplayVerifyScreen} />
       <Stack.Screen name="Coming" component={ComingScreen} />
       <Stack.Screen
         name="Ai"

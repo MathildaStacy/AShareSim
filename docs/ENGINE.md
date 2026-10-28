@@ -117,3 +117,12 @@ engine.advance(now);           // 没有行情时也要推进时间：报送暂�
 | `src/app/settings.ts` | 改后台跟踪模式、间隔和快照保留：存设置、交给运行中的 Refresher、立刻按新设置开关后台跟踪、记操作日志 |
 
 测试：`__tests__/engine/funds.test.ts`（转账时间、上限、可取、改费率不影响已挂委托、旧数据升级、反推费率）、`__tests__/sim/step4.test.ts`（表单和流水）、`__tests__/sim/simulator.test.ts`（转账、设置日志、重置归档、日志清理）、`__tests__/ui/fundsScreens.test.tsx`（新页面的冒烟测试和页面上下文）。全部 227 项。
+
+## 9. M6：输入记录和回放
+
+`Engine.recorder`（`EngineRecorder`）记下引擎的每次输入（`EngineInput`）：下单、撤单、转账、改费率 / 上限 / 限额、分红送配变化、改了状态的时间推进、会改变状态的快照（这只证券有未完成委托，或者推进时间时改了状态）。`begin(date)` 在每个带日期的输入改状态之前调用，记录器据此在每个交易日第一次输入前记一个起点。引擎为此加了 `snapshots()`、`corporateActions()`、`memo()` / `restoreMemo()`（按日记下的集合竞价成交量基准），撮合逻辑没有改。
+
+- 实时账户：`src/replay/journal.ts` 的 `JournalWriter` 挂在 Simulator 的引擎上，和账户状态、`account_event` 同一个事务写进 `engine_input`。
+- 重放：`src/replay/runner.ts` 的 `applyInput` 把一条输入喂给引擎；下单前先恢复下单那一刻这只证券的快照和集合竞价成交量基准。
+- 核对：`src/replay/verify.ts`；回放练习：`src/replay/practice.ts`。口径见 [M6_REPLAY.md](M6_REPLAY.md)。
+
