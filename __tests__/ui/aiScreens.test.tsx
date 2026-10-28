@@ -348,10 +348,10 @@ test('处理过程默认折叠、展开后可追溯，异常数量可见；向�
       ],
     });
   });
-  expect(r.text()).toContain('工具记录 2 项');
+  expect(r.text()).toContain('已调用 2 个工具');
   expect(r.text()).not.toContain('读取 账户和持仓');
   expect(r.text()).toContain('异常 1 项');
-  expect(r.text()).not.toContain('行情查询失败，请重试');
+  expect(r.text()).toContain('行情查询失败，请重试');
   await r.press('处理过程');
   expect(r.text()).toContain('行情查询失败，请重试');
   expect(r.text()).toContain('读取 账户和持仓');

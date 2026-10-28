@@ -89,7 +89,7 @@ function Table({
 }) {
   const { width, fontScale } = useWindowDimensions();
   const count = Math.max(0, ...rows.map(row => row.length));
-  const available = Math.min(720, width - 40);
+  const available = Math.min(720, width - 32);
   const widths = Array.from({ length: count }, (_, i) => {
     const longest = Math.max(
       ...rows.map(row => (row[i] ?? []).map(x => x.text).join('').length),
@@ -117,7 +117,22 @@ function Table({
           >
             {widths.map((cellWidth, col) => (
               <View key={col} style={[s.cell, { width: cellWidth }]}>
-                <Text selectable style={[s.td, num, r === 0 && s.bold]}>
+                <Text
+                  selectable
+                  style={[
+                    s.td,
+                    num,
+                    r === 0 && s.bold,
+                    r > 0 &&
+                      /^[-+−]?[\d.,%¥￥元万元亿]+$/.test(
+                        (row[col] ?? [])
+                          .map(x => x.text)
+                          .join('')
+                          .trim(),
+                      ) &&
+                      s.numeric,
+                  ]}
+                >
                   <Inline inl={row[col] ?? []} onLink={onLink} />
                 </Text>
               </View>
@@ -248,16 +263,16 @@ const s = StyleSheet.create({
     color: c.secondary,
     marginBottom: 8,
   },
-  p: { fontSize: 16, lineHeight: 27, color: c.ink, marginBottom: 14 },
-  h: { fontWeight: '600', color: c.ink, marginTop: 24, marginBottom: 10 },
-  h1: { fontSize: 22, lineHeight: 32 },
-  h2: { fontSize: 20, lineHeight: 30 },
-  h3: { fontSize: 17, lineHeight: 27 },
+  p: { fontSize: 16, lineHeight: 25, color: c.ink, marginBottom: 12 },
+  h: { fontWeight: '600', color: c.ink, marginTop: 20, marginBottom: 8 },
+  h1: { fontSize: 21, lineHeight: 30 },
+  h2: { fontSize: 18, lineHeight: 27 },
+  h3: { fontSize: 16, lineHeight: 25 },
   firstHeading: { marginTop: 0 },
   bold: { fontWeight: '600' },
   icode: {
     fontFamily: mono,
-    fontSize: 14,
+    fontSize: 13,
     backgroundColor: c.soft,
     color: c.code,
   },
@@ -268,10 +283,10 @@ const s = StyleSheet.create({
     paddingRight: 6,
     flexShrink: 0,
     fontSize: 16,
-    lineHeight: 27,
+    lineHeight: 25,
     color: c.secondary,
   },
-  liText: { flex: 1, fontSize: 16, lineHeight: 27, color: c.ink },
+  liText: { flex: 1, fontSize: 16, lineHeight: 25, color: c.ink },
   listEnd: { marginBottom: 16 },
   tableWrap: { marginVertical: 6, marginBottom: 20, borderRadius: 12 },
   table: {
@@ -288,12 +303,13 @@ const s = StyleSheet.create({
   lastRow: { borderBottomWidth: 0 },
   th: { backgroundColor: c.soft },
   cell: { paddingHorizontal: 12, paddingVertical: 11 },
+  numeric: { textAlign: 'right' },
   td: { fontSize: 14, lineHeight: 22, color: c.ink },
   codeWrap: { backgroundColor: c.soft, borderRadius: 12, marginBottom: 18 },
   code: {
     fontFamily: mono,
     fontSize: 13,
-    lineHeight: 21,
+    lineHeight: 20,
     color: c.ink,
     padding: 14,
   },
@@ -304,7 +320,7 @@ const s = StyleSheet.create({
     marginVertical: 4,
     marginBottom: 18,
   },
-  quoteText: { fontSize: 16, lineHeight: 27, color: c.secondary },
+  quoteText: { fontSize: 16, lineHeight: 25, color: c.secondary },
   hr: {
     height: StyleSheet.hairlineWidth,
     backgroundColor: c.line,

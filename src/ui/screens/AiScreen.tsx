@@ -7,6 +7,8 @@ import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import {
   ArrowUp,
+  CircleAlert,
+  ChevronRight,
   ArrowRight,
   ChevronLeft,
   SquarePen,
@@ -102,7 +104,11 @@ import {
   markBriefing,
   type BriefDue,
 } from '../../ai/flows';
-import { ChatProcess, conversationTurns } from '../components/ChatProcess';
+import {
+  ChatProcess,
+  conversationFlow,
+  conversationTurns,
+} from '../components/ChatProcess';
 import { Button } from '../components/ui';
 import { useCore } from '../hooks';
 import type { RootStackParamList } from '../navigation/types';
@@ -474,7 +480,7 @@ export function AiScreen() {
               {thread?.title ?? 'AI 助手'}
             </Text>
             <View style={s.headerMeta}>
-              <Text style={s.ctxText}>
+              <Text style={s.ctxText} numberOfLines={1}>
                 {'来源页面：' +
                   (pageName ?? '无页面') +
                   (est && svc
@@ -585,7 +591,7 @@ export function AiScreen() {
             </View>
           </View>
         ) : null}
-        {svc && briefs.length && !busy ? (
+        {svc && briefs.length && !busy && !live.length ? (
           <View style={s.briefs}>
             {briefs.map(d => (
               <View key={d.kind} style={s.brief}>
@@ -656,7 +662,7 @@ export function AiScreen() {
                   m={m}
                   usage={
                     m.role !== 'user' &&
-                    m === turn.answer[turn.answer.length - 1] &&
+                    m.id === turn.answer[turn.answer.length - 1]?.id &&
                     !(busy && turnIndex === turns.length - 1)
                       ? answerUsage(turn.answer, 0)
                       : null
@@ -664,10 +670,10 @@ export function AiScreen() {
                   svc={messageService(m)}
                   trace={
                     m.role === 'assistant' &&
-                    m ===
+                    m.id ===
                       [...turn.answer]
                         .reverse()
-                        .find(x => x.role === 'assistant') &&
+                        .find(x => x.role === 'assistant')?.id &&
                     !(busy && turnIndex === turns.length - 1)
                       ? traces[turnIndex]
                       : null
@@ -676,6 +682,11 @@ export function AiScreen() {
                   onLink={onLink}
                   onSearch={q => retrySearch(q).catch(e => setError(String(e)))}
                   searchBusy={!!busy}
+                  onRetry={
+                    turn.question?.ui?.question && !busy
+                      ? () => send(turn.question!.ui!.question!)
+                      : undefined
+                  }
                   onCard={(toolId, act) =>
                     act === 'run'
                       ? runCard(core, m.id, toolId)
@@ -701,17 +712,31 @@ export function AiScreen() {
               return (
                 <>
                   {turn.question ? renderMessage(turn.question) : null}
-                  <ChatProcess
-                    messages={turn.answer}
-                    onInteract={() => {
-                      followEnd.current = false;
-                    }}
-                    busy={turnIndex === turns.length - 1 ? busy : null}
-                    onLink={onLink}
-                  />
-                  {turn.answer.map((m, i) => (
-                    <View key={i}>{renderMessage(m)}</View>
-                  ))}
+                  {(() => {
+                    const running =
+                      turnIndex === turns.length - 1 ? busy : null;
+                    const flow = conversationFlow(turn.answer, !!running);
+                    const lastProcess = [...flow]
+                      .reverse()
+                      .find(block => block.kind === 'process');
+                    return flow.map(block =>
+                      block.kind === 'process' ? (
+                        <ChatProcess
+                          key={block.key}
+                          messages={block.messages}
+                          onInteract={() => {
+                            followEnd.current = false;
+                          }}
+                          busy={block === lastProcess ? running : null}
+                          onLink={onLink}
+                        />
+                      ) : (
+                        <View key={block.key}>
+                          {renderMessage(block.message)}
+                        </View>
+                      ),
+                    );
+                  })()}
                 </>
               );
             })()}
@@ -720,7 +745,16 @@ export function AiScreen() {
         {!turns.length && busy ? (
           <ChatProcess messages={[]} busy={busy} onLink={onLink} />
         ) : null}
-        {error ? <Text style={s.error}>{error}</Text> : null}
+        {error ? (
+          <ChatError
+            message={error}
+            onRetry={
+              !busy && turns.at(-1)?.question?.ui?.question
+                ? () => send(turns.at(-1)!.question!.ui!.question!)
+                : undefined
+            }
+          />
+        ) : null}
       </ScrollView>
       <View style={[s.bottom, { paddingBottom: bottomInset }]}>
         {!atEnd && live.length ? (
@@ -771,7 +805,7 @@ export function AiScreen() {
             value={text}
             onChangeText={setText}
             placeholder={svc ? '给 AI 助手发消息' : '先配置供应商与模型'}
-            placeholderTextColor={c.muted}
+            placeholderTextColor={c.secondary}
             style={s.input}
             multiline
             hitSlop={8}
@@ -828,9 +862,7 @@ export function AiScreen() {
                   color={config?.search ? c.accent : c.secondary}
                 />
               </View>
-              <Text style={s.controlText}>
-                {config?.search ? '联网开' : '联网关'}
-              </Text>
+              {config?.search ? <View style={s.searchDot} /> : null}
             </Pressable>
             {mcpOk || config?.mcp ? (
               <Pressable
@@ -874,7 +906,7 @@ export function AiScreen() {
             >
               <Brain size={19} color={c.secondary} />
               <Text style={s.controlText}>
-                {'思考' + (config ? EFFORT_NAME[config.effort] : '未选')}
+                {config ? EFFORT_NAME[config.effort] : '未选'}
               </Text>
             </Pressable>
             <Pressable
@@ -977,6 +1009,7 @@ function MessageView({
   onOpen,
   onSearch,
   searchBusy,
+  onRetry,
 }: {
   m: StoredMessage;
   usage: Usage | null;
@@ -991,6 +1024,7 @@ function MessageView({
   onOpen: (route: string, params?: object) => void;
   onSearch: (q: string) => void;
   searchBusy: boolean;
+  onRetry?: () => void;
 }) {
   const [showSources, setShowSources] = useState(false);
   if (m.role === 'user') {
@@ -1066,7 +1100,7 @@ function MessageView({
                 onPress={() => onNav(t.nav!)}
                 accessibilityRole="button"
               >
-                <Text style={s.tool}>{'↗ ' + t.label}</Text>
+                <Text style={s.tool}>{t.label}</Text>
               </Pressable>
             ) : null}
           </View>
@@ -1143,9 +1177,63 @@ function MessageView({
       ) : null}
       {trace && trace.refs.length ? <TraceView trace={trace} /> : null}
       {m.ui?.notice ? <Text style={s.notice}>{m.ui.notice}</Text> : null}
-      {m.ui?.error ? <Text style={s.error}>{m.ui.error}</Text> : null}
+      {m.ui?.error ? (
+        <ChatError message={m.ui.error} onRetry={onRetry} />
+      ) : null}
       {usage ? (
         <AnswerDetails m={m} usage={usage} svc={svc} text={text} />
+      ) : null}
+    </View>
+  );
+}
+
+function ChatError({
+  message,
+  onRetry,
+}: {
+  message: string;
+  onRetry?: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const summary = message.split('\n')[0];
+  return (
+    <View style={s.errorBlock}>
+      <View style={s.errorRow}>
+        <CircleAlert size={15} color={color.up} />
+        <Text style={s.errorLabel}>
+          {summary.length > 70 ? '回复未完成' : summary}
+        </Text>
+      </View>
+      <View style={s.errorRow}>
+        <Pressable
+          style={s.toolSummary}
+          accessibilityRole="button"
+          accessibilityLabel="错误详情"
+          accessibilityState={{ expanded: open }}
+          onPress={() => setOpen(v => !v)}
+        >
+          <Text style={s.toolSummaryText}>查看详情</Text>
+          {open ? (
+            <ChevronDown size={14} color={c.secondary} />
+          ) : (
+            <ChevronRight size={14} color={c.secondary} />
+          )}
+        </Pressable>
+        {onRetry ? (
+          <Pressable
+            style={s.retry}
+            accessibilityRole="button"
+            accessibilityLabel="重试回答"
+            onPress={onRetry}
+          >
+            <Text style={s.toolSummaryText}>重试</Text>
+          </Pressable>
+        ) : null}
+      </View>
+      {open ? (
+        <Text selectable style={s.errorLabel}>
+          {message}
+        </Text>
       ) : null}
     </View>
   );
@@ -1384,7 +1472,8 @@ function MemoryView({
       : '没有记：';
   return (
     <View style={s.mem}>
-      <Text style={s.memText}>{'🧠 ' + head + what}</Text>
+      <Brain size={16} strokeWidth={1.75} color={c.secondary} />
+      <Text style={s.memText}>{head + what}</Text>
       {mm.status === 'pending' ? (
         <View style={s.memBtns}>
           <Button
@@ -1481,7 +1570,7 @@ const s = StyleSheet.create({
     paddingVertical: 12,
   },
   header: { paddingHorizontal: 6, backgroundColor: c.page },
-  headerRow: { flexDirection: 'row', alignItems: 'center', minHeight: 62 },
+  headerRow: { flexDirection: 'row', alignItems: 'center', minHeight: 56 },
   headerButton: {
     width: 48,
     height: 48,
@@ -1495,7 +1584,7 @@ const s = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: 4,
   },
-  headerName: { fontSize: 16, lineHeight: 23, color: c.ink, fontWeight: '500' },
+  headerName: { fontSize: 16, lineHeight: 24, color: c.ink, fontWeight: '500' },
   headerMeta: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1562,15 +1651,15 @@ const s = StyleSheet.create({
     textAlign: 'center',
   },
   turn: { marginBottom: 16 },
-  userWrap: { alignItems: 'flex-end', marginTop: 8, marginBottom: 16 },
+  userWrap: { alignItems: 'flex-end', marginTop: 0, marginBottom: 20 },
   userBubble: {
-    maxWidth: '92%',
+    maxWidth: '90%',
     backgroundColor: c.user,
-    borderRadius: 16,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
   },
-  userText: { color: c.ink, fontSize: 16, lineHeight: 26 },
+  userText: { color: c.ink, fontSize: 16, lineHeight: 25 },
   attach: { fontSize: 11, lineHeight: 17, color: c.muted, marginTop: 6 },
   aiBlock: { padding: 0, marginBottom: 8 },
   toolBlock: { marginBottom: 8 },
@@ -1586,7 +1675,7 @@ const s = StyleSheet.create({
   briefText: { fontSize: 14, lineHeight: 21, color: c.ink },
   briefBtns: { flexDirection: 'row', justifyContent: 'flex-end', gap: 4 },
   briefBtn: {
-    minHeight: 44,
+    minHeight: 48,
     minWidth: 48,
     justifyContent: 'center',
     paddingHorizontal: 10,
@@ -1610,7 +1699,7 @@ const s = StyleSheet.create({
   toolSummary: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 4,
     minHeight: 48,
     alignSelf: 'flex-start',
     paddingRight: 8,
@@ -1664,7 +1753,20 @@ const s = StyleSheet.create({
     color: color.warnInk,
     marginBottom: 6,
   },
-  error: { fontSize: 14, lineHeight: 22, color: color.up, marginVertical: 8 },
+  errorBlock: { marginVertical: 8 },
+  errorRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  errorLabel: {
+    flexShrink: 1,
+    fontSize: 13,
+    lineHeight: 20,
+    color: c.secondary,
+  },
+  retry: {
+    minHeight: 48,
+    minWidth: 48,
+    justifyContent: 'center',
+    paddingHorizontal: 12,
+  },
   card: {
     borderWidth: 1,
     borderColor: c.line,

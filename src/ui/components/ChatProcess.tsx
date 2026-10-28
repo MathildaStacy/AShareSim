@@ -2,14 +2,17 @@
 import { useState } from 'react';
 import {
   ActivityIndicator,
+  Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
-import { ChevronDown, ChevronUp } from 'lucide-react-native';
+import { ChevronDown, ChevronRight, CircleAlert } from 'lucide-react-native';
 import type { StoredMessage, SearchSource, ToolUi } from '../../ai/types';
 import { aiColor as c } from '../aiTheme';
+import { color } from '../theme';
 import { Markdown } from './Markdown';
 
 export function conversationTurns(messages: StoredMessage[]) {
@@ -95,6 +98,110 @@ export function processEvidence(messages: StoredMessage[]) {
   };
 }
 
+type FlowBlock =
+  | { kind: 'process'; key: string; messages: StoredMessage[] }
+  | { kind: 'message'; key: string; message: StoredMessage };
+
+/** Only ordered messages establish a boundary; aggregated fields remain local. */
+export function conversationFlow(
+  messages: StoredMessage[],
+  running = false,
+): FlowBlock[] {
+  const blocks: FlowBlock[] = [];
+  const seenTools = new Set<string>();
+  const seenQueries = new Set<string>();
+  const seenSources = new Set<string>();
+  const seenSummaries = new Set<string>();
+  let seenSearch = false;
+  const latestTools = new Map(
+    messages.flatMap(m => (m.ui?.tools ?? []).map(t => [t.id, t] as const)),
+  );
+  const calls = messages.flatMap(m => m.parts.filter(p => p.t === 'call'));
+  for (const [index, message] of messages.entries()) {
+    const tools = (message.ui?.tools ?? [])
+      .filter(t => {
+        if (seenTools.has(t.id)) return false;
+        seenTools.add(t.id);
+        return true;
+      })
+      .map(t => latestTools.get(t.id)!);
+    const originalSearch = message.ui?.search;
+    const queries = (originalSearch?.queries ?? []).filter(q => {
+      if (seenQueries.has(q)) return false;
+      seenQueries.add(q);
+      return true;
+    });
+    const sources = (originalSearch?.sources ?? []).filter(source => {
+      if (seenSources.has(source.url)) return false;
+      seenSources.add(source.url);
+      return true;
+    });
+    const summary = publicSummary(message);
+    const hasSummary = !!summary && !seenSummaries.has(summary);
+    if (summary) seenSummaries.add(summary);
+    const hasSearch =
+      !!originalSearch &&
+      (queries.length > 0 || sources.length > 0 || !seenSearch);
+    if (originalSearch) seenSearch = true;
+    const hasEvidence = tools.length > 0 || hasSummary || hasSearch;
+    if (
+      hasEvidence ||
+      (running && index === messages.length - 1 && blocks.length === 0)
+    ) {
+      const record = {
+        ...message,
+        raw: hasSummary ? message.raw : null,
+        parts: [
+          ...calls.filter(p => tools.some(t => t.id === p.id)),
+          ...message.parts.filter(p => p.t === 'result'),
+        ],
+        ui: {
+          ...message.ui,
+          tools,
+          search:
+            hasSearch && originalSearch
+              ? { ...originalSearch, queries, sources }
+              : undefined,
+        },
+      };
+      const previous = blocks[blocks.length - 1];
+      if (previous?.kind === 'process') previous.messages.push(record);
+      else
+        blocks.push({
+          kind: 'process',
+          key: `process:${blocks.length}`,
+          messages: [record],
+        });
+    }
+    const hasBody =
+      message.parts.some(p => p.t === 'text' && p.text.trim()) ||
+      message.ui?.notice ||
+      message.ui?.error ||
+      message.ui?.searchOffer;
+    const hasActions = tools.some(
+      t => t.card || t.memory || t.nav || t.proposal,
+    );
+    if (hasBody || hasActions || index === messages.length - 1) {
+      blocks.push({
+        kind: 'message',
+        key: `message:${blocks.length}`,
+        message: {
+          ...message,
+          ui: message.ui ? { ...message.ui, tools } : null,
+        },
+      });
+    }
+  }
+  if (running && !blocks.some(b => b.kind === 'process')) {
+    blocks.push({
+      kind: 'process',
+      key: `process:${blocks.length}`,
+      messages: [],
+    });
+  }
+  return blocks;
+}
+
 function toolStatus(tool: ToolUi): string {
   if (tool.error) {
     return '执行异常';
@@ -139,7 +246,7 @@ export function ChatProcess({
     t => t.error || t.card?.status === 'failed',
   ).length;
   const counts = [
-    tools.length ? `工具记录 ${tools.length} 项` : '',
+    tools.length ? `已调用 ${tools.length} 个工具` : '',
     errors ? `异常 ${errors} 项` : '',
     !sources.length && queries.length ? `检索词 ${queries.length} 个` : '',
     sources.length ? `来源 ${sources.length} 个` : '',
@@ -162,31 +269,67 @@ export function ChatProcess({
           setExpanded(v => !v);
         }}
       >
-        <Text style={s.label}>处理过程{counts ? ' · ' + counts : ''}</Text>
-        <Text style={s.action}>{expanded ? '收起' : '展开'}</Text>
+        {busy ? <ActivityIndicator size={13} color={c.secondary} /> : null}
+        <Text style={s.label}>{counts || (busy ? busy : '处理摘要')}</Text>
         {expanded ? (
-          <ChevronUp size={16} color={c.secondary} />
+          <ChevronDown size={14} color={c.secondary} />
         ) : (
-          <ChevronDown size={16} color={c.secondary} />
+          <ChevronRight size={14} color={c.secondary} />
         )}
       </Pressable>
-      {busy ? (
-        <View style={s.current} accessibilityLiveRegion="polite">
-          <ActivityIndicator size="small" color={c.accent} />
-          <Text style={s.label}>{'进行中 · ' + busy}</Text>
-        </View>
+      {busy && counts ? (
+        <Text style={s.current} accessibilityLiveRegion="polite">
+          {busy}
+        </Text>
       ) : null}
+      {tools
+        .filter(t => t.error || t.card?.status === 'failed')
+        .map(t => (
+          <View key={t.id} style={s.errorRow}>
+            <CircleAlert size={14} color={color.up} />
+            <Text style={s.label}>{t.label + ' · 执行异常'}</Text>
+          </View>
+        ))}
       {expanded ? (
         <View style={s.details} testID="process-details">
-          {groups.map((group, index) => (
+          {groups.map(group => (
             <View key={group.id} style={s.group}>
-              <Text style={s.label}>{`步骤 ${index + 1}`}</Text>
               <View style={s.indent}>
-                {group.tools.map(tool => (
-                  <Text key={tool.id} selectable style={s.label}>
-                    {toolStatus(tool) + ' · ' + tool.label}
-                  </Text>
-                ))}
+                {group.tools.map(tool => {
+                  const parts = messages.flatMap(m => m.parts);
+                  const input = parts.find(
+                    p => p.t === 'call' && p.id === tool.id,
+                  );
+                  const output = parts.find(
+                    p => p.t === 'result' && p.id === tool.id,
+                  );
+                  return (
+                    <View key={tool.id} style={s.toolDetail}>
+                      <Text selectable style={s.label}>
+                        {tool.label}
+                      </Text>
+                      <Text style={s.label}>{toolStatus(tool)}</Text>
+                      {input?.t === 'call' ? (
+                        <View style={s.inputCode}>
+                          <ScrollView
+                            horizontal
+                            nestedScrollEnabled
+                            accessibilityLabel="工具输入，可横向滚动"
+                          >
+                            <Text selectable style={s.code}>
+                              {input.args}
+                            </Text>
+                          </ScrollView>
+                        </View>
+                      ) : null}
+                      {output?.t === 'result' ? (
+                        <Text selectable style={s.output}>
+                          {output.output}
+                        </Text>
+                      ) : null}
+                    </View>
+                  );
+                })}
                 {group.summary ? (
                   <View>
                     <Text style={s.label}>处理摘要</Text>
@@ -209,7 +352,7 @@ export function ChatProcess({
                     </Text>
                   ))
                 ) : (
-                  <Text style={s.label}>接口未提供检索词</Text>
+                  <Text style={s.label}>此处无新增检索词</Text>
                 )}
                 {sources.length ? (
                   sources.map(source => (
@@ -225,7 +368,7 @@ export function ChatProcess({
                     </Pressable>
                   ))
                 ) : (
-                  <Text style={s.label}>接口未提供来源</Text>
+                  <Text style={s.label}>此处无新增来源</Text>
                 )}
               </View>
             </View>
@@ -237,24 +380,59 @@ export function ChatProcess({
 }
 
 const s = StyleSheet.create({
-  process: { marginBottom: 8 },
-  toggle: { minHeight: 48, flexDirection: 'row', alignItems: 'center', gap: 8 },
+  process: { marginBottom: 0 },
+  toggle: {
+    minHeight: 48,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    alignSelf: 'flex-start',
+    maxWidth: '100%',
+  },
   label: { fontSize: 13, lineHeight: 20, color: c.secondary, flexShrink: 1 },
-  action: {
+  current: {
     fontSize: 13,
     lineHeight: 20,
     color: c.secondary,
-    marginLeft: 'auto',
-  },
-  current: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
     paddingBottom: 8,
   },
-  details: { paddingTop: 8, paddingBottom: 8, gap: 16 },
+  errorRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 8,
+  },
+  details: {
+    backgroundColor: c.paper,
+    borderWidth: 1,
+    borderColor: c.line,
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 8,
+    gap: 12,
+  },
   group: { gap: 8 },
-  indent: { paddingLeft: 16, gap: 8 },
+  indent: { gap: 8 },
+  toolDetail: { gap: 8 },
+  inputCode: {
+    borderWidth: 1,
+    borderColor: c.line,
+    borderRadius: 8,
+    overflow: 'hidden',
+  },
+  code: {
+    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+    fontSize: 13,
+    lineHeight: 20,
+    color: c.ink,
+    padding: 8,
+  },
+  output: {
+    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+    fontSize: 13,
+    lineHeight: 20,
+    color: c.secondary,
+  },
   source: { minHeight: 48, justifyContent: 'center', gap: 4 },
   link: { textDecorationLine: 'underline' },
 });

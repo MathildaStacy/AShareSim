@@ -1,21 +1,21 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-10-27T13:16:36.409Z",
+  "generatedAt": "2026-10-28T07:45:52.178Z",
   "title": "Design System: AShareSim · AI Conversation",
   "extensions": {
     "colorMeta": {
       "page": {
         "role": "neutral",
-        "displayName": "Warm page",
+        "displayName": "Near-white page",
         "tonalRamp": [
-          "oklch(15% 0.0019 91.4)",
-          "oklch(25% 0.0029 91.4)",
-          "oklch(35% 0.0037 91.4)",
-          "oklch(45% 0.0041 91.4)",
-          "oklch(58% 0.0040 91.4)",
-          "oklch(70% 0.0033 91.4)",
-          "oklch(83% 0.0021 91.4)",
-          "oklch(95% 0.0006 91.4)"
+          "oklch(15% 0.0006 106.4)",
+          "oklch(25% 0.0009 106.4)",
+          "oklch(35% 0.0012 106.4)",
+          "oklch(45% 0.0013 106.4)",
+          "oklch(58% 0.0013 106.4)",
+          "oklch(70% 0.0011 106.4)",
+          "oklch(83% 0.0007 106.4)",
+          "oklch(95% 0.0002 106.4)"
         ]
       },
       "paper": {
@@ -36,168 +36,168 @@
         "role": "neutral",
         "displayName": "Deep ink",
         "tonalRamp": [
-          "oklch(15% 0.0025 91.6)",
-          "oklch(25% 0.0040 91.6)",
-          "oklch(35% 0.0050 91.6)",
-          "oklch(45% 0.0055 91.6)",
-          "oklch(58% 0.0054 91.6)",
-          "oklch(70% 0.0045 91.6)",
-          "oklch(83% 0.0029 91.6)",
-          "oklch(95% 0.0009 91.6)"
+          "oklch(15% 0.0008 106.5)",
+          "oklch(25% 0.0013 106.5)",
+          "oklch(35% 0.0016 106.5)",
+          "oklch(45% 0.0018 106.5)",
+          "oklch(58% 0.0018 106.5)",
+          "oklch(70% 0.0015 106.5)",
+          "oklch(83% 0.0009 106.5)",
+          "oklch(95% 0.0003 106.5)"
         ]
       },
       "secondary": {
         "role": "neutral",
         "displayName": "Secondary ink",
         "tonalRamp": [
-          "oklch(15% 0.0037 88.7)",
-          "oklch(25% 0.0058 88.7)",
-          "oklch(35% 0.0073 88.7)",
-          "oklch(45% 0.0081 88.7)",
-          "oklch(58% 0.0079 88.7)",
-          "oklch(70% 0.0066 88.7)",
-          "oklch(83% 0.0042 88.7)",
-          "oklch(95% 0.0013 88.7)"
+          "oklch(15% 0.0028 106.6)",
+          "oklch(25% 0.0044 106.6)",
+          "oklch(35% 0.0055 106.6)",
+          "oklch(45% 0.0061 106.6)",
+          "oklch(58% 0.0060 106.6)",
+          "oklch(70% 0.0050 106.6)",
+          "oklch(83% 0.0032 106.6)",
+          "oklch(95% 0.0010 106.6)"
         ]
       },
       "muted": {
         "role": "neutral",
         "displayName": "Muted ink",
         "tonalRamp": [
-          "oklch(15% 0.0047 78.2)",
-          "oklch(25% 0.0074 78.2)",
-          "oklch(35% 0.0093 78.2)",
-          "oklch(45% 0.0103 78.2)",
-          "oklch(58% 0.0101 78.2)",
-          "oklch(70% 0.0084 78.2)",
-          "oklch(83% 0.0053 78.2)",
-          "oklch(95% 0.0016 78.2)"
+          "oklch(15% 0.0041 106.7)",
+          "oklch(25% 0.0064 106.7)",
+          "oklch(35% 0.0081 106.7)",
+          "oklch(45% 0.0089 106.7)",
+          "oklch(58% 0.0088 106.7)",
+          "oklch(70% 0.0073 106.7)",
+          "oklch(83% 0.0046 106.7)",
+          "oklch(95% 0.0014 106.7)"
         ]
       },
       "line": {
         "role": "neutral",
         "displayName": "Quiet line",
         "tonalRamp": [
-          "oklch(15% 0.0037 98.9)",
-          "oklch(25% 0.0058 98.9)",
-          "oklch(35% 0.0073 98.9)",
-          "oklch(45% 0.0081 98.9)",
-          "oklch(58% 0.0079 98.9)",
-          "oklch(70% 0.0066 98.9)",
-          "oklch(83% 0.0042 98.9)",
-          "oklch(95% 0.0013 98.9)"
+          "oklch(15% 0.0024 106.5)",
+          "oklch(25% 0.0038 106.5)",
+          "oklch(35% 0.0048 106.5)",
+          "oklch(45% 0.0053 106.5)",
+          "oklch(58% 0.0052 106.5)",
+          "oklch(70% 0.0043 106.5)",
+          "oklch(83% 0.0027 106.5)",
+          "oklch(95% 0.0008 106.5)"
         ]
       },
       "soft": {
         "role": "neutral",
         "displayName": "Soft surface",
         "tonalRamp": [
-          "oklch(15% 0.0025 95.1)",
-          "oklch(25% 0.0038 95.1)",
-          "oklch(35% 0.0048 95.1)",
-          "oklch(45% 0.0054 95.1)",
-          "oklch(58% 0.0053 95.1)",
-          "oklch(70% 0.0044 95.1)",
-          "oklch(83% 0.0028 95.1)",
-          "oklch(95% 0.0008 95.1)"
+          "oklch(15% 0.0012 106.4)",
+          "oklch(25% 0.0019 106.4)",
+          "oklch(35% 0.0024 106.4)",
+          "oklch(45% 0.0026 106.4)",
+          "oklch(58% 0.0026 106.4)",
+          "oklch(70% 0.0021 106.4)",
+          "oklch(83% 0.0013 106.4)",
+          "oklch(95% 0.0004 106.4)"
         ]
       },
       "user": {
         "role": "neutral",
         "displayName": "Question gray",
         "tonalRamp": [
-          "oklch(15% 0.0031 97.4)",
-          "oklch(25% 0.0048 97.4)",
-          "oklch(35% 0.0060 97.4)",
-          "oklch(45% 0.0067 97.4)",
-          "oklch(58% 0.0065 97.4)",
-          "oklch(70% 0.0055 97.4)",
-          "oklch(83% 0.0034 97.4)",
-          "oklch(95% 0.0011 97.4)"
+          "oklch(15% 0.0006 106.4)",
+          "oklch(25% 0.0009 106.4)",
+          "oklch(35% 0.0012 106.4)",
+          "oklch(45% 0.0013 106.4)",
+          "oklch(58% 0.0013 106.4)",
+          "oklch(70% 0.0011 106.4)",
+          "oklch(83% 0.0007 106.4)",
+          "oklch(95% 0.0002 106.4)"
         ]
       },
       "accent": {
-        "role": "primary",
-        "displayName": "Warm rust",
+        "role": "neutral",
+        "displayName": "Quiet gray",
         "tonalRamp": [
-          "oklch(15% 0.0454 38.0)",
-          "oklch(25% 0.0707 38.0)",
-          "oklch(35% 0.0891 38.0)",
-          "oklch(45% 0.0988 38.0)",
-          "oklch(58% 0.0969 38.0)",
-          "oklch(70% 0.0809 38.0)",
-          "oklch(83% 0.0509 38.0)",
-          "oklch(95% 0.0156 38.0)"
+          "oklch(15% 0.0028 106.6)",
+          "oklch(25% 0.0044 106.6)",
+          "oklch(35% 0.0055 106.6)",
+          "oklch(45% 0.0061 106.6)",
+          "oklch(58% 0.0060 106.6)",
+          "oklch(70% 0.0050 106.6)",
+          "oklch(83% 0.0032 106.6)",
+          "oklch(95% 0.0010 106.6)"
         ]
       },
       "code": {
         "role": "neutral",
         "displayName": "Code rust",
         "tonalRamp": [
-          "oklch(15% 0.0454 29.3)",
-          "oklch(25% 0.0707 29.3)",
-          "oklch(35% 0.0891 29.3)",
-          "oklch(45% 0.0988 29.3)",
-          "oklch(58% 0.0969 29.3)",
-          "oklch(70% 0.0809 29.3)",
-          "oklch(83% 0.0509 29.3)",
-          "oklch(95% 0.0156 29.3)"
+          "oklch(15% 0.0587 29.2)",
+          "oklch(25% 0.0914 29.2)",
+          "oklch(35% 0.1151 29.2)",
+          "oklch(45% 0.1276 29.2)",
+          "oklch(58% 0.1252 29.2)",
+          "oklch(70% 0.1046 29.2)",
+          "oklch(83% 0.0658 29.2)",
+          "oklch(95% 0.0202 29.2)"
         ]
       },
       "action": {
         "role": "primary",
         "displayName": "Charcoal action",
         "tonalRamp": [
-          "oklch(15% 0.0040 97.6)",
-          "oklch(25% 0.0062 97.6)",
-          "oklch(35% 0.0078 97.6)",
-          "oklch(45% 0.0086 97.6)",
-          "oklch(58% 0.0085 97.6)",
-          "oklch(70% 0.0071 97.6)",
-          "oklch(83% 0.0045 97.6)",
-          "oklch(95% 0.0014 97.6)"
+          "oklch(15% 0.0024 106.7)",
+          "oklch(25% 0.0037 106.7)",
+          "oklch(35% 0.0046 106.7)",
+          "oklch(45% 0.0052 106.7)",
+          "oklch(58% 0.0051 106.7)",
+          "oklch(70% 0.0042 106.7)",
+          "oklch(83% 0.0027 106.7)",
+          "oklch(95% 0.0008 106.7)"
         ]
       },
       "disabled": {
         "role": "neutral",
         "displayName": "Disabled fill",
         "tonalRamp": [
-          "oklch(15% 0.0044 93.6)",
-          "oklch(25% 0.0069 93.6)",
-          "oklch(35% 0.0087 93.6)",
-          "oklch(45% 0.0096 93.6)",
-          "oklch(58% 0.0095 93.6)",
-          "oklch(70% 0.0079 93.6)",
-          "oklch(83% 0.0050 93.6)",
-          "oklch(95% 0.0015 93.6)"
+          "oklch(15% 0.0024 106.5)",
+          "oklch(25% 0.0038 106.5)",
+          "oklch(35% 0.0048 106.5)",
+          "oklch(45% 0.0053 106.5)",
+          "oklch(58% 0.0052 106.5)",
+          "oklch(70% 0.0044 106.5)",
+          "oklch(83% 0.0027 106.5)",
+          "oklch(95% 0.0008 106.5)"
         ]
       },
       "error": {
         "role": "semantic",
         "displayName": "Shared error red",
         "tonalRamp": [
-          "oklch(15% 0.0454 27.7)",
-          "oklch(25% 0.0707 27.7)",
-          "oklch(35% 0.0891 27.7)",
-          "oklch(45% 0.0988 27.7)",
-          "oklch(58% 0.0969 27.7)",
-          "oklch(70% 0.0809 27.7)",
-          "oklch(83% 0.0509 27.7)",
-          "oklch(95% 0.0156 27.7)"
+          "oklch(15% 0.0976 27.7)",
+          "oklch(25% 0.1520 27.7)",
+          "oklch(35% 0.1916 27.7)",
+          "oklch(45% 0.2123 27.7)",
+          "oklch(58% 0.2082 27.7)",
+          "oklch(70% 0.1739 27.7)",
+          "oklch(83% 0.1094 27.7)",
+          "oklch(95% 0.0336 27.7)"
         ]
       },
       "success": {
         "role": "semantic",
         "displayName": "Shared success green",
         "tonalRamp": [
-          "oklch(15% 0.0454 154.7)",
-          "oklch(25% 0.0707 154.7)",
-          "oklch(35% 0.0891 154.7)",
-          "oklch(45% 0.0988 154.7)",
-          "oklch(58% 0.0969 154.7)",
-          "oklch(70% 0.0809 154.7)",
-          "oklch(83% 0.0509 154.7)",
-          "oklch(95% 0.0156 154.7)"
+          "oklch(15% 0.0684 154.7)",
+          "oklch(25% 0.1065 154.7)",
+          "oklch(35% 0.1342 154.7)",
+          "oklch(45% 0.1487 154.7)",
+          "oklch(58% 0.1459 154.7)",
+          "oklch(70% 0.1218 154.7)",
+          "oklch(83% 0.0767 154.7)",
+          "oklch(95% 0.0236 154.7)"
         ]
       },
       "warning-bg": {
@@ -218,14 +218,14 @@
         "role": "semantic",
         "displayName": "Shared warning ink",
         "tonalRamp": [
-          "oklch(15% 0.0454 59.9)",
-          "oklch(25% 0.0707 59.9)",
-          "oklch(35% 0.0891 59.9)",
-          "oklch(45% 0.0988 59.9)",
-          "oklch(58% 0.0969 59.9)",
-          "oklch(70% 0.0809 59.9)",
-          "oklch(83% 0.0509 59.9)",
-          "oklch(95% 0.0156 59.9)"
+          "oklch(15% 0.0510 59.9)",
+          "oklch(25% 0.0795 59.9)",
+          "oklch(35% 0.1002 59.9)",
+          "oklch(45% 0.1110 59.9)",
+          "oklch(58% 0.1089 59.9)",
+          "oklch(70% 0.0909 59.9)",
+          "oklch(83% 0.0572 59.9)",
+          "oklch(95% 0.0176 59.9)"
         ]
       }
     },
@@ -260,7 +260,7 @@
       },
       "label": {
         "displayName": "Label",
-        "purpose": "Collapsed tool, thinking, search, and source summary rows."
+        "purpose": "Local process summaries and collapsed search/source rows."
       },
       "detail": {
         "displayName": "Detail",
@@ -280,14 +280,20 @@
       },
       "code-block": {
         "displayName": "Code Block",
-        "purpose": "Android monospace for horizontally scrollable code blocks."
+        "purpose": "Android monospace for code blocks and tool input/output, with local horizontal scrolling for long input."
       },
       "inline-code": {
         "displayName": "Inline Code",
         "purpose": "Android monospace for code inside prose; surrounding line-height is inherited."
       }
     },
-    "shadows": [],
+    "shadows": [
+      {
+        "name": "chat-menu",
+        "value": "Android elevation: 8",
+        "purpose": "Existing raised AI menu; reading, composer and return-to-latest surfaces remain flat."
+      }
+    ],
     "motion": [
       {
         "name": "selector-modal",
@@ -300,7 +306,12 @@
         "purpose": "Native menu disclosure; no custom duration or easing is set."
       }
     ],
-    "breakpoints": []
+    "breakpoints": [
+      {
+        "name": "stacked-chat-toolbar",
+        "value": "Native window width < 360dp or fontScale > 1.2; model takes the full toolbar row."
+      }
+    ]
   },
   "components": [
     {
@@ -309,7 +320,7 @@
       "refersTo": "button-send",
       "description": "Current native send silhouette: 32dp disc centered in a 48dp target. The native action becomes stop while streaming; this preview shows send.",
       "html": "<button class=\"ds-send\" type=\"button\" aria-label=\"发送\"><span class=\"ds-send-disc\"><svg width=\"20\" height=\"20\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"m5 12 7-7 7 7M12 19V5\"/></svg></span></button>",
-      "css": ".ds-send{display:inline-flex;width:48px;height:48px;align-items:center;justify-content:center;padding:0;border:0;background:transparent;color:#FFFFFF}.ds-send-disc{display:flex;width:32px;height:32px;align-items:center;justify-content:center;border-radius:16px;background:#35342F}.ds-send:hover .ds-send-disc,.ds-send:active .ds-send-disc{background:#35342F}.ds-send:focus-visible{outline:2px solid #A65035;outline-offset:2px}"
+      "css": ".ds-send{display:inline-flex;width:48px;height:48px;align-items:center;justify-content:center;padding:0;border:0;background:transparent;color:#FFFFFF}.ds-send-disc{display:flex;width:32px;height:32px;align-items:center;justify-content:center;border-radius:16px;background:#333330}.ds-send:hover .ds-send-disc,.ds-send:active .ds-send-disc{background:#333330}.ds-send:focus-visible{outline:2px solid #666662;outline-offset:2px}"
     },
     {
       "name": "Disabled send button",
@@ -317,23 +328,23 @@
       "refersTo": "button-send-disabled",
       "description": "Unavailable send action uses a disabled fill and secondary icon, retaining the 48dp frame.",
       "html": "<button class=\"ds-send-disabled\" type=\"button\" aria-label=\"发送\" disabled><span class=\"ds-send-disabled-disc\"><svg width=\"20\" height=\"20\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"m5 12 7-7 7 7M12 19V5\"/></svg></span></button>",
-      "css": ".ds-send-disabled{display:inline-flex;width:48px;height:48px;align-items:center;justify-content:center;padding:0;border:0;background:transparent;color:#65635E}.ds-send-disabled-disc{display:flex;width:32px;height:32px;align-items:center;justify-content:center;border-radius:16px;background:#D7D5CE}.ds-send-disabled:hover .ds-send-disabled-disc,.ds-send-disabled:active .ds-send-disabled-disc{background:#D7D5CE}"
+      "css": ".ds-send-disabled{display:inline-flex;width:48px;height:48px;align-items:center;justify-content:center;padding:0;border:0;background:transparent;color:#666662}.ds-send-disabled-disc{display:flex;width:32px;height:32px;align-items:center;justify-content:center;border-radius:16px;background:#DEDEDA}.ds-send-disabled:hover .ds-send-disabled-disc,.ds-send-disabled:active .ds-send-disabled-disc{background:#DEDEDA}"
     },
     {
       "name": "Compact two-layer composer",
       "kind": "input",
       "refersTo": "composer",
-      "description": "Current compact composer: draft and model start at the same left inset, selected search uses a rust icon/dot, thinking shows only the current level, and send sits at the right. Model and thinking values are accessible. This HTML is a visual native translation; it does not send requests.",
+      "description": "Compact native composer: draft/model share the left inset; selected search uses quiet gray and a dot. Width below 360dp or font scale above 1.2 puts model on its own toolbar row. This is a visual translation, not a request control.",
       "html": "<div class=\"ds-composer\"><textarea class=\"ds-draft\" rows=\"1\" placeholder=\"给 AI 助手发消息\" aria-label=\"问 AI\"></textarea><div class=\"ds-toolbar\"><button class=\"ds-model\" type=\"button\" aria-label=\"选择模型，GPT-6.1-sol\"><span class=\"ds-model-name\">GPT-6.1-sol</span><svg width=\"13\" height=\"13\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"m6 9 6 6 6-6\"/></svg></button><button class=\"ds-search\" type=\"button\" aria-label=\"联网搜索\" aria-pressed=\"true\"><span class=\"ds-search-symbol\"><svg width=\"19\" height=\"19\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><circle cx=\"12\" cy=\"12\" r=\"10\"/><path d=\"M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20M2 12h20\"/></svg></span><span class=\"ds-search-dot\"></span></button><button class=\"ds-effort\" type=\"button\" aria-label=\"思考强度，低\"><svg width=\"19\" height=\"19\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M12 18V5M15 13a4.17 4.17 0 0 1-3-4 4.17 4.17 0 0 1-3 4M17.598 6.5A3 3 0 1 0 12 5a3 3 0 1 0-5.598 1.5M17.997 5.125a4 4 0 0 1 2.526 5.77M18 18a4 4 0 0 0 2-7.464M19.967 17.483A4 4 0 1 1 12 18a4 4 0 1 1-7.967-.517M6 18a4 4 0 0 1-2-7.464M6.003 5.125a4 4 0 0 0-2.526 5.77\"/></svg><span>低</span></button><button class=\"ds-composer-send\" type=\"button\" aria-label=\"发送\"><span class=\"ds-composer-disc\"><svg width=\"20\" height=\"20\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"m5 12 7-7 7 7M12 19V5\"/></svg></span></button></div></div>",
-      "css": ".ds-composer{max-width:736px;border:1px solid #DEDDD7;border-radius:18px;padding:4px;background:#FFFFFF;color:#292825;font-family:system-ui,sans-serif}.ds-draft{display:block;width:calc(100% - 20px);min-height:26px;max-height:118px;resize:vertical;margin:0;padding:7px 10px;border:0;border-radius:0;background:transparent;color:#292825;font:400 16px/24px system-ui,sans-serif}.ds-draft::placeholder{color:#75716B}.ds-toolbar{display:flex;align-items:center;gap:2px}.ds-model,.ds-search,.ds-effort,.ds-composer-send{display:flex;align-items:center;justify-content:center;gap:4px;min-width:48px;min-height:48px;padding:0 7px;border:0;border-radius:12px;background:transparent;color:#65635E;font:400 12px/18px system-ui,sans-serif}.ds-model{flex:1;justify-content:flex-start;padding:0 10px;min-width:48px}.ds-model-name{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.ds-model svg{flex-shrink:0}.ds-search{position:relative;color:#A65035}.ds-search-symbol{display:flex;width:28px;height:28px;align-items:center;justify-content:center}.ds-search-dot{position:absolute;right:10px;top:9px;width:4px;height:4px;border-radius:2px;background:#A65035}.ds-composer-send{width:48px;height:48px;padding:0;flex-shrink:0;color:#FFFFFF}.ds-composer-disc{display:flex;width:32px;height:32px;align-items:center;justify-content:center;border-radius:16px;background:#35342F}.ds-model:hover,.ds-search:hover,.ds-effort:hover,.ds-model:active,.ds-search:active,.ds-effort:active{background:transparent}.ds-draft:focus-visible{outline:2px solid #A65035;outline-offset:2px}.ds-toolbar button:focus-visible{outline:2px solid #A65035;outline-offset:2px}"
+      "css": ".ds-composer{max-width:736px;border:1px solid #E2E2DE;border-radius:18px;padding:4px;background:#FFFFFF;color:#242423;font-family:system-ui,sans-serif}.ds-draft{display:block;width:calc(100% - 20px);min-height:24px;max-height:120px;resize:vertical;margin:0;padding:6px 10px;border:0;border-radius:0;background:transparent;color:#242423;font:400 16px/24px system-ui,sans-serif}.ds-draft::placeholder{color:#767670}.ds-toolbar{display:flex;align-items:center;gap:4px}.ds-model,.ds-search,.ds-effort,.ds-composer-send{display:flex;align-items:center;justify-content:center;gap:4px;min-width:48px;min-height:48px;padding:0 7px;border:0;border-radius:12px;background:transparent;color:#666662;font:400 12px/18px system-ui,sans-serif}.ds-model{flex:1;justify-content:flex-start;padding:0 10px;min-width:48px}.ds-model-name{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.ds-model svg{flex-shrink:0}.ds-search{position:relative;color:#666662}.ds-search-symbol{display:flex;width:28px;height:28px;align-items:center;justify-content:center}.ds-search-dot{position:absolute;right:10px;top:9px;width:4px;height:4px;border-radius:2px;background:#666662}.ds-composer-send{width:48px;height:48px;padding:0;flex-shrink:0;color:#FFFFFF}.ds-composer-disc{display:flex;width:32px;height:32px;align-items:center;justify-content:center;border-radius:16px;background:#333330}.ds-model:hover,.ds-search:hover,.ds-effort:hover,.ds-model:active,.ds-search:active,.ds-effort:active{background:transparent}.ds-draft:focus-visible{outline:2px solid #666662;outline-offset:2px}.ds-toolbar button:focus-visible{outline:2px solid #666662;outline-offset:2px}.ds-composer{container-type:inline-size}@container (max-width:335px){.ds-toolbar{flex-wrap:wrap}.ds-model{flex-basis:100%}.ds-composer-send{margin-left:auto}}"
     },
     {
       "name": "Chat navigation",
       "kind": "nav",
       "refersTo": "chat-navigation",
       "description": "Compact native title/context stack between back and new/menu actions. Safe-area padding belongs to the native screen wrapper.",
-      "html": "<nav class=\"ds-nav\" aria-label=\"AI 对话\"><button class=\"ds-nav-icon\" aria-label=\"返回\"><svg width=\"23\" height=\"23\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"m15 18-6-6 6-6\"/></svg></button><button class=\"ds-nav-context\" aria-label=\"查看上下文\"><span class=\"ds-nav-title\">AI 助手</span><span class=\"ds-nav-meta\">自选 · 5.6k <svg width=\"13\" height=\"13\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"m6 9 6 6 6-6\"/></svg></span></button><button class=\"ds-nav-new\" aria-label=\"新对话\"><svg width=\"20\" height=\"20\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M12 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7M16 3l5 5M10 14l-1 5 5-1L22 6a2 2 0 0 0-5-5Z\"/></svg></button><button class=\"ds-nav-icon\" aria-label=\"AI 菜单\"><svg width=\"21\" height=\"21\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M4 6h16M4 12h16M4 18h16\"/></svg></button></nav>",
-      "css": ".ds-nav{display:flex;align-items:center;min-height:62px;padding:0 6px;background:#FAF9F6;color:#292825;font-family:system-ui,sans-serif}.ds-nav button{border:0;background:transparent;color:inherit;padding:0}.ds-nav-icon{display:flex;align-items:center;justify-content:center;flex-shrink:0;width:44px;height:44px;border-radius:22px}.ds-nav-new{display:flex;align-items:center;justify-content:center;flex-shrink:0;width:48px;height:48px}.ds-nav-context{display:flex;flex:1;min-width:0;min-height:56px;flex-direction:column;align-items:flex-start;justify-content:center;padding:0 4px!important}.ds-nav-title{font:500 16px/23px system-ui,sans-serif}.ds-nav-meta{display:flex;align-items:center;gap:4px;margin-top:1px;color:#65635E;font:400 12px/18px system-ui,sans-serif}.ds-nav-icon:hover,.ds-nav-icon:active{background:#F3F4F6}.ds-nav button:focus-visible{outline:2px solid #A65035;outline-offset:2px}"
+      "html": "<nav class=\"ds-nav\" aria-label=\"AI 对话\"><button class=\"ds-nav-icon\" aria-label=\"返回\"><svg width=\"23\" height=\"23\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"m15 18-6-6 6-6\"/></svg></button><button class=\"ds-nav-context\" aria-label=\"查看上下文\"><span class=\"ds-nav-title\">AI 助手</span><span class=\"ds-nav-meta\">来源页面：自选 · 预计输入 5.6k 词元 <svg width=\"13\" height=\"13\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"m6 9 6 6 6-6\"/></svg></span></button><button class=\"ds-nav-new\" aria-label=\"新对话\"><svg width=\"20\" height=\"20\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M12 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7M16 3l5 5M10 14l-1 5 5-1L22 6a2 2 0 0 0-5-5Z\"/></svg></button><button class=\"ds-nav-icon\" aria-label=\"AI 菜单\"><svg width=\"21\" height=\"21\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M4 6h16M4 12h16M4 18h16\"/></svg></button></nav>",
+      "css": ".ds-nav{display:flex;align-items:center;min-height:56px;padding:0 6px;background:#FAFAF9;color:#242423;font-family:system-ui,sans-serif}.ds-nav button{border:0;background:transparent;color:inherit;padding:0}.ds-nav-icon{display:flex;align-items:center;justify-content:center;flex-shrink:0;width:48px;height:48px}.ds-nav-new{display:flex;align-items:center;justify-content:center;flex-shrink:0;width:48px;height:48px}.ds-nav-context{display:flex;flex:1;min-width:0;min-height:56px;flex-direction:column;align-items:flex-start;justify-content:center;padding:0 4px!important}.ds-nav-title{font:500 16px/24px system-ui,sans-serif}.ds-nav-meta{display:flex;align-items:center;gap:4px;margin-top:1px;color:#666662;font:400 12px/18px system-ui,sans-serif}.ds-nav-icon:hover,.ds-nav-icon:active{background:transparent}.ds-nav button:focus-visible{outline:2px solid #666662;outline-offset:2px}"
     },
     {
       "name": "Capability tag",
@@ -341,23 +352,23 @@
       "refersTo": "chip-capability",
       "description": "Compact noninteractive capability badges; wrap within the model text column. Unknown or unavailable capabilities use shared warning colors.",
       "html": "<div class=\"ds-tags\"><span class=\"ds-tag\">联网搜索</span><span class=\"ds-tag\">200K 上下文</span><span class=\"ds-tag ds-tag-warning\">工具能力未知</span></div>",
-      "css": ".ds-tags{display:flex;flex-wrap:wrap;gap:5px;margin-top:7px;font-family:system-ui,sans-serif}.ds-tag{padding:3px 6px;border-radius:4px;background:#F0EFEB;color:#292825;font-size:10px}.ds-tag-warning{color:#8A4B00;background:#FFF3E0}"
+      "css": ".ds-tags{display:flex;flex-wrap:wrap;gap:5px;margin-top:7px;font-family:system-ui,sans-serif}.ds-tag{padding:3px 6px;border-radius:4px;background:#F4F4F2;color:#242423;font-size:10px}.ds-tag-warning{color:#8A4B00;background:#FFF3E0}"
     },
     {
       "name": "User question bubble",
       "kind": "card",
       "refersTo": "user-bubble",
-      "description": "Right-aligned user message, capped at 92% of the reading width; metadata stays below the bubble.",
-      "html": "<div class=\"ds-user-wrap\"><div class=\"ds-user-bubble\">结合我的持仓，先看哪些风险？</div><span class=\"ds-user-attachment\">附带：持仓 · 2 条操作</span></div>",
-      "css": ".ds-user-wrap{display:flex;align-items:flex-end;flex-direction:column;margin-top:8px;margin-bottom:24px;font-family:system-ui,sans-serif}.ds-user-bubble{max-width:92%;padding:12px 16px;border-radius:16px;background:#EEEDE8;color:#292825;font:400 16px/26px system-ui,sans-serif}.ds-user-attachment{margin-top:6px;color:#75716B;font:400 11px/17px system-ui,sans-serif}"
+      "description": "Natural-width right-aligned question, at most 90% of the reading width; context metadata stays below.",
+      "html": "<div class=\"ds-user-wrap\"><div class=\"ds-user-bubble\">结合我的持仓，先看哪些风险？</div><span class=\"ds-user-attachment\">已附带上下文：页面 持仓 · 最近操作记录 2 条</span></div>",
+      "css": ".ds-user-wrap{display:flex;align-items:flex-end;flex-direction:column;margin-top:0;margin-bottom:20px;font-family:system-ui,sans-serif}.ds-user-bubble{max-width:90%;padding:10px 12px;border-radius:12px;background:#EFEFEE;color:#242423;font:400 16px/25px system-ui,sans-serif}.ds-user-attachment{margin-top:6px;color:#767670;font:400 11px/17px system-ui,sans-serif}"
     },
     {
-      "name": "Evidence disclosure",
+      "name": "Local process disclosure",
       "kind": "custom",
       "refersTo": "disclosure",
-      "description": "Quiet 48dp summary with optional supporting detail. HTML details supplies preview interactivity; the native implementation uses Pressable and expanded-state semantics.",
-      "html": "<details class=\"ds-disclosure\"><summary class=\"ds-disclosure-summary\"><svg width=\"19\" height=\"19\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><circle cx=\"12\" cy=\"12\" r=\"10\"/><path d=\"M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20M2 12h20\"/></svg><span>1 个来源</span><svg width=\"13\" height=\"13\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"m6 9 6 6 6-6\"/></svg></summary><div class=\"ds-disclosure-body\"><a class=\"ds-source\" href=\"#source-preview\">[1] 公司公告</a><span class=\"ds-source-url\">来源页面</span></div></details>",
-      "css": ".ds-disclosure{color:#65635E;font-family:system-ui,sans-serif}.ds-disclosure-summary{display:flex;min-height:48px;align-items:center;gap:8px;padding-right:8px;list-style:none;font:400 13px/20px system-ui,sans-serif;cursor:pointer}.ds-disclosure-summary::-webkit-details-marker{display:none}.ds-disclosure-summary:hover,.ds-disclosure-summary:active{background:transparent}.ds-disclosure-body{padding:8px 0}.ds-source{display:block;min-height:21px;color:#292825;text-decoration:underline;font:400 13px/21px system-ui,sans-serif}.ds-source-url{color:#65635E;font:400 12px/19px system-ui,sans-serif}.ds-disclosure-summary:focus-visible{outline:2px solid #A65035;outline-offset:2px}.ds-source:focus-visible{outline:2px solid #A65035;outline-offset:2px}"
+      "description": "A local 48dp process summary with a nearby arrow. Expanded native details use one white bordered panel; input is a bordered code inset and output follows. Text below is explicitly a display sample; native data comes only from existing call/result parts.",
+      "html": "<details class=\"ds-process\"><summary class=\"ds-process-summary\"><span>已调用 1 个工具</span><svg width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"m9 18 6-6-6-6\"/></svg></summary><div class=\"ds-process-details\"><span>工具调用（展示样例）</span><span>调用已结束</span><pre class=\"ds-process-input\">{}</pre><code class=\"ds-process-output\">本地样例输出</code></div></details>",
+      "css": ".ds-process{color:#666662;font-family:system-ui,sans-serif;font:400 13px/20px system-ui,sans-serif}.ds-process-summary{display:flex;min-height:48px;align-items:center;gap:4px;width:fit-content;max-width:100%;list-style:none;cursor:pointer}.ds-process-summary::-webkit-details-marker{display:none}.ds-process-summary span{min-width:0}.ds-process-summary svg{flex-shrink:0}.ds-process[open] .ds-process-summary svg{transform:rotate(90deg)}.ds-process-details{display:flex;flex-direction:column;gap:8px;padding:12px;margin-bottom:8px;border:1px solid #E2E2DE;border-radius:12px;background:#FFFFFF}.ds-process-input{margin:0;padding:8px;border:1px solid #E2E2DE;border-radius:8px;overflow-x:auto;color:#242423;font:400 13px/20px monospace}.ds-process-output{color:#666662;font:400 13px/20px monospace;white-space:pre-wrap}.ds-process-summary:hover,.ds-process-summary:active{background:transparent}.ds-process-summary:focus-visible{outline:2px solid #666662;outline-offset:2px}"
     },
     {
       "name": "Markdown table",
@@ -365,7 +376,7 @@
       "refersTo": "markdown-table",
       "description": "Fine table rules, shared column widths, soft header and local horizontal overflow. Native widths also respond to content and font scale.",
       "html": "<div class=\"ds-table-scroll\" tabindex=\"0\" role=\"region\" aria-label=\"表格，可横向滚动\"><div class=\"ds-table\"><div class=\"ds-tr ds-th\"><span class=\"ds-cell\">项目</span><span class=\"ds-cell\">观察</span><span class=\"ds-cell\">依据</span></div><div class=\"ds-tr\"><span class=\"ds-cell\">仓位</span><span class=\"ds-cell\">先持有观察</span><span class=\"ds-cell\">结合风险承受能力</span></div></div></div>",
-      "css": ".ds-table-scroll{max-width:100%;overflow-x:auto;margin:6px 0 20px;border-radius:12px}.ds-table{display:table;width:max-content;border:1px solid #DEDDD7;border-radius:12px;overflow:hidden;color:#292825;font:400 14px/22px system-ui,sans-serif;font-variant-numeric:tabular-nums}.ds-tr{display:flex;border-bottom:1px solid #DEDDD7}.ds-tr:last-child{border-bottom:0}.ds-th{background:#F0EFEB;font-weight:600}.ds-cell{width:144px;padding:11px 12px}.ds-table-scroll:focus-visible{outline:2px solid #A65035;outline-offset:2px}"
+      "css": ".ds-table-scroll{max-width:100%;overflow-x:auto;margin:6px 0 20px;border-radius:12px}.ds-table{display:table;width:max-content;border:1px solid #E2E2DE;border-radius:12px;overflow:hidden;color:#242423;font:400 14px/22px system-ui,sans-serif;font-variant-numeric:tabular-nums}.ds-tr{display:flex;border-bottom:1px solid #E2E2DE}.ds-tr:last-child{border-bottom:0}.ds-th{background:#F4F4F2;font-weight:600}.ds-cell{width:144px;padding:11px 12px}.ds-table-scroll:focus-visible{outline:2px solid #666662;outline-offset:2px}"
     },
     {
       "name": "Model choice",
@@ -373,7 +384,7 @@
       "refersTo": "model-choice",
       "description": "Model row with identity mark, readable name/ID, wrapping tags, and selected check. Preview controls change the checked state without invoking a provider.",
       "html": "<div class=\"ds-model-options\" role=\"radiogroup\" aria-label=\"选择模型\"><label class=\"ds-model-option\"><input class=\"ds-model-radio\" type=\"radio\" name=\"ds-model-choice\" checked/><span class=\"ds-provider-mark\">O</span><span class=\"ds-model-copy\"><span class=\"ds-model-title\">GPT-6.1-sol</span><span class=\"ds-model-sub\">OpenAI · gpt-6.1-sol</span><span class=\"ds-model-tags\"><span>思考开关</span><span>联网搜索</span><span>200K 上下文</span></span></span><span class=\"ds-model-check\"><svg width=\"20\" height=\"20\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"m20 6-11 11-5-5\"/></svg></span></label></div>",
-      "css": ".ds-model-options{background:#FAF9F6;color:#292825;font-family:system-ui,sans-serif}.ds-model-option{position:relative;display:flex;align-items:flex-start;gap:10px;padding:16px;border-top:1px solid #DEDDD7;background:#F0EFEB;cursor:pointer}.ds-model-radio{position:absolute;left:16px;top:16px;width:30px;height:30px;margin:0;opacity:0}.ds-provider-mark{display:flex;width:30px;height:30px;flex-shrink:0;align-items:center;justify-content:center;border-radius:8px;background:#087F5B;color:#FFFFFF;font-size:15px;font-weight:700}.ds-model-copy{flex:1;min-width:0}.ds-model-title{display:block;font-size:15px;font-weight:500}.ds-model-sub{display:block;font-size:12px;line-height:18px;color:#65635E;overflow-wrap:anywhere}.ds-model-tags{display:flex;flex-wrap:wrap;gap:5px;margin-top:7px}.ds-model-tags span{padding:3px 6px;border-radius:4px;background:#F0EFEB;font-size:10px}.ds-model-check{display:flex;align-items:center}.ds-model-option:hover,.ds-model-option:active{background:#F0EFEB}.ds-model-option:has(.ds-model-radio:focus-visible){outline:2px solid #A65035;outline-offset:2px}"
+      "css": ".ds-model-options{background:#FAFAF9;color:#242423;font-family:system-ui,sans-serif}.ds-model-option{position:relative;display:flex;align-items:flex-start;gap:10px;padding:16px;border-top:1px solid #E2E2DE;background:#F4F4F2;cursor:pointer}.ds-model-radio{position:absolute;left:16px;top:16px;width:30px;height:30px;margin:0;opacity:0}.ds-provider-mark{display:flex;width:30px;height:30px;flex-shrink:0;align-items:center;justify-content:center;border-radius:8px;background:#087F5B;color:#FFFFFF;font-size:15px;font-weight:700}.ds-model-copy{flex:1;min-width:0}.ds-model-title{display:block;font-size:15px;font-weight:500}.ds-model-sub{display:block;font-size:12px;line-height:18px;color:#666662;overflow-wrap:anywhere}.ds-model-tags{display:flex;flex-wrap:wrap;gap:5px;margin-top:7px}.ds-model-tags span{padding:3px 6px;border-radius:4px;background:#F4F4F2;font-size:10px}.ds-model-check{display:flex;align-items:center}.ds-model-option:hover,.ds-model-option:active{background:#F4F4F2}.ds-model-option:has(.ds-model-radio:focus-visible){outline:2px solid #666662;outline-offset:2px}"
     },
     {
       "name": "Operation confirmation card",
@@ -381,24 +392,24 @@
       "refersTo": "operation-card",
       "description": "Bordered paper card for a pending operation; keeps explicit confirmation and inherited app action semantics. This is a visual preview and executes no trade.",
       "html": "<section class=\"ds-operation\"><h3 class=\"ds-operation-title\">待确认操作</h3><div class=\"ds-operation-row\"><span>操作</span><span>模拟买入</span></div><div class=\"ds-operation-row\"><span>数量</span><span>100 股</span></div><div class=\"ds-operation-buttons\"><button class=\"ds-operation-cancel\" type=\"button\">取消</button><button class=\"ds-operation-run\" type=\"button\">确认执行</button></div></section>",
-      "css": ".ds-operation{margin:10px 0;padding:16px;border:1px solid #DEDDD7;border-radius:14px;background:#FFFFFF;color:#292825;font-family:system-ui,sans-serif}.ds-operation-title{margin:0 0 10px;font-size:16px;line-height:24px;font-weight:600}.ds-operation-row{display:flex;justify-content:space-between;gap:16px;padding:5px 0;font-size:14px;line-height:22px}.ds-operation-row span:first-child{color:#65635E}.ds-operation-row span:last-child{flex-shrink:1;text-align:right;font-variant-numeric:tabular-nums}.ds-operation-buttons{display:flex;gap:12px;margin-top:12px}.ds-operation-buttons button{height:40px;flex:1;padding:0 16px;border-radius:6px;font:500 15px system-ui,sans-serif}.ds-operation-cancel{border:1px solid #ECEDEF;background:#FFFFFF;color:#1F2329}.ds-operation-run{border:0;background:#E5322D;color:#FFFFFF}.ds-operation-buttons button:hover,.ds-operation-buttons button:active{opacity:.8}.ds-operation-buttons button:focus-visible{outline:2px solid #A65035;outline-offset:2px}"
+      "css": ".ds-operation{margin:10px 0;padding:16px;border:1px solid #E2E2DE;border-radius:14px;background:#FFFFFF;color:#242423;font-family:system-ui,sans-serif}.ds-operation-title{margin:0 0 10px;font-size:16px;line-height:24px;font-weight:600}.ds-operation-row{display:flex;justify-content:space-between;gap:16px;padding:5px 0;font-size:14px;line-height:22px}.ds-operation-row span:first-child{color:#666662}.ds-operation-row span:last-child{flex-shrink:1;text-align:right;font-variant-numeric:tabular-nums}.ds-operation-buttons{display:flex;gap:12px;margin-top:12px}.ds-operation-buttons button{min-height:48px;flex:1;padding:12px 16px;border-radius:6px;font:500 15px system-ui,sans-serif}.ds-operation-cancel{border:1px solid #ECEDEF;background:#FFFFFF;color:#1F2329}.ds-operation-run{border:0;background:#E5322D;color:#FFFFFF}.ds-operation-buttons button:hover,.ds-operation-buttons button:active{opacity:.8}.ds-operation-buttons button:focus-visible{outline:2px solid #666662;outline-offset:2px}"
     }
   ],
   "narrative": {
-    "northStar": "Claude Desktop 对话阅读布局（Android 适配）",
-    "overview": "The user-selected reference establishes a continuous answer on a warm white field: native Chinese text, quiet supporting controls, a pale right-aligned question, and a single bottom composer. The answer reads as one analysis rather than a sequence of white message cards. This is a code-led adaptation of the reference, with no generated imagery or shipping raster assets.\n\nThis system applies to the Android AI conversation, its Markdown renderer, and in-chat model/thinking selectors. It does not replace the stock application's visual world. Trading screens retain the cool gray background, white cards, compact controls, tabular numerals, red rises/green falls, and existing semantic colors in `src/ui/theme.ts` and `src/ui/components/ui.tsx`. Shared operation buttons inside the conversation retain those established action semantics.\n\nThe current delivery is light-only. The system-dark capture verifies that the existing light app remains legible; it does not establish a dark palette. Android phone captures support normal type, 1.3× type, a narrower phone, keyboard, empty state, model sheet, table, and expanded details. They do not establish iOS, tablet, physical-device performance, or a full TalkBack traversal. The fresh finish review in `.impeccable/review/composer-review.md` records disposition **ship** for the current phone surface. It includes the rejected composer as a counterexample; the earlier `finish-review.md` approval remains withdrawn.",
+    "northStar": "参考图的连续对话与局部过程（Android 适配）",
+    "overview": "The user-selected references establish a continuous conversation on a near-white field: native Chinese text, quiet local process summaries, a pale right-aligned question, and a single bottom composer. Tool stages stay beside the explanation that follows them; the assistant reads as continuous analysis rather than a sequence of white message cards. This is a code-led adaptation of `docs/design/references/agent-conversation.png` and `agent-expanded.png`, with no generated imagery or shipping raster assets.\n\nThis system applies to the Android AI conversation, its Markdown renderer, and in-chat model/thinking selectors. It does not replace the stock application's visual world. Trading screens retain the cool gray background, white cards, compact controls, tabular numerals, red rises/green falls, and existing semantic colors in `src/ui/theme.ts` and `src/ui/components/ui.tsx`. Shared operation buttons inside the conversation retain those established action semantics.\n\nThe current system is recorded from `codex/release-agent-ui-preview`, based on v0.9.0. It is light-only. The system-dark capture verifies that the existing light app remains legible; it does not establish a dark palette. Eight native Android phone captures cover normal type, 1.3× type, a narrower phone, keyboard, empty state, model sheet, table, and expanded details. `.impeccable/review/agent-finish-review.md` records disposition **ship**. Physical hardware, a full TalkBack traversal, iOS, tablet, and live supplier calls remain unverified. Earlier `composer-review.md` and chat-detail records describe past versions; they are not the current preview verdict.",
     "keyCharacteristics": [
       "Continuous assistant text with paragraph and heading rhythm.",
-      "Warm neutral surfaces; dark primary action; semantic color reserved for actual state.",
+      "Near-white neutral surfaces; dark primary action; semantic color reserved for actual state.",
       "Native font scaling, touch controls, and safe-area/keyboard accommodation.",
       "Compact two-layer composer with left-aligned draft and model name.",
-      "Collapsed supporting evidence with visible errors and explicit operation confirmation.",
+      "Local collapsed process stages with visible errors and explicit operation confirmation.",
       "Local AI styling that preserves the surrounding trading interface."
     ],
     "rules": [
       {
         "name": "The Local Palette Rule",
-        "body": "Use this warm palette only on the AI reading surface and its chat selectors. Preserve the existing stock application's red/green market semantics and shared action colors.",
+        "body": "Use this near-neutral palette only on the AI reading surface and its chat selectors. Preserve the existing stock application's red/green market semantics and shared action colors.",
         "section": "colors"
       },
       {
@@ -413,20 +424,20 @@
       },
       {
         "name": "The Flat Reading Rule",
-        "body": "Keep assistant prose on the page. Use tonal containers for code, details, and the question; reserve a bordered card for a concrete operation that needs confirmation.",
+        "body": "Keep assistant prose on the page. Use soft tone for code and the question, and a thin bordered white panel for expanded process details. Keep a concrete operation in its own confirmation card.",
         "section": "elevation"
       }
     ],
     "dos": [
-      "**Do** keep assistant answers continuous on the warm page and preserve the native body/heading hierarchy.",
+      "**Do** keep assistant answers continuous on the near-white page and preserve the native body/heading hierarchy.",
       "**Do** contain horizontal overflow inside tables and code, and let capability tags wrap.",
       "**Do** preserve 48dp chat targets, native font scaling, safe-area padding, keyboard avoidance, stop, and return-to-latest behavior.",
       "**Do** keep draft and model text left-aligned on the same inset, with compact icon controls and a 32dp send disc inside its 48dp target.",
-      "**Do** keep supporting evidence discoverable through disclosures while showing errors and pending confirmations directly.",
+      "**Do** keep process disclosures at their actual message position while showing errors and pending confirmations directly.",
       "**Do** retain shared trading status colors and existing stock-screen components outside the AI scope."
     ],
     "donts": [
-      "**Don't** restore a white rounded card or repeated model banner around every assistant answer.",
+      "**Don't** restore a white rounded card or repeated model banner around every assistant answer, or gather all process stages ahead of the answer.",
       "**Don't** move the desktop reference's sidebar into the phone or claim an independently designed dark theme.",
       "**Don't** shrink prose or touch targets to make a narrow or enlarged-font layout fit.",
       "**Don't** center the model, add a large filled search tile, or restore the rejected taller composer.",
