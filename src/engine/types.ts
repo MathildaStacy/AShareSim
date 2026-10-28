@@ -256,6 +256,8 @@ export interface AccountState {
     action: string;
   }[];
   seq: number;
+  /** 风险限额（M5.5，risk.ts）；没有 = 全部关闭。重置账户时沿用。 */
+  risk?: import('./risk').RiskLimits;
 }
 
 /** 引擎对外的事件，界面层据此弹提示、写操作日志。 */

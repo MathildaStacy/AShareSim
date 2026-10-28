@@ -142,7 +142,7 @@ describe('Anthropic Messages 请求', () => {
     expect(body.thinking).toEqual({ type: 'adaptive' });
     expect(body.output_config).toEqual({ effort: 'low' });
     const names = (body.tools as any[]).map(t => t.name);
-    expect(names).toHaveLength(27);
+    expect(names).toHaveLength(36);
     expect(names).toEqual([...names].sort());
   });
 

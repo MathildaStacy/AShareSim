@@ -6,14 +6,8 @@ import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { addDays } from '../../engine/calendar';
-import type { Li } from '../../engine/units';
-import {
-  analyze,
-  equitySeries,
-  MIN_SAMPLE,
-  RISK_FREE,
-} from '../../learn/analysis';
+import { BENCH, loadAnalysis, type Bench } from '../../app/analysisData';
+import { MIN_SAMPLE, RISK_FREE } from '../../learn/analysis';
 import { LinesChart } from '../charts/Charts';
 import {
   AiFab,
@@ -30,11 +24,7 @@ import { color, num, PAD } from '../theme';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
-export const BENCH = {
-  sh000300: '沪深300',
-  sh000906: '中证800',
-} as const;
-type Bench = keyof typeof BENCH;
+export { BENCH };
 
 export function AnalysisScreen() {
   const core = useCore();
@@ -42,34 +32,8 @@ export function AnalysisScreen() {
   const [bench, setBench] = useState<Bench>('sh000300');
   const [open, setOpen] = useState<string | null>(null);
   const ledger = core.sim.engine.state.ledger;
-  const start = ledger.length
-    ? ledger.reduce((m, e) => (e.date < m ? e.date : m), ledger[0].date)
-    : null;
-  const codes = [
-    ...new Set(ledger.map(e => e.code).filter((c): c is string => !!c)),
-  ];
   const data = usePolling(
-    async () => {
-      if (!start) {
-        return null;
-      }
-      // 多取几天，第一天之前的基准收盘价用来算第一天的收益
-      const from = addDays(start, -10);
-      const bars = await core.client.klineRange(bench, '', from, '', '');
-      const closes: Record<string, Record<string, Li>> = {};
-      for (const c of codes) {
-        const type = core.sim.security(c)?.type ?? '';
-        const k = await core.client.klineRange(c, type, from, '', '');
-        closes[c] = Object.fromEntries(k.map(b => [b.date, b.close]));
-      }
-      const eq = equitySeries(
-        ledger,
-        bars.map(b => b.date),
-        closes,
-      );
-      const bmap = Object.fromEntries(bars.map(b => [b.date, b.close]));
-      return { eq, a: analyze(eq, bmap, BENCH[bench]) };
-    },
+    () => loadAnalysis(core, bench),
     [bench, ledger.length],
     null,
   );

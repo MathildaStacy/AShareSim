@@ -759,6 +759,8 @@ export async function ask(core: AppCore, input: AskInput): Promise<void> {
       const marked = uis.map(u =>
         u.card && externalRead.size
           ? { ...u, card: { ...u.card, external: [...externalRead] } }
+          : u.proposal && externalRead.size
+          ? { ...u, proposal: { ...u.proposal, external: [...externalRead] } }
           : u,
       );
       await aiRepo.addMessage(

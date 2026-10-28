@@ -34,6 +34,23 @@ import {
 } from './read';
 import { LESSONS } from '../../learn/lessons';
 import {
+  analysisText,
+  benchmarkText,
+  corpActionsText,
+  journalText,
+  portfolioText,
+  queryText,
+  scorecardText,
+  screenText,
+} from './insight';
+import { createProposal } from '../../advice/service';
+import {
+  DEFAULT_BENCHMARK,
+  STANCE_NAME,
+  type ProposalItem,
+  type Stance,
+} from '../../advice/types';
+import {
   announcementBody,
   announcementsText,
   asOfOf,
@@ -324,6 +341,60 @@ async function dispatch(
         '检索 其他对话「' + q + '」',
       );
     }
+    case 'query_local_db': {
+      const sql = String(args.sql ?? '').trim();
+      return ok(
+        await queryText(core, sql, clampInt(args.limit, 50, 200)),
+        '查询 本地库（' + sql.replace(/\s+/g, ' ').slice(0, 40) + '）',
+      );
+    }
+    case 'screen': {
+      const r = await screenText(core, args);
+      return ok(r.text, r.label);
+    }
+    case 'get_analysis': {
+      const b = args.benchmark === 'sh000906' ? 'sh000906' : 'sh000300';
+      return ok(
+        await analysisText(core, b),
+        '读取 账户分析（基准 ' +
+          (b === 'sh000906' ? '中证800' : '沪深300') +
+          '）',
+      );
+    }
+    case 'get_corp_actions': {
+      const r = await corpActionsText(core, args);
+      return ok(r.text, r.label);
+    }
+    case 'get_benchmark': {
+      const r = await needCode(env, args);
+      const period = ['week', 'month'].includes(String(args.period))
+        ? (String(args.period) as 'week' | 'month')
+        : 'day';
+      const n = clampInt(args.n, 60, 250);
+      return ok(
+        await benchmarkText(core, r, period, n),
+        '读取 ' +
+          r.name +
+          ' 近 ' +
+          n +
+          ' 根' +
+          KLINE_NAME[period] +
+          '和区间收益',
+      );
+    }
+    case 'get_journal': {
+      const r = args.code ? await needCode(env, args) : null;
+      return ok(
+        await journalText(core, r?.code ?? null, clampInt(args.n, 20, 100)),
+        '读取 决策日志' + (r ? '（' + r.name + '）' : ''),
+      );
+    }
+    case 'get_scorecard':
+      return ok(await scorecardText(core), '读取 记分卡');
+    case 'get_portfolio':
+      return ok(await portfolioText(core), '读取 策略、调仓和执行报告');
+    case 'propose':
+      return propose(env, id, args);
     case 'remember':
       return remember(env, id, args);
     case 'forget':
@@ -361,6 +432,76 @@ async function dispatch(
     };
   }
   throw new Error('没有这个工具：' + name);
+}
+
+const STANCES = Object.keys(STANCE_NAME) as Stance[];
+
+async function propose(
+  env: ToolEnv,
+  id: string,
+  args: Record<string, unknown>,
+): Promise<ToolOutcome> {
+  const kind = args.kind === 'rebalance' ? 'rebalance' : 'single';
+  const raw = Array.isArray(args.items) ? args.items : [];
+  const items: ProposalItem[] = [];
+  for (const x of raw as Record<string, unknown>[]) {
+    const r = await needCode(env, x ?? {});
+    const stance = STANCES.includes(x.stance as Stance)
+      ? (x.stance as Stance)
+      : null;
+    if (!stance) {
+      throw new Error(r.name + ' 的 stance 要写 ' + STANCES.join(' / '));
+    }
+    const n = (v: unknown) =>
+      v == null || v === '' || !Number.isFinite(Number(v)) ? null : Number(v);
+    const lo = n(x.price_low);
+    const hi = n(x.price_high);
+    items.push({
+      code: r.code,
+      name: r.name,
+      stance,
+      weight: n(x.weight),
+      priceLow: lo != null && lo > 0 ? yuanToLi(lo) : null,
+      priceHigh: hi != null && hi > 0 ? yuanToLi(hi) : null,
+    });
+  }
+  const bench = args.benchmark
+    ? await needCode(env, { code: args.benchmark })
+    : null;
+  const p = await createProposal(env.core, {
+    threadId: env.threadId,
+    kind,
+    items,
+    horizonDays: Math.round(Number(args.horizon_days)),
+    benchmark: bench?.code ?? DEFAULT_BENCHMARK,
+    thesis: String(args.thesis ?? ''),
+    invalidation: String(args.invalidation ?? ''),
+  });
+  const what =
+    kind === 'rebalance'
+      ? '调仓方案（' + items.length + ' 只）'
+      : STANCE_NAME[items[0].stance] + ' ' + items[0].name;
+  return {
+    output:
+      '已记下提案 #' +
+      p.id +
+      '「' +
+      what +
+      '」，等用户批准或拒绝；' +
+      p.dueDate +
+      ' 收盘后按 ' +
+      p.benchmark +
+      ' 对账进记分卡。' +
+      (kind === 'rebalance'
+        ? '用户批准后 App 会按当前策略预检，生成一张批量操作卡，用户点「执行」才提交委托。'
+        : '批准不等于下单；用户要下单时再按用户给的参数生成下单卡。'),
+    ui: {
+      id,
+      name: 'propose',
+      label: '提案 #' + p.id + ' ' + what,
+      proposal: { id: p.id },
+    },
+  };
 }
 
 async function remember(

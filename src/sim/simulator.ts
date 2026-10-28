@@ -26,6 +26,12 @@ import {
   type PlaceResult,
   type SimpleResult,
 } from '../engine/engine';
+import {
+  invalidRisk,
+  riskOf,
+  riskText,
+  type RiskLimits,
+} from '../engine/risk';
 import { classify, isSTName, type Security } from '../engine/securities';
 import { AFTER_END, AFTER_START, CLOSE, T, type Sec } from '../engine/session';
 import type { EngineEvent, Snapshot } from '../engine/types';
@@ -581,6 +587,24 @@ export class Simulator {
     this.listeners.forEach(fn => fn([]));
   }
 
+  setRiskLimits(r: RiskLimits): Promise<void> {
+    return this.serial(() => this.setRiskLimitsNow(r));
+  }
+
+  private async setRiskLimitsNow(r: RiskLimits): Promise<void> {
+    const err = invalidRisk(r);
+    if (err) {
+      throw new Error(err);
+    }
+    const old = riskText(riskOf(this.engine.state));
+    this.engine.setRiskLimits(r);
+    await this.logSetting('风险限额 ' + old + ' → ' + riskText(r), {
+      setting: 'risk',
+    });
+    await this.commit([], true);
+    this.listeners.forEach(fn => fn([]));
+  }
+
   /**
    * 重置账户：旧账户（状态、委托、交割单、操作日志）原样归档、只读，未完成委托随旧账户归档、不再撮合。
    * 新账户从 0 元开始，沿用当前的费率设置和入金上限（这两项是「你的券商」的设置）。返回旧账户和新账户的 id。
@@ -600,6 +624,9 @@ export class Simulator {
       fee: old.fee,
       depositCap: old.depositCap,
     });
+    if (old.risk) {
+      state.risk = { ...old.risk };
+    }
     let newId = 0;
     // 旧账户里没完成的委托不再撮合：状态原样保留，说明改掉（否则还写着「9:15 报送」）
     for (const o of old.orders.filter(isLive)) {

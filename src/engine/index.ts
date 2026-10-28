@@ -9,3 +9,4 @@ export * from './matching';
 export * from './account';
 export * from './engine';
 export * from './funds';
+export * from './risk';

@@ -397,8 +397,8 @@ test('对话打开外部工具：工具列表多 mcp_call / mcp_search，仍按�
   const on = { ...off, mcp: true };
   const a = modelTools(resolvedService([p], off)!).map(t => t.name);
   const b = modelTools(resolvedService([p], on)!).map(t => t.name);
-  expect(a).toHaveLength(27);
-  expect(b).toHaveLength(29);
+  expect(a).toHaveLength(36);
+  expect(b).toHaveLength(38);
   expect(b).toEqual([...b].sort());
   expect(b).toContain('mcp_search');
   expect(sameConfig(off, { ...off, mcp: false })).toBe(true);

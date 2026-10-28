@@ -1,5 +1,5 @@
 /**
- * AI 的工具（AI_ASSISTANT.md §8、§13.2）：27 个，按名字排序，任何设置下都不增减（工具列表变了缓存就失效）。
+ * AI 的工具（AI_ASSISTANT.md §8、§13.2、§13.6–13.7）：36 个，按名字排序，任何设置下都不增减（工具列表变了缓存就失效）。
  * 读取类直接执行；记忆类按记忆模式执行；操作 App 的除 navigate 外都只生成操作卡。
  * 外部工具（MCP）打开时另加 mcp_search / mcp_call 两个（mcp.ts），按对话开关。
  */
@@ -93,6 +93,14 @@ export const TOOL_DEFS: ToolDef[] = [
     }),
   },
   {
+    name: 'get_analysis',
+    description:
+      '账户分析（和账户分析页同一套算法）：累计收益、年化、波动率、最大回撤、夏普、β、α、超额收益、信息比率等，带公式。benchmark 是 sh000300 沪深300 / sh000906 中证800。',
+    schema: obj({
+      benchmark: { type: 'string', enum: ['sh000300', 'sh000906'] },
+    }),
+  },
+  {
     name: 'get_announcements',
     description:
       '公司公告列表（东方财富，从新到旧）：日期、分类、标题、art_code、链接。type 按大类筛：all 全部 / report 财务报告（年报季报、业绩预告、分红实施）/ financing 融资 / risk 风险提示（停牌、异常波动）/ info 信息变更 / major 重大事项 / restructure 资产重组 / holding 持股变动（增减持）。ETF、指数没有公告。',
@@ -107,10 +115,33 @@ export const TOOL_DEFS: ToolDef[] = [
     ),
   },
   {
+    name: 'get_benchmark',
+    description:
+      '基准指数或 ETF 的行情和区间收益（前复权）：近 1 / 5 / 20 / 60 根的涨跌和最近 30 根收盘。和提案、持仓比较时用。code 例如 sh000300 沪深300、sh510300 沪深300ETF、sh000905 中证500。',
+    schema: obj(
+      {
+        code: CODE,
+        period: { type: 'string', enum: ['day', 'week', 'month'] },
+        n: { type: 'integer', description: '根数，默认 60，最多 250' },
+      },
+      ['code'],
+    ),
+  },
+  {
     name: 'get_company_profile',
     description:
       '公司简况：全称、行业、主营业务、简介、成立和上市日期（东方财富 F10）。ETF 没有。',
     schema: obj({ code: CODE }, ['code']),
+  },
+  {
+    name: 'get_corp_actions',
+    description:
+      '分红送配：给 code 返回这只证券历次分红送转（东方财富，含股权登记日、除权除息日、每股派现、送转）；不给 code 返回本地库里持仓和自选证券 from–to（YYYY-MM-DD，默认今天起）的除权除息日历。',
+    schema: obj({
+      code: CODE,
+      from: { type: 'string' },
+      to: { type: 'string' },
+    }),
   },
   {
     name: 'get_fee_profile',
@@ -129,6 +160,15 @@ export const TOOL_DEFS: ToolDef[] = [
       },
       ['code'],
     ),
+  },
+  {
+    name: 'get_journal',
+    description:
+      '决策日志（当前账户，从新到旧）：每笔买入写下的理由、预期、失效条件、来源（你 / AI 提案）、到期对账结果。code 可选，只看这只。',
+    schema: obj({
+      code: CODE,
+      n: { type: 'integer', description: '条数，默认 20，最多 100' },
+    }),
   },
   {
     name: 'get_kline',
@@ -162,6 +202,12 @@ export const TOOL_DEFS: ToolDef[] = [
     }),
   },
   {
+    name: 'get_portfolio',
+    description:
+      '组合与调仓：风险限额、调仓策略（股票池、频率、基准、单票上限、补单规则、交易纪律，带版本号）、最近的调仓计划和执行报告（费用、滑点、实现损失、违规）。生成调仓提案前先读。',
+    schema: obj({}),
+  },
+  {
     name: 'get_positions',
     description:
       '账户概览（总资产、市值、资金余额、可用、可取、冻结、累计净入金）和持仓（数量、可卖、今日买入、摊薄成本价和买入均价、现价、市值、浮动盈亏）。',
@@ -191,6 +237,12 @@ export const TOOL_DEFS: ToolDef[] = [
     description:
       '交易规则：topic 给规则课 id 或关键词（如 fee、价格笼子），返回规则课讲解和小测答案要点；code 给证券代码，返回这只证券的规则卡（板块、涨跌幅、申报单位、价格笼子、现在能否撤单、可卖数量）。都不给时返回规则课列表。',
     schema: obj({ topic: { type: 'string' }, code: CODE }),
+  },
+  {
+    name: 'get_scorecard',
+    description:
+      '记分卡：AI 提案和用户自己的决策分开统计已到期的条数、方向命中率、平均超额收益（相对各自的基准），以及最近 10 条提案和复盘结果。样本少于 20 条时标「样本太少」。',
+    schema: obj({}),
   },
   {
     name: 'get_trades',
@@ -248,6 +300,60 @@ export const TOOL_DEFS: ToolDef[] = [
     ),
   },
   {
+    name: 'propose',
+    description:
+      '记下一条投资建议或调仓方案（提案卡，不是操作卡）：用户可以批准或拒绝，到期按基准对账进记分卡。给出具体买卖、加减仓、持有或观望建议时都要调用。kind single 单只建议（items 只放一只）/ rebalance 调仓方案（items 是整个账户的目标组合，每只给 weight，未列出的持仓按 0 处理，合计不超过 1，余下是现金；用户批准后生成一张批量操作卡，按策略执行，进执行报告）。stance buy / add / hold / reduce / sell / watch。price_low / price_high 元，可选。horizon_days 交易日。',
+    schema: obj(
+      {
+        kind: { type: 'string', enum: ['single', 'rebalance'] },
+        items: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              code: CODE,
+              stance: {
+                type: 'string',
+                enum: ['buy', 'add', 'hold', 'reduce', 'sell', 'watch'],
+              },
+              weight: { type: 'number', description: '0–1' },
+              price_low: { type: 'number' },
+              price_high: { type: 'number' },
+            },
+            required: ['code', 'stance'],
+            additionalProperties: false,
+          },
+        },
+        horizon_days: { type: 'integer', description: '期限，交易日，1–250' },
+        benchmark: {
+          type: 'string',
+          description: '对账基准，完整代码，默认 sh510300 沪深300ETF',
+        },
+        thesis: { type: 'string', description: '理由' },
+        invalidation: {
+          type: 'string',
+          description: '失效条件：出现什么情况说明判断错了',
+        },
+      },
+      ['kind', 'items', 'horizon_days', 'thesis', 'invalidation'],
+    ),
+  },
+  {
+    name: 'query_local_db',
+    description:
+      '本地库只读 SQL（SQLite）：只能一条 SELECT / WITH，不能用 RECURSIVE，最多 200 行。可查的表：quotes_snapshot（3 秒快照）、kline_day（不复权日线）、security、corp_action、trade_calendar、account_event（引擎事件）、execution_report（执行报告）、security_day（某日证券状态）。价格单位厘，金额单位分。',
+    schema: obj(
+      {
+        sql: { type: 'string' },
+        limit: {
+          type: 'integer',
+          description: '最多返回几行，默认 50，最多 200',
+        },
+      },
+      ['sql'],
+    ),
+  },
+  {
     name: 'read_announcement',
     description:
       '读一条公告的正文（纯文本，按页，每页约 5,000 字）。art_code 用 get_announcements 查到的。年报、半年报全文只有 PDF 链接，改读摘要。',
@@ -279,6 +385,38 @@ export const TOOL_DEFS: ToolDef[] = [
     name: 'reset_account',
     description: '重置模拟账户：生成操作卡。旧账户归档，新账户从 0 元开始。',
     schema: obj({}),
+  },
+  {
+    name: 'screen',
+    description:
+      '横截面选股：从排行候选池（沪深 A / 创业板 / 科创板 / ETF 的成交额和涨跌幅前 100，不是全市场）或自选、持仓里，按条件过滤后排序。filters：pct_min / pct_max 涨跌幅 %，pe_min / pe_max，pb_max，amount_min 成交额亿元，cap_min 总市值亿元，turnover_min 换手率 %，exclude_st（默认 true）。sort pct / amount / turnover / pe / pb / cap，order desc / asc。',
+    schema: obj({
+      universe: {
+        type: 'string',
+        enum: ['a', 'cyb', 'kcb', 'etf', 'watch', 'held'],
+      },
+      filters: {
+        type: 'object',
+        properties: {
+          pct_min: { type: 'number' },
+          pct_max: { type: 'number' },
+          pe_min: { type: 'number' },
+          pe_max: { type: 'number' },
+          pb_max: { type: 'number' },
+          amount_min: { type: 'number' },
+          cap_min: { type: 'number' },
+          turnover_min: { type: 'number' },
+          exclude_st: { type: 'boolean' },
+        },
+        additionalProperties: false,
+      },
+      sort: {
+        type: 'string',
+        enum: ['pct', 'amount', 'turnover', 'pe', 'pb', 'cap'],
+      },
+      order: { type: 'string', enum: ['desc', 'asc'] },
+      n: { type: 'integer', description: '返回几只，默认 20，最多 50' },
+    }),
   },
   {
     name: 'search_conversations',
@@ -323,8 +461,11 @@ export const TOOL_DEFS: ToolDef[] = [
   {
     name: 'set_settings',
     description:
-      '改设置：生成操作卡。cost_basis diluted 摊薄成本 / average 买入均价；background_mode orders 有委托时自动 / session 交易时段全程 / off；background_interval 秒（3 / 5 / 10 / 30）；snapshot_keep 交易日（20 / 60，0 = 永久）；deposit_cap 累计净入金上限（元）。',
+      '改设置：生成操作卡。cost_basis diluted 摊薄成本 / average 买入均价；background_mode orders 有委托时自动 / session 交易时段全程 / off；background_interval 秒（3 / 5 / 10 / 30）；snapshot_keep 交易日（20 / 60，0 = 永久）；deposit_cap 累计净入金上限（元）。风险限额（引擎校验里拦买入，你和 AI 的单一样）：risk_max_weight 单票上限 %、risk_max_turnover 单日换手上限 %（0 = 不限），risk_no_st 禁买 ST。',
     schema: obj({
+      risk_max_weight: { type: 'number' },
+      risk_max_turnover: { type: 'number' },
+      risk_no_st: { type: 'boolean' },
       cost_basis: { type: 'string', enum: ['diluted', 'average'] },
       background_mode: { type: 'string', enum: ['orders', 'session', 'off'] },
       background_interval: { type: 'integer' },

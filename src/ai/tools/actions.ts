@@ -21,6 +21,13 @@ import {
   yuanToLi,
 } from '../../engine/units';
 import type { OrderRequest } from '../../engine/validate';
+import {
+  checkRisk,
+  invalidRisk,
+  riskOf,
+  riskText,
+  type RiskLimits,
+} from '../../engine/risk';
 import { itemById } from '../../learn/roadmap';
 import { beijingIso } from '../../market/clock';
 import { feeDiff, formOf as feeFormOf, parseFeeForm } from '../../sim/feeForm';
@@ -127,6 +134,14 @@ async function planOrder(
   const sim = core.sim;
   const snap = q?.snapshot ?? sim.engine.snapshot(sec.code);
   const check = sim.checkOrder(req);
+  const risk = checkRisk({
+    state: sim.engine.state,
+    sec,
+    req,
+    date: sim.now().date,
+    snap,
+    priceOf: c => sim.engine.lastPrice(c),
+  });
   const est = estimate(req, sec, snap, sim.engine.state.fee);
   const now = sim.now();
   const tradingDay = sim.calendar.isTradingDay(now.date);
@@ -159,6 +174,7 @@ async function planOrder(
         ...(side === 'B'
           ? [{ k: '冻结资金', v: formatFen(est.freeze) + ' 元' }]
           : []),
+        { k: '风险校验', v: (risk.ok ? '' : '不通过：') + risk.text },
       ],
       check: check.ok
         ? { ok: true, text: '校验通过（和下单页同一套规则）' }
@@ -329,6 +345,7 @@ interface SettingsPlan {
     snapshotKeepDays?: number;
   };
   depositCap?: number;
+  risk?: RiskLimits;
 }
 
 function planSettings(
@@ -406,6 +423,47 @@ function planSettings(
       });
     } else {
       errs.push(c.msg);
+    }
+  }
+  if (
+    a.risk_max_weight != null ||
+    a.risk_max_turnover != null ||
+    a.risk_no_st != null
+  ) {
+    const cur = riskOf(core.sim.engine.state);
+    const next = { ...cur };
+    const pctOf = (v: unknown, what: string) => {
+      const n = num(v);
+      if (n == null || n < 0) {
+        errs.push(what + '要写百分数（0 = 不限）');
+        return undefined;
+      }
+      return n === 0 ? null : n / 100;
+    };
+    if (a.risk_max_weight != null) {
+      const v = pctOf(a.risk_max_weight, '单票上限');
+      if (v !== undefined) {
+        next.maxWeight = v;
+      }
+    }
+    if (a.risk_max_turnover != null) {
+      const v = pctOf(a.risk_max_turnover, '单日换手上限');
+      if (v !== undefined) {
+        next.maxTurnover = v;
+      }
+    }
+    if (typeof a.risk_no_st === 'boolean') {
+      next.noSt = a.risk_no_st;
+    }
+    const bad = invalidRisk(next);
+    if (bad) {
+      errs.push(bad);
+    } else if (riskText(next) !== riskText(cur)) {
+      plan.risk = next;
+      rows.push({
+        k: '风险限额',
+        v: riskText(cur) + ' → ' + riskText(next),
+      });
     }
   }
   return {
@@ -606,6 +664,9 @@ export async function executeCard(
       }
       if (p.plan.depositCap != null) {
         await core.sim.setDepositCap(p.plan.depositCap);
+      }
+      if (p.plan.risk) {
+        await core.sim.setRiskLimits(p.plan.risk);
       }
       out = {
         ok: true,

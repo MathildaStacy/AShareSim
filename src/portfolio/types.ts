@@ -74,6 +74,10 @@ export interface Rebalance {
   orderIds: number[];
   attempts: Record<string, number>;
   notes: string[];
+  /** AI 调仓提案批准后生成的（M5.5）：执行状态回写到提案。 */
+  proposalId?: number;
+  /** 这次调仓的理由，执行时写进决策日志（买入的每只一条）。 */
+  thesis?: string;
 }
 export interface ReportRow {
   code: string;

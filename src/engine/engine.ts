@@ -26,6 +26,7 @@ import {
   oppositeLevels,
   type FillPlan,
 } from './matching';
+import { riskValidation, type RiskLimits } from './risk';
 import { ruleOf, type Security } from './securities';
 import {
   CLOSE,
@@ -416,6 +417,11 @@ export class Engine {
     this.state.depositCap = fen;
   }
 
+  /** 改风险限额（范围由调用方用 invalidRisk 校验）。 */
+  setRiskLimits(r: RiskLimits): void {
+    this.state.risk = { ...r };
+  }
+
   // ---------- 委托 ----------
 
   private sec(code: string): Security {
@@ -477,6 +483,19 @@ export class Engine {
             )
           : 0,
     });
+    if (v.ok || v.level !== 'block') {
+      const risk = riskValidation({
+        state: s,
+        sec,
+        req,
+        date: now.date,
+        snap: snap ?? this.snaps.get(req.code) ?? null,
+        priceOf: c => this.lastPrice(c),
+      });
+      if (risk) {
+        v = risk;
+      }
+    }
     if ((v.ok || v.level !== 'block') && route === 'continuous' && !snap) {
       v = {
         ok: false,

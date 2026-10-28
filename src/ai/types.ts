@@ -221,6 +221,8 @@ export interface ToolUi {
   memory?: MemoryChange;
   /** navigate：回答结束后打开的页面。 */
   nav?: { route: string; params?: Record<string, unknown>; label: string };
+  /** propose：提案卡（状态存在 ai_proposal 表，界面按 id 现读）。external 同操作卡（§13.3）。 */
+  proposal?: { id: number; external?: string[] };
 }
 
 export interface MessageUi {

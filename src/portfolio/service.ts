@@ -1,4 +1,5 @@
 import type { Db } from '../data/db';
+import type { Engine } from '../engine/engine';
 import * as data from '../data/repos';
 import { isLive } from '../engine/account';
 import { phaseAt, T } from '../engine/session';
@@ -14,7 +15,51 @@ import {
   saveRebalance,
   streak,
 } from './repo';
-import type { Plan, Rebalance, Strategy, TargetFile } from './types';
+import type { Plan, PlanRow, Rebalance, Strategy, TargetFile } from './types';
+import { addJournal } from '../advice/repo';
+import { datesOf } from '../advice/score';
+
+/**
+ * 调仓计划里的买入继承这次调仓的理由，写进决策日志（M5.5）：期限 5 个交易日（每周调仓），基准用策略的基准。
+ * 先卖后买时买单稍后才报，日志在确认时就写下（决策发生在确认那一刻）。
+ */
+async function journalRebalance(
+  tx: Db,
+  r: Rebalance,
+  engine: Engine,
+  sim: Simulator,
+  selected: PlanRow[],
+): Promise<void> {
+  const now = sim.now();
+  const { baseDate, dueDate } = datesOf(sim.calendar, now.date, 5);
+  for (const row of r.plan.rows.filter(x => x.request?.side === 'B')) {
+    const order = selected.some(x => x.code === row.code)
+      ? r.orderIds.find(
+          id => engine.state.orders.find(o => o.id === id)?.code === row.code,
+        )
+      : undefined;
+    await addJournal(tx, {
+      accountId: r.accountId,
+      source: r.proposalId != null ? 'ai' : 'user',
+      orderId: order ?? null,
+      rebalanceId: r.id,
+      proposalId: r.proposalId ?? null,
+      code: row.code,
+      name: row.name,
+      side: 'B',
+      thesis:
+        r.thesis ??
+        '按策略「' + r.strategy.name + '」v' + r.strategy.version + ' 调仓',
+      expectation: '',
+      invalidation: '',
+      horizonDays: 5,
+      benchmark: r.strategy.benchmark,
+      createdAt: beijingIso(),
+      baseDate,
+      dueDate,
+    });
+  }
+}
 
 export class PortfolioService {
   constructor(
@@ -48,6 +93,7 @@ export class PortfolioService {
     strategy: Strategy,
     targets: TargetFile,
     plan: Plan,
+    extra: { proposalId?: number; thesis?: string } = {},
   ): Promise<Rebalance> {
     if (plan.accountId !== this.sim.accountId) {
       throw new Error('账户已切换，请重新预检');
@@ -72,6 +118,8 @@ export class PortfolioService {
         orderIds: [],
         attempts: {},
         notes: [],
+        ...(extra.proposalId != null ? { proposalId: extra.proposalId } : {}),
+        ...(extra.thesis?.trim() ? { thesis: extra.thesis.trim() } : {}),
       };
       await saveRebalance(tx, r);
       return r;
@@ -152,6 +200,7 @@ export class PortfolioService {
         r.orderIds.push(placed.order.id);
         r.attempts[row.code] = 1;
       }
+      await journalRebalance(tx, r, engine, this.sim, selected);
       if (mode === 'sellFirst') {
         r.notes.push(
           '先卖后买：9:30 后以实际可用资金提交已确认的买入数量；不足则放弃，不自动缩单。',
