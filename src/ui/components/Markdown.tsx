@@ -1,5 +1,5 @@
 /** 可连续阅读的 AI 正文。表格共用列宽，宽表与代码只横向滚动自身。 */
-import { useMemo } from 'react';
+import { createContext, useContext, useMemo } from 'react';
 import {
   Platform,
   ScrollView,
@@ -9,8 +9,36 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import { parseMarkdown, type MdInline } from '../../ai/markdown';
+import { splitMissing } from '../../ai/provenance';
 import { aiColor as c } from '../aiTheme';
-import { num } from '../theme';
+import { color, num } from '../theme';
+
+/** 找不到来源的数字加虚线（Android 不支持虚线样式时显示成下划线，颜色区分）。 */
+const Missing = createContext<Set<string> | undefined>(undefined);
+
+function Plain({ text }: { text: string }) {
+  const missing = useContext(Missing);
+  if (!missing) {
+    return <>{text}</>;
+  }
+  return (
+    <>
+      {splitMissing(text, missing).map((x, i) =>
+        x.missing ? (
+          <Text
+            key={i}
+            style={s.missing}
+            accessibilityLabel={x.text + '，找不到来源'}
+          >
+            {x.text}
+          </Text>
+        ) : (
+          x.text
+        ),
+      )}
+    </>
+  );
+}
 
 function Inline({
   inl,
@@ -24,7 +52,7 @@ function Inline({
       {inl.map((x, i) =>
         x.t === 'bold' ? (
           <Text key={i} style={s.bold}>
-            {x.text}
+            <Plain text={x.text} />
           </Text>
         ) : x.t === 'code' ? (
           <Text key={i} style={s.icode}>
@@ -43,7 +71,9 @@ function Inline({
             {x.href.startsWith('source:') ? '[' + x.text + ']' : x.text}
           </Text>
         ) : (
-          <Text key={i}>{x.text}</Text>
+          <Text key={i}>
+            <Plain text={x.text} />
+          </Text>
         ),
       )}
     </>
@@ -103,100 +133,115 @@ export function Markdown({
   text,
   onLink,
   secondary = false,
+  missing,
 }: {
   text: string;
   secondary?: boolean;
   onLink: (href: string) => void;
+  /** 找不到来源的数字（数字溯源，§13.9），加虚线。 */
+  missing?: Set<string>;
 }) {
   const blocks = useMemo(() => parseMarkdown(text), [text]);
   return (
-    <View>
-      {blocks.map((b, i) => {
-        switch (b.t) {
-          case 'h':
-            return (
-              <Text
-                key={i}
-                selectable
-                accessibilityRole="header"
-                style={[
-                  s.h,
-                  b.level === 1 ? s.h1 : b.level === 2 ? s.h2 : s.h3,
-                  i === 0 && s.firstHeading,
-                  secondary && s.secondary,
-                ]}
-              >
-                <Inline inl={b.inl} onLink={onLink} />
-              </Text>
-            );
-          case 'li':
-            return (
-              <View
-                key={i}
-                style={[
-                  s.li,
-                  { paddingLeft: b.depth * 16 },
-                  blocks[i + 1]?.t !== 'li' && s.listEnd,
-                ]}
-              >
+    <Missing.Provider value={missing}>
+      <View>
+        {blocks.map((b, i) => {
+          switch (b.t) {
+            case 'h':
+              return (
                 <Text
+                  key={i}
+                  selectable
+                  accessibilityRole="header"
                   style={[
-                    s.marker,
-                    num,
-                    { minWidth: Math.max(26, b.marker.length * 9) },
+                    s.h,
+                    b.level === 1 ? s.h1 : b.level === 2 ? s.h2 : s.h3,
+                    i === 0 && s.firstHeading,
+                    secondary && s.secondary,
                   ]}
                 >
-                  {b.marker}
-                </Text>
-                <Text selectable style={[s.liText, secondary && s.secondary]}>
                   <Inline inl={b.inl} onLink={onLink} />
                 </Text>
-              </View>
-            );
-          case 'table':
-            return <Table key={i} rows={b.rows} onLink={onLink} />;
-          case 'code':
-            return (
-              <ScrollView
-                key={i}
-                horizontal
-                style={s.codeWrap}
-                nestedScrollEnabled
-                showsHorizontalScrollIndicator
-                accessibilityLabel="代码，可横向滚动"
-              >
-                <Text selectable style={s.code}>
-                  {b.text}
-                </Text>
-              </ScrollView>
-            );
-          case 'quote':
-            return (
-              <View key={i} style={s.quote}>
+              );
+            case 'li':
+              return (
+                <View
+                  key={i}
+                  style={[
+                    s.li,
+                    { paddingLeft: b.depth * 16 },
+                    blocks[i + 1]?.t !== 'li' && s.listEnd,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      s.marker,
+                      num,
+                      { minWidth: Math.max(26, b.marker.length * 9) },
+                    ]}
+                  >
+                    {b.marker}
+                  </Text>
+                  <Text selectable style={[s.liText, secondary && s.secondary]}>
+                    <Inline inl={b.inl} onLink={onLink} />
+                  </Text>
+                </View>
+              );
+            case 'table':
+              return <Table key={i} rows={b.rows} onLink={onLink} />;
+            case 'code':
+              return (
+                <ScrollView
+                  key={i}
+                  horizontal
+                  style={s.codeWrap}
+                  nestedScrollEnabled
+                  showsHorizontalScrollIndicator
+                  accessibilityLabel="代码，可横向滚动"
+                >
+                  <Text selectable style={s.code}>
+                    {b.text}
+                  </Text>
+                </ScrollView>
+              );
+            case 'quote':
+              return (
+                <View key={i} style={s.quote}>
+                  <Text
+                    selectable
+                    style={[s.quoteText, secondary && s.secondary]}
+                  >
+                    <Inline inl={b.inl} onLink={onLink} />
+                  </Text>
+                </View>
+              );
+            case 'hr':
+              return <View key={i} style={s.hr} />;
+            default:
+              return (
                 <Text
+                  key={i}
                   selectable
-                  style={[s.quoteText, secondary && s.secondary]}
+                  style={[s.p, secondary && s.secondary]}
                 >
                   <Inline inl={b.inl} onLink={onLink} />
                 </Text>
-              </View>
-            );
-          case 'hr':
-            return <View key={i} style={s.hr} />;
-          default:
-            return (
-              <Text key={i} selectable style={[s.p, secondary && s.secondary]}>
-                <Inline inl={b.inl} onLink={onLink} />
-              </Text>
-            );
-        }
-      })}
-    </View>
+              );
+          }
+        })}
+      </View>
+    </Missing.Provider>
   );
 }
 
 const mono = Platform.OS === 'ios' ? 'Menlo' : 'monospace';
 const s = StyleSheet.create({
+  missing: {
+    color: color.warnInk,
+    textDecorationLine: 'underline',
+    textDecorationStyle: 'dashed',
+    textDecorationColor: color.warnInk,
+  },
   secondary: {
     fontSize: 13,
     lineHeight: 20,

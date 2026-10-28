@@ -299,7 +299,7 @@ test('对话列表、AI 记忆、上下文页', async () => {
   });
   const ctx = await render('AiContext', AiContextScreen);
   const ct = ctx.text();
-  expect(ct).toContain('工具定义（27 个）');
+  expect(ct).toContain('工具定义（36 个）');
   expect(ct).toContain('断点 1（所有对话共用）');
   expect(ct).toContain('实际请求结构（JSON）');
   expect(ct).not.toContain('sk-ui-secret');

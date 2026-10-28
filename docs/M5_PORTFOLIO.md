@@ -60,7 +60,7 @@ JSON 权重只接受 0–1 数字。股数模式为 `mode:"shares"`。重复代�
 
 Schema 5 新增 `strategy_version`、`rebalance`、`execution_report`、`weekly_skip`、`account_event`、`security_day`、`data_check`。账户仍整行 JSON。事件与账户更新同事务写入，只追加。调仓使用独立引擎副本保留盘口消耗量；委托、账户、关联 ID 和补单次数同事务提交，失败不发布副本。交易与行情写操作串行化；重复确认和重启后的补单以数据库状态去重。重置账户后历史报告保留且不参与新账户执行。
 
-M5.5 的 AI 调仓提案、风险限额和批量操作卡，以及产品文档允许后置的影子组合，不在本次实现中。
+M5.5 的 AI 调仓提案、风险限额和批量操作卡见 [M55_AI_WORKFLOW.md](M55_AI_WORKFLOW.md)。产品文档允许后置的影子组合不在本次实现中。
 
 ## 验证
 

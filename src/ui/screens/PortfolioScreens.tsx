@@ -16,6 +16,7 @@ import { exportText, importText } from '../../app/exportFile';
 import { isLive } from '../../engine/account';
 import { addDays } from '../../engine/calendar';
 import { formatFen } from '../../engine/units';
+import { riskOf, riskText } from '../../engine/risk';
 import { formatSec } from '../../engine/session';
 import { PortfolioService } from '../../portfolio/service';
 import * as portfolio from '../../portfolio/repo';
@@ -243,6 +244,24 @@ export function PortfolioScreen({ navigation }: RootScreenProps<'Portfolio'>) {
         <View style={s.streak}>
           <Text style={s.label}>已连续记录 {n} 周</Text>
           <Text style={s.sub}>阶段 7 目标：连续完成 12 周</Text>
+        </View>
+        <View style={s.heading}>
+          <Pressable
+            style={({ pressed }) => [s.navAction, pressed && s.pressed]}
+            accessibilityRole="button"
+            onPress={() => navigation.navigate('Proposals')}
+          >
+            <Text style={s.link}>AI 提案与记分卡 ›</Text>
+          </Pressable>
+          <Pressable
+            style={({ pressed }) => [s.navAction, pressed && s.pressed]}
+            accessibilityRole="button"
+            onPress={() => navigation.navigate('Settings')}
+          >
+            <Text style={s.link}>
+              风险限额：{riskText(riskOf(core.sim.engine.state))} ›
+            </Text>
+          </Pressable>
         </View>
         <ErrorLine error={data.error ?? task.error} />
         <View style={s.heading}>
@@ -494,7 +513,8 @@ export function RebalanceScreen({
     [confirm, setConfirm] = useState<
       'together' | 'sellFirst' | 'cancel' | null
     >(null),
-    [note, setNote] = useState('');
+    [note, setNote] = useState(''),
+    [thesis, setThesis] = useState('');
   const loaded = usePolling(
     async () => ({
       strategies: await portfolio.strategies(core.db),
@@ -594,7 +614,7 @@ export function RebalanceScreen({
       if (!strategy || !targets || !plan) {
         throw new Error('请重新预检');
       }
-      r = await service.draft(strategy, targets, plan);
+      r = await service.draft(strategy, targets, plan, { thesis });
       setId(r.id);
     }
     await service.execute(r.id, choice);
@@ -952,6 +972,15 @@ export function RebalanceScreen({
                   确认后将按策略处理未成交委托；先卖后买在 9:30
                   后提交买单。14:50 撤销剩余委托。
                 </Text>
+                {!run ? (
+                  <PortfolioField
+                    label="这次调仓的理由（写进决策日志，可选）"
+                    value={thesis}
+                    onChange={setThesis}
+                    multiline
+                    placeholder="信号是什么？预期多久见效？"
+                  />
+                ) : null}
                 <Button
                   title="批量确认"
                   tone="sell"

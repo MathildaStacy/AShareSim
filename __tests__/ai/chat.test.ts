@@ -1191,3 +1191,20 @@ test('Kimi 搜索错误文本也隔离为外部资料，之后的操作卡带提
   });
   expect(rows[1].ui?.tools?.[0].card?.external).toEqual(['联网搜索失败']);
 });
+
+test('附带的模板（简报、预设流程）放在最后一条用户消息里、问题之前；对话里只显示名字', async () => {
+  const core = await setup();
+  replies = [{ json: textReply('好的') }];
+  await ask(core, {
+    question: '盘前简报 2026-10-26',
+    page: null,
+    attach: { label: '盘前简报数据', text: '<briefing_data>持仓</briefing_data>' },
+  });
+  const body = sent[0].body;
+  const last = body.messages[body.messages.length - 1].content.map((c: any) => c.text);
+  expect(last[1]).toBe('<briefing_data>持仓</briefing_data>');
+  expect(last[2]).toBe('盘前简报 2026-10-26');
+  expect(JSON.stringify(body.system)).not.toContain('briefing_data');
+  const q = useChat.getState().messages.find(m => m.role === 'user')!;
+  expect(q.ui).toMatchObject({ question: '盘前简报 2026-10-26', attach: '盘前简报数据' });
+});

@@ -232,6 +232,8 @@ export interface MessageUi {
   actions?: number;
   /** user：换了页面时的分隔线「你现在在：xxx」。 */
   divider?: string;
+  /** user：附带的模板或数据（简报数据、预设流程），只显示名字。 */
+  attach?: string;
   /** assistant：这一次请求的用量和服务。 */
   usage?: Usage;
   service?: string;

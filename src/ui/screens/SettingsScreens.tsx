@@ -18,6 +18,12 @@ import { updateRefreshSettings } from '../../app/settings';
 import { batterySettings, notificationPermission } from '../../app/tracker';
 import * as repo from '../../data/repos';
 import { formatFen } from '../../engine/units';
+import {
+  invalidRisk,
+  riskOf,
+  riskText,
+  type RiskLimits,
+} from '../../engine/risk';
 import { yuanText } from '../../sim/feeForm';
 import type { RefreshSettings } from '../../sim/refresher';
 import {
@@ -29,7 +35,7 @@ import {
   msName,
   SNAPSHOT_KEEP_OPTIONS,
 } from '../../sim/settings';
-import { ChoiceRow, FieldRow, KV } from '../components/form';
+import { ChoiceRow, FieldRow, KV, SwitchRow } from '../components/form';
 import { AiFab, Button, NavBar, Note, SectionTitle } from '../components/ui';
 import { useAiContext, useCore, useLive, useViewLog } from '../hooks';
 import type { RootStackParamList } from '../navigation/types';
@@ -64,6 +70,25 @@ export function SettingsScreen() {
   }, [core, rs.snapshotKeepDays]);
   const cap = checkDepositCap(capText, st.depositTotal);
   const capDirty = cap.ok && cap.fen !== st.depositCap;
+  const risk = riskOf(st);
+  const pctIn = (v: number | null) =>
+    v == null ? '' : String(+(v * 100).toFixed(2));
+  const [wText, setWText] = useState(pctIn(risk.maxWeight));
+  const [tText, setTText] = useState(pctIn(risk.maxTurnover));
+  const [noSt, setNoSt] = useState(risk.noSt);
+  const pctOut = (t: string) =>
+    !t.trim() || Number(t) === 0 ? null : Number(t) / 100;
+  const nextRisk: RiskLimits = {
+    maxWeight: pctOut(wText),
+    maxTurnover: pctOut(tText),
+    noSt,
+  };
+  const riskErr = [wText, tText].some(
+    t => t.trim() && !Number.isFinite(Number(t)),
+  )
+    ? '填数字（%），留空或 0 表示不限'
+    : invalidRisk(nextRisk);
+  const riskDirty = !riskErr && riskText(nextRisk) !== riskText(risk);
 
   useViewLog('settings', '查看 设置');
   useAiContext('Settings', () => ({
@@ -86,6 +111,9 @@ export function SettingsScreen() {
         '（可选：有委托时自动 / 交易时段全程 / 关闭），后台刷新间隔 ' +
         msName(rs.backgroundMs) +
         '（可选：3 / 5 / 10 / 30 秒）；前台可见报价目标 1 秒，其余记录证券 3 秒',
+      '风险限额：' +
+        riskText(risk) +
+        '（在引擎校验里拦买入，你和 AI 的单一样；卖出不拦）',
       '累计净入金上限 ' +
         formatFen(st.depositCap) +
         ' 元，已转入 ' +
@@ -115,6 +143,14 @@ export function SettingsScreen() {
     }
     await sim.setDepositCap(cap.fen);
     toast.show('累计净入金上限改为 ' + formatFen(cap.fen) + ' 元');
+  };
+
+  const saveRisk = async () => {
+    if (riskErr) {
+      return;
+    }
+    await sim.setRiskLimits(nextRisk);
+    toast.show('风险限额：' + riskText(nextRisk));
   };
 
   return (
@@ -177,6 +213,46 @@ export function SettingsScreen() {
           >
             <Text style={s.link}>后台跟踪与省电设置引导（HyperOS）›</Text>
           </Pressable>
+        </View>
+        <View style={s.card}>
+          <SectionTitle title="风险限额" />
+          <Text style={s.riskNote}>
+            在交易引擎的校验里执行：下单页、AI
+            操作卡和调仓预检都会拦下超限的买入，卖出不拦。现在：
+            {riskText(risk)}
+          </Text>
+          <FieldRow
+            label="单票上限"
+            sub="买入后这只证券（含未成交买单）占总资产的比例"
+            value={wText}
+            onChangeText={setWText}
+            unit="%"
+            placeholder="不限"
+          />
+          <FieldRow
+            label="单日换手上限"
+            sub="当天委托金额（买 + 卖）占总资产的比例"
+            value={tText}
+            onChangeText={setTText}
+            unit="%"
+            placeholder="不限"
+            error={riskErr}
+          />
+          <SwitchRow
+            label="禁买 ST"
+            sub="ST、*ST 股票不能买入"
+            value={noSt}
+            onChange={setNoSt}
+          />
+          <View style={s.btnRow}>
+            <Button
+              title="保存风险限额"
+              small
+              tone="buy"
+              disabled={!riskDirty}
+              onPress={saveRisk}
+            />
+          </View>
         </View>
         <View style={s.card}>
           <SectionTitle title="模拟入金" />
@@ -428,6 +504,13 @@ export function PowerGuideScreen() {
 }
 
 const s = StyleSheet.create({
+  riskNote: {
+    fontSize: 12,
+    lineHeight: 18,
+    color: color.ink3,
+    paddingHorizontal: PAD,
+    paddingBottom: 6,
+  },
   page: { flex: 1, backgroundColor: color.bg },
   pad: { paddingBottom: 90 },
   card: { backgroundColor: color.card, marginTop: 8 },

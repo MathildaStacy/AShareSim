@@ -69,6 +69,11 @@ export const NAV_ROUTES: Record<string, { label: string; params: string }> = {
   AiMemory: { label: 'AI 记忆', params: '' },
   AiServices: { label: '供应商与模型', params: '' },
   AiMcp: { label: '外部工具（MCP）', params: '' },
+  Portfolio: { label: '组合与调仓', params: '' },
+  Rebalance: { label: '调仓计划', params: 'id（调仓 id，可选；不给是新建）' },
+  Proposals: { label: '提案与记分卡', params: '' },
+  AiFlows: { label: '预设流程', params: '' },
+  DataCenter: { label: '数据中心', params: '' },
 };
 
 export const TOOL_DEFS: ToolDef[] = [
@@ -146,8 +151,12 @@ export const TOOL_DEFS: ToolDef[] = [
   {
     name: 'get_fee_profile',
     description:
-      '当前费率设置：股票 / ETF 佣金率和最低佣金、规费是否另收、是否已用交割单校准，以及印花税、过户费等法定费用。',
-    schema: obj({}),
+      '当前费率设置：股票 / ETF 佣金率和最低佣金、规费是否另收、是否已用交割单校准，以及印花税、过户费等法定费用。同时给 code、price（元）、qty 时，再按当前费率算这笔的买入 / 卖出逐项费用、来回费用和保本卖出价（和费用计算器同一套），算费用时用它，不要心算。',
+    schema: obj({
+      code: CODE,
+      price: { type: 'number' },
+      qty: { type: 'integer' },
+    }),
   },
   {
     name: 'get_financials',

@@ -10,6 +10,7 @@ import { lessonById } from '../../learn/lessons';
 import type { AiPrefs, MemoryKind, ToolUi } from '../types';
 import { MEMORY_KIND_NAME } from '../types';
 import { previewCard } from './actions';
+import { feeCalcSummary, parseFeeCalc } from '../../sim/feeCalc';
 import { CARD_TOOLS, NAV_ROUTES } from './defs';
 import { EXTERNAL_TOOLS, external } from '../external';
 import { mcpCall, mcpSearch } from '../mcp';
@@ -295,8 +296,29 @@ async function dispatch(
             : '（最近 20 条）'),
       );
     }
-    case 'get_fee_profile':
-      return ok(feeProfileText(core), '读取 费率设置');
+    case 'get_fee_profile': {
+      if (!args.code || args.price == null || args.qty == null) {
+        return ok(feeProfileText(core), '读取 费率设置');
+      }
+      const r = await needCode(env, args);
+      const calc = parseFeeCalc(
+        {
+          code: r.code.slice(2),
+          price: String(args.price),
+          qty: String(args.qty),
+        },
+        core.sim.engine.state.fee,
+      );
+      if (!calc.ok) {
+        throw new Error(calc.errors.map(e => e.msg).join('；'));
+      }
+      return ok(
+        feeProfileText(core) +
+          '\n按当前费率算（和费用计算器同一套）：\n' +
+          feeCalcSummary(calc.result, r.name).join('\n'),
+        '计算 ' + r.name + ' ' + args.qty + ' 股 @' + args.price + ' 的费用',
+      );
+    }
     case 'get_rule': {
       if (typeof args.code === 'string' && args.code.trim()) {
         const r = await needCode(env, args);
@@ -487,7 +509,17 @@ async function propose(
       p.id +
       '「' +
       what +
-      '」，等用户批准或拒绝；' +
+      '」：' +
+      items
+        .map(
+          i =>
+            STANCE_NAME[i.stance] +
+            ' ' +
+            i.name +
+            (i.weight != null ? ' ' + +(i.weight * 100).toFixed(2) + '%' : ''),
+        )
+        .join('，') +
+      '；等用户批准或拒绝；' +
       p.dueDate +
       ' 收盘后按 ' +
       p.benchmark +
@@ -659,6 +691,11 @@ async function navigate(
     case 'Orders':
       if (['today', 'fills', 'hist', 'ledger'].includes(String(p.tab))) {
         params.tab = p.tab;
+      }
+      break;
+    case 'Rebalance':
+      if (p.id != null && Number.isFinite(Number(p.id))) {
+        params.id = Number(p.id);
       }
       break;
     case 'OrderDetail':

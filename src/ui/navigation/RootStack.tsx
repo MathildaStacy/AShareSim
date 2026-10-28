@@ -17,6 +17,7 @@ import {
 } from '../screens/AccountsScreens';
 import { AiMcpScreen, AiMcpServerScreen } from '../screens/AiMcpScreens';
 import { AiScreen } from '../screens/AiScreen';
+import { AiFlowsScreen, ProposalsScreen } from '../screens/AdviceScreens';
 import {
   AiContextScreen,
   AiMemoryScreen,
@@ -178,6 +179,8 @@ export function RootStack() {
       <Stack.Screen name="AiMcp" component={AiMcpScreen} />
       <Stack.Screen name="AiMcpServer" component={AiMcpServerScreen} />
       <Stack.Screen name="AiContext" component={AiContextScreen} />
+      <Stack.Screen name="AiFlows" component={AiFlowsScreen} />
+      <Stack.Screen name="Proposals" component={ProposalsScreen} />
     </Stack.Navigator>
   );
 }

@@ -282,6 +282,11 @@ export interface AskInput {
   question: string;
   /** 来源页面（打开 AI 时记下的路由，提问时重新计算上下文）。 */
   page: { route: string; ctx: PageContext } | null;
+  /**
+   * 附带的模板或数据（简报数据、预设流程的步骤和模板，§13.8）：放在最后一条用户消息里、问题之前，
+   * 对话里只显示 label，不改 system，不影响缓存。
+   */
+  attach?: { label: string; text: string };
 }
 
 /** 对话里还没告诉模型的操作卡 / 记忆确认结果；顺便标成已告诉。 */
@@ -428,6 +433,9 @@ export async function ask(core: AppCore, input: AskInput): Promise<void> {
       role: 'user',
       parts: [
         { t: 'text', text: ctxText },
+        ...(input.attach
+          ? [{ t: 'text' as const, text: input.attach.text }]
+          : []),
         { t: 'text', text: question },
       ],
       ui: {
@@ -435,6 +443,7 @@ export async function ask(core: AppCore, input: AskInput): Promise<void> {
         page: page ? page.name : null,
         actions: acts?.length ?? 0,
         divider,
+        ...(input.attach ? { attach: input.attach.label } : {}),
       },
     },
     now,

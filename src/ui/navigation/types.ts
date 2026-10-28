@@ -75,6 +75,9 @@ export type RootStackParamList = {
   /** 没有 id 是添加外部工具。 */
   AiMcpServer: { id?: string } | undefined;
   AiContext: undefined;
+  // M5.5
+  AiFlows: undefined;
+  Proposals: undefined;
 };
 
 export type RootScreenProps<K extends keyof RootStackParamList> =

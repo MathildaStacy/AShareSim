@@ -54,6 +54,8 @@ import {
   type OrderForm,
 } from '../../sim/orderForm';
 import { lessonById } from '../../learn/lessons';
+import { writeJournal } from '../../advice/service';
+import { DEFAULT_BENCHMARK, DEFAULT_HORIZON } from '../../advice/types';
 import { feeLabel } from '../../sim/feeForm';
 import { BOARD_NAME } from '../../sim/ruleCard';
 import { ConfirmDialog, type DialogRow } from '../components/Dialog';
@@ -154,6 +156,8 @@ export function OrderScreen({ route }: RootScreenProps<'Order'>) {
     lesson?: string;
   } | null>(null);
   const [cancelling, setCancelling] = useState<Order | null>(null);
+  // 决策日志（M5.5）：买入时可以写下理由、预期和失效条件，到期按基准对账
+  const [why, setWhy] = useState({ thesis: '', expectation: '', invalidation: '' });
 
   // 从个股页、搜索、五档进来时换证券 / 方向 / 价格：表单重来
   useEffect(() => {
@@ -422,6 +426,21 @@ export function OrderScreen({ route }: RootScreenProps<'Order'>) {
     }
     set({ qty: '' });
     core.refresher.kick();
+    if (req.side === 'B' && r.order.status !== '废单' && why.thesis.trim()) {
+      await writeJournal(core, {
+        source: 'user',
+        orderId: r.order.id,
+        rebalanceId: null,
+        proposalId: null,
+        code: req.code,
+        name,
+        side: 'B',
+        ...why,
+        horizonDays: DEFAULT_HORIZON,
+        benchmark: DEFAULT_BENCHMARK,
+      }).catch(() => undefined);
+      setWhy({ thesis: '', expectation: '', invalidation: '' });
+    }
   };
   const doCancel = async (o: Order) => {
     setCancelling(null);
@@ -920,6 +939,30 @@ export function OrderScreen({ route }: RootScreenProps<'Order'>) {
         onCancel={() => setConfirm(null)}
       >
         <Note style={s.dlgNote}>{sendNote}</Note>
+        {tradeSide === 'B' ? (
+          <View style={s.dlgNote}>
+            <Text style={s.journalTitle}>
+              决策日志（可选，{DEFAULT_HORIZON} 个交易日后按沪深300ETF 对账）
+            </Text>
+            {(
+              [
+                ['thesis', '理由：为什么买'],
+                ['expectation', '预期：比如一个月涨 5%'],
+                ['invalidation', '失效条件：出现什么说明判断错了'],
+              ] as const
+            ).map(([k, ph]) => (
+              <TextInput
+                key={k}
+                accessibilityLabel={ph.split('：')[0]}
+                placeholder={ph}
+                placeholderTextColor={color.ink3}
+                value={why[k]}
+                onChangeText={v => setWhy({ ...why, [k]: v })}
+                style={s.journalInput}
+              />
+            ))}
+          </View>
+        ) : null}
         {check && !check.ok ? (
           <Note tone="warn" style={s.dlgNote}>
             {'这笔委托会被交易所拒收，成为废单（' +
@@ -1279,6 +1322,17 @@ const s = StyleSheet.create({
     paddingTop: 8,
   },
   dlgNote: { marginTop: 10 },
+  journalTitle: { fontSize: 12, lineHeight: 18, color: color.ink2 },
+  journalInput: {
+    marginTop: 6,
+    minHeight: 40,
+    borderWidth: 1,
+    borderColor: color.line,
+    borderRadius: 4,
+    paddingHorizontal: 8,
+    fontSize: 14,
+    color: color.ink,
+  },
   blockedText: {
     fontSize: 14,
     lineHeight: 21,

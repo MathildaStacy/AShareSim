@@ -85,6 +85,23 @@ import {
   SearchUnavailable,
 } from '../components/AiOptions';
 import { Markdown } from '../components/Markdown';
+import { ProposalCard } from '../components/ProposalCard';
+import {
+  answerText,
+  traceNumbers,
+  turnSources,
+  type Provenance,
+} from '../../ai/provenance';
+import {
+  BRIEF_NAME,
+  briefingData,
+  briefingQuestion,
+  briefingTemplate,
+  dueBriefings,
+  loadBriefLog,
+  markBriefing,
+  type BriefDue,
+} from '../../ai/flows';
 import { ChatProcess, conversationTurns } from '../components/ChatProcess';
 import { Button } from '../components/ui';
 import { useCore } from '../hooks';
@@ -150,6 +167,7 @@ export function AiScreen() {
     }, []),
   );
   const [actCount, setActCount] = useState(0);
+  const [briefs, setBriefs] = useState<BriefDue[]>([]);
   const [quick, setQuick] = useState<string[]>([]);
   const [est, setEst] = useState<{
     total: number;
@@ -216,6 +234,13 @@ export function AiScreen() {
       if (!config && cfg) {
         useChat.setState({ config: cfg });
       }
+      setBriefs(
+        dueBriefings(
+          core.sim.now(),
+          core.sim.calendar,
+          await loadBriefLog(core),
+        ),
+      );
       setMemCount(mems.length);
       setActCount(Math.min(prefs.recentN, acts.length));
       setQuick(quickQuestions(acts, prefs.includePage ? page : null));
@@ -257,6 +282,31 @@ export function AiScreen() {
       question,
       page: source ? { route: source.route, ctx: source.get() } : null,
     }).catch(e => setError(e instanceof Error ? e.message : String(e)));
+  };
+
+  // 简报（§13.8）：你点了才发，一次请求，结果在新对话里
+  const runBrief = async (d: BriefDue) => {
+    if (busy) {
+      return;
+    }
+    setError(null);
+    const data = await briefingData(core, d.kind);
+    await markBriefing(core, d);
+    setBriefs(b => b.filter(x => x.kind !== d.kind));
+    newThread();
+    followEnd.current = true;
+    await ask(core, {
+      question: briefingQuestion(d),
+      page: null,
+      attach: {
+        label: BRIEF_NAME[d.kind] + '数据',
+        text: briefingTemplate(d.kind) + '\n' + data,
+      },
+    });
+  };
+  const skipBrief = (d: BriefDue) => {
+    markBriefing(core, d).catch(() => undefined);
+    setBriefs(b => b.filter(x => x.kind !== d.kind));
   };
 
   const onLink = (href: string) => {
@@ -362,6 +412,17 @@ export function AiScreen() {
   };
   const live = useMemo(() => messages.filter(m => !m.compacted), [messages]);
   const turns = useMemo(() => conversationTurns(live), [live]);
+  // 数字溯源（§13.9）：每轮最后的回答和这一轮的工具结果对一遍
+  const traces = useMemo(
+    () =>
+      turns.map(t => {
+        const answer = answerText(t.answer);
+        return answer
+          ? traceNumbers(answer, turnSources(t.question ?? null, t.answer))
+          : null;
+      }),
+    [turns],
+  );
   const tail = live[live.length - 1];
   const scrollVersion = [
     thread?.id,
@@ -524,6 +585,43 @@ export function AiScreen() {
             </View>
           </View>
         ) : null}
+        {svc && briefs.length && !busy ? (
+          <View style={s.briefs}>
+            {briefs.map(d => (
+              <View key={d.kind} style={s.brief}>
+                <Text style={s.briefText}>
+                  {d.missed
+                    ? '错过了今天的' + BRIEF_NAME[d.kind] + '，要不要补一份？'
+                    : BRIEF_NAME[d.kind] +
+                      '还没看（发一次请求，费用按当前模型算）'}
+                </Text>
+                <View style={s.briefBtns}>
+                  <Pressable
+                    style={s.briefBtn}
+                    onPress={() => skipBrief(d)}
+                    accessibilityRole="button"
+                    accessibilityLabel={'不用' + BRIEF_NAME[d.kind]}
+                  >
+                    <Text style={s.briefSkip}>不用</Text>
+                  </Pressable>
+                  <Pressable
+                    style={s.briefBtn}
+                    onPress={() =>
+                      runBrief(d).catch(e =>
+                        setError(e instanceof Error ? e.message : String(e)),
+                      )
+                    }
+                    accessibilityRole="button"
+                  >
+                    <Text style={s.briefGo}>
+                      {d.missed ? '补一份' : '生成' + BRIEF_NAME[d.kind]}
+                    </Text>
+                  </Pressable>
+                </View>
+              </View>
+            ))}
+          </View>
+        ) : null}
         {!live.length && svc ? (
           <View style={s.emptyState}>
             <Text style={s.emptyTitle}>有什么想聊的？</Text>
@@ -564,6 +662,16 @@ export function AiScreen() {
                       : null
                   }
                   svc={messageService(m)}
+                  trace={
+                    m.role === 'assistant' &&
+                    m ===
+                      [...turn.answer]
+                        .reverse()
+                        .find(x => x.role === 'assistant') &&
+                    !(busy && turnIndex === turns.length - 1)
+                      ? traces[turnIndex]
+                      : null
+                  }
                   accountId={core.sim.accountId}
                   onLink={onLink}
                   onSearch={q => retrySearch(q).catch(e => setError(String(e)))}
@@ -580,6 +688,12 @@ export function AiScreen() {
                     (nav.navigate as (r: string, p?: object) => void)(
                       TAB_ROUTES.has(n.route) ? 'Tabs' : n.route,
                       TAB_ROUTES.has(n.route) ? { screen: n.route } : n.params,
+                    )
+                  }
+                  onOpen={(route, params) =>
+                    (nav.navigate as (r: string, p?: object) => void)(
+                      route,
+                      params,
                     )
                   }
                 />
@@ -854,22 +968,27 @@ function MessageView({
   m,
   usage,
   svc,
+  trace,
   accountId,
   onLink,
   onCard,
   onMemory,
   onNav,
+  onOpen,
   onSearch,
   searchBusy,
 }: {
   m: StoredMessage;
   usage: Usage | null;
   svc: AiService | null;
+  /** 这一轮最后的回答：数字溯源结果。 */
+  trace: Provenance | null;
   accountId: number;
   onLink: (href: string) => void;
   onCard: (toolId: string, act: 'run' | 'cancel') => void;
   onMemory: (toolId: string, act: 'confirm' | 'decline' | 'undo') => void;
   onNav: (n: NonNullable<ToolUi['nav']>) => void;
+  onOpen: (route: string, params?: object) => void;
   onSearch: (q: string) => void;
   searchBusy: boolean;
 }) {
@@ -903,6 +1022,7 @@ function MessageView({
                   ui.actions !== undefined
                     ? '最近操作记录 ' + ui.actions + ' 条'
                     : '',
+                  ui.attach ?? '',
                 ]
                   .filter(Boolean)
                   .join(' · ')}
@@ -914,7 +1034,9 @@ function MessageView({
   }
   if (m.role === 'tool') {
     const tools = m.ui?.tools ?? [];
-    const visibleTools = tools.filter(t => t.card || t.memory || t.nav);
+    const visibleTools = tools.filter(
+      t => t.card || t.memory || t.nav || t.proposal,
+    );
     if (!visibleTools.length && !usage) {
       return null;
     }
@@ -929,6 +1051,12 @@ function MessageView({
                 onRun={() => onCard(t.id, 'run')}
                 onCancel={() => onCard(t.id, 'cancel')}
                 onLesson={id => onLink('lesson:' + id)}
+              />
+            ) : t.proposal ? (
+              <ProposalCard
+                id={t.proposal.id}
+                external={t.proposal.external}
+                onOpen={onOpen}
               />
             ) : t.memory ? (
               <MemoryView mm={t.memory} onAct={a => onMemory(t.id, a)} />
@@ -956,6 +1084,11 @@ function MessageView({
       {text ? (
         <Markdown
           text={citedText(text, m.ui?.search)}
+          missing={
+            trace?.missing.length
+              ? new Set(trace.missing.map(x => x.text))
+              : undefined
+          }
           onLink={href => {
             const match = /^source:(\d+)$/.exec(href);
             const src = match ? m.ui?.search?.sources[Number(match[1])] : null;
@@ -1008,11 +1141,49 @@ function MessageView({
           <Text style={s.linkText}>开启搜索并重问</Text>
         </Pressable>
       ) : null}
+      {trace && trace.refs.length ? <TraceView trace={trace} /> : null}
       {m.ui?.notice ? <Text style={s.notice}>{m.ui.notice}</Text> : null}
       {m.ui?.error ? <Text style={s.error}>{m.ui.error}</Text> : null}
       {usage ? (
         <AnswerDetails m={m} usage={usage} svc={svc} text={text} />
       ) : null}
+    </View>
+  );
+}
+
+/** 「数字溯源：12 个有来源 · 1 个算出 · 1 个找不到来源」，点开看每个数字来自哪个工具。 */
+function TraceView({ trace }: { trace: Provenance }) {
+  const [open, setOpen] = useState(false);
+  const miss = trace.missing.length;
+  return (
+    <View>
+      <Pressable
+        style={s.toolSummary}
+        onPress={() => setOpen(v => !v)}
+        accessibilityRole="button"
+        accessibilityLabel="数字溯源"
+        accessibilityState={{ expanded: open }}
+      >
+        <Text style={[s.traceText, miss ? s.traceMiss : null, num]}>
+          {'数字溯源：' +
+            trace.sourced +
+            ' 个有来源' +
+            (trace.derived ? ' · ' + trace.derived + ' 个算出' : '') +
+            (miss ? ' · ' + miss + ' 个找不到来源（虚线）' : '')}
+        </Text>
+        <ChevronDown size={13} color={c.secondary} />
+      </Pressable>
+      {open
+        ? trace.refs.map((r, i) => (
+            <Text key={i} style={[s.traceRow, num]} selectable>
+              {r.text +
+                '  ' +
+                (r.status === 'none'
+                  ? '找不到来源：本轮工具结果里没有，也算不出来'
+                  : r.source)}
+            </Text>
+          ))
+        : null}
     </View>
   );
 }
@@ -1244,6 +1415,8 @@ function MemoryView({
 
 type MenuKey =
   | 'new'
+  | 'AiFlows'
+  | 'Proposals'
   | 'AiThreads'
   | 'AiMemory'
   | 'AiServices'
@@ -1252,6 +1425,8 @@ type MenuKey =
 
 const MENU: [MenuKey, string, string][] = [
   ['new', '新对话', '别的对话不会自动带进来；AI 可以按需检索'],
+  ['AiFlows', '预设流程', '个股体检、周度复盘、调仓前检查，一键运行'],
+  ['Proposals', '提案与记分卡', 'AI 的建议准不准；你的决策日志'],
   ['AiThreads', '对话列表', '切换、删除对话'],
   ['AiMemory', 'AI 记忆', '记忆模式；按类别查看、修改、删除'],
   ['AiServices', '供应商与模型', '连接、Key、模型能力与价格'],
@@ -1399,6 +1574,38 @@ const s = StyleSheet.create({
   attach: { fontSize: 11, lineHeight: 17, color: c.muted, marginTop: 6 },
   aiBlock: { padding: 0, marginBottom: 8 },
   toolBlock: { marginBottom: 8 },
+  briefs: { gap: 8, marginBottom: 12 },
+  brief: {
+    borderWidth: 1,
+    borderColor: c.line,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingTop: 10,
+    backgroundColor: c.paper,
+  },
+  briefText: { fontSize: 14, lineHeight: 21, color: c.ink },
+  briefBtns: { flexDirection: 'row', justifyContent: 'flex-end', gap: 4 },
+  briefBtn: {
+    minHeight: 44,
+    minWidth: 48,
+    justifyContent: 'center',
+    paddingHorizontal: 10,
+  },
+  briefSkip: { fontSize: 14, color: c.secondary },
+  briefGo: { fontSize: 14, color: c.ink, fontWeight: '600' },
+  traceText: {
+    fontSize: 12,
+    lineHeight: 18,
+    color: c.secondary,
+    flexShrink: 1,
+  },
+  traceMiss: { color: color.warnInk },
+  traceRow: {
+    fontSize: 12,
+    lineHeight: 18,
+    color: c.secondary,
+    marginBottom: 2,
+  },
   tool: { fontSize: 13, lineHeight: 21, color: c.secondary, marginBottom: 6 },
   toolSummary: {
     flexDirection: 'row',
