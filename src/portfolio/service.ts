@@ -6,7 +6,7 @@ import { phaseAt, T } from '../engine/session';
 import { beijingIso } from '../market/clock';
 import type { MarketClient } from '../market/client';
 import type { Simulator } from '../sim/simulator';
-import { makePlan } from './planner';
+import { checkPlanRows, makePlan, type PlanContext } from './planner';
 import { buildReport } from './report';
 import {
   loadRebalance,
@@ -147,22 +147,25 @@ export class PortfolioService {
       ) {
         throw new Error('请先完成当前调仓并生成报告');
       }
-      const fresh = makePlan(r.targets, {
+      const ctx: PlanContext = {
         state: engine.state,
         accountId: r.accountId,
         now: this.sim.now(),
         calendar: this.sim.calendar,
         security: c => this.sim.security(c),
         snapshot: c => engine.snapshot(c),
-      });
-      // 持仓或价格变动需要重新确认，绝不默默改变已确认数量/价格。
+      };
+      // 检查行情新鲜度和持仓；报价变化不改变已确认的限价和数量。
+      const fresh = makePlan(r.targets, ctx);
       if (
-        JSON.stringify(fresh.rows.map(x => [x.held, x.request])) !==
-        JSON.stringify(r.plan.rows.map(x => [x.held, x.request]))
+        JSON.stringify(fresh.rows.map(x => [x.code, x.held])) !==
+        JSON.stringify(r.plan.rows.map(x => [x.code, x.held]))
       ) {
-        throw new Error('行情或持仓已变化，请重新生成预检并确认');
+        throw new Error('持仓已变化，请重新生成预检并确认');
       }
-      for (const row of fresh.rows) {
+      const rows = r.plan.rows.map(row => ({ ...row }));
+      checkPlanRows(rows, ctx);
+      for (const row of rows) {
         if (
           row.check &&
           !row.check.ok &&
@@ -172,7 +175,7 @@ export class PortfolioService {
             row.check.rule === '可用资金'
           )
         ) {
-          throw new Error(row.name + '：' + row.check.msg);
+          throw new Error(row.name + ' · ' + row.check.rule + '：' + row.check.msg);
         }
       }
       if (
@@ -180,7 +183,7 @@ export class PortfolioService {
       ) {
         throw new Error('费率已变化，请重新预检');
       }
-      const selected = fresh.rows.filter(
+      const selected = rows.filter(
         x => x.request && !(mode === 'sellFirst' && x.request.side === 'B'),
       );
       if (mode === 'sellFirst' && !selected.length) {

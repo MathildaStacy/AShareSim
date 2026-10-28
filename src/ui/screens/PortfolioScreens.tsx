@@ -910,7 +910,7 @@ export function RebalanceScreen({
               />
             </View>
             <Text style={s.sub}>
-              生成于 {current.date} {formatSec(current.t)} · 报价变化需重新预检
+              生成于 {current.date} {formatSec(current.t)} · 按已确认限价和数量提交
             </Text>
             {current.buyNeed > current.available ? (
               <View style={s.warning}>

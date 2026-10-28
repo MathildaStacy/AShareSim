@@ -186,9 +186,18 @@ test('提案卡：批准调仓方案 → 批量操作卡逐笔预校验 → 一�
   expect(r.text()).toContain('批量操作卡 · 2 笔委托');
   expect(r.text()).toContain('预校验通过（含风险校验）');
   expect(r.text()).toContain('全部通过，一次确认提交');
+  await core.sim.ingest([
+    {
+      ...quote('sh510300'),
+      snapshot: { ...quote('sh510300').snapshot, last: 10010 },
+    },
+  ]);
   await r.press('执行');
   expect((await proposalById(core.db, p.id))!.status).toBe('executed');
   expect(core.sim.engine.state.orders).toHaveLength(2);
+  expect(core.sim.engine.state.orders.map(o => o.price)).toEqual([
+    10000, 10000,
+  ]);
   expect(r.text()).toContain('已提交 2 笔委托');
   const rb = await loadRebalance(
     core.db,

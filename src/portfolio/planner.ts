@@ -48,16 +48,6 @@ export function makePlan(targets: TargetFile, ctx: PlanContext): Plan {
   if (equity <= 0) {
     throw new Error('请先入金，再生成调仓计划');
   }
-  const shadow = new Engine(JSON.parse(JSON.stringify(ctx.state)), {
-    calendar: ctx.calendar,
-    security: ctx.security,
-  });
-  codes.forEach(c => {
-    const s = ctx.snapshot(c);
-    if (s) {
-      shadow.primeSnapshot(s);
-    }
-  });
   const rows: PlanRow[] = codes.map(code => {
     const sec = ctx.security(code);
     if (!sec) {
@@ -133,30 +123,7 @@ export function makePlan(targets: TargetFile, ctx: PlanContext): Plan {
       warnings,
     };
   });
-  // 预检只预留买单资金；不能把尚未成交的卖单收入算入余额。
-  for (const r of rows) {
-    if (!r.request) {
-      continue;
-    }
-    r.check = shadow.check(ctx.now, r.request);
-    if (ctx.state.orders.some(o => o.code === r.code && isLive(o))) {
-      r.check = {
-        ...r.check,
-        ok: false,
-        level: 'block',
-        rule: '未完成委托',
-        msg: '请先处理本证券已有委托',
-      };
-    }
-    if (r.check.ok && r.request.side === 'B') {
-      shadow.state.frozen += buyFreeze(
-        r.security,
-        r.decisionPrice,
-        r.request.qty,
-        ctx.state.fee,
-      );
-    }
-  }
+  checkPlanRows(rows, ctx);
   return {
     accountId: ctx.accountId,
     date: ctx.now.date,
@@ -175,4 +142,46 @@ export function makePlan(targets: TargetFile, ctx: PlanContext): Plan {
     weightError: rows.reduce((n, r) => n + Math.abs(r.weightError), 0),
     rows,
   };
+}
+
+/** 用当前行情和账户校验已确定的委托，不重新计算限价或数量。 */
+export function checkPlanRows(rows: PlanRow[], ctx: PlanContext): void {
+  const shadow = new Engine(JSON.parse(JSON.stringify(ctx.state)), {
+    calendar: ctx.calendar,
+    security: ctx.security,
+  });
+  const codes = new Set([
+    ...rows.map(r => r.code),
+    ...ctx.state.lots.map(l => l.code),
+  ]);
+  codes.forEach(code => {
+    const s = ctx.snapshot(code);
+    if (s) {
+      shadow.primeSnapshot(s);
+    }
+  });
+  // 只预留买单资金；不能把尚未成交的卖单收入算入余额。
+  for (const r of rows) {
+    if (!r.request) {
+      continue;
+    }
+    r.check = shadow.check(ctx.now, r.request);
+    if (ctx.state.orders.some(o => o.code === r.code && isLive(o))) {
+      r.check = {
+        ...r.check,
+        ok: false,
+        level: 'block',
+        rule: '未完成委托',
+        msg: '请先处理本证券已有委托',
+      };
+    }
+    if (r.check.ok && r.request.side === 'B') {
+      shadow.state.frozen += buyFreeze(
+        ctx.security(r.code)!,
+        r.request.price!,
+        r.request.qty,
+        ctx.state.fee,
+      );
+    }
+  }
 }

@@ -106,6 +106,8 @@ export interface LastRequest {
 }
 
 interface ChatState {
+  /** 已加载对话或明确选择新对话；只在首次打开时自动恢复最近对话。 */
+  initialized: boolean;
   threadId: number | null;
   thread: Thread | null;
   messages: StoredMessage[];
@@ -120,6 +122,7 @@ interface ChatState {
 }
 
 export const useChat = create<ChatState>(() => ({
+  initialized: false,
   threadId: null,
   thread: null,
   messages: [],
@@ -138,6 +141,7 @@ export async function loadThread(
 ): Promise<void> {
   if (id == null) {
     useChat.setState({
+      initialized: true,
       threadId: null,
       thread: null,
       messages: [],
@@ -187,6 +191,7 @@ export async function loadThread(
     }
   }
   useChat.setState({
+    initialized: true,
     threadId: thread ? id : null,
     thread,
     messages,
@@ -194,18 +199,24 @@ export async function loadThread(
   });
 }
 
-/** 打开 AI 页：没选对话时接着最近的一个。 */
+/** 首次打开 AI 页时恢复最近对话；明确新建的空对话不能被旧对话覆盖。 */
 export async function openLatest(core: AppCore): Promise<void> {
+  if (useChat.getState().initialized) {
+    return;
+  }
   if (useChat.getState().threadId != null) {
     await loadThread(core, useChat.getState().threadId);
     return;
   }
   const list = await aiRepo.threads(core.db);
-  await loadThread(core, list[0]?.id ?? null);
+  if (!useChat.getState().initialized) {
+    await loadThread(core, list[0]?.id ?? null);
+  }
 }
 
 export function newThread(): void {
   useChat.setState({
+    initialized: true,
     threadId: null,
     thread: null,
     messages: [],

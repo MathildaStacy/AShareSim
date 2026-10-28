@@ -209,6 +209,61 @@ describe('目标文件和调仓预检', () => {
 });
 
 describe('持久化执行闭环', () => {
+  test('报价变化后仍提交确认过的限价和股数，不按新价重算权重', async () => {
+    const { db, service, sim, clock, draft } = await setup();
+    clock.t = T(10, 0);
+    const r = await draft(target(SEC.code, 0.3, 'weight'));
+    const confirmed = r.plan.rows[0].request!;
+    clock.t += 10;
+    await sim.ingest([
+      quote(snapshot(SEC.code, { t: clock.t, last: 10010 })),
+    ]);
+    await service.execute(r.id, 'together');
+    expect(sim.engine.state.orders).toHaveLength(1);
+    expect(sim.engine.state.orders[0]).toMatchObject(confirmed);
+    expect((await loadRebalance(db, r.id, sim.accountId)).plan).toEqual(
+      r.plan,
+    );
+    await db.close();
+  });
+  test.each(['持仓', '费率', '风险限额', '停牌', '价格笼子', '60 秒'])(
+    '报价变化后仍拦截%s，失败不提交委托',
+    async reason => {
+      const { db, service, sim, clock, draft } = await setup();
+      clock.t = T(10, 0);
+      const r = await draft();
+      let over: Partial<Snapshot> = { last: 10010 };
+      if (reason === '持仓') {
+        sim.engine.state.lots.push({
+          id: 1,
+          code: SEC.code,
+          qty: 100,
+          buyDate: '2026-10-23',
+          dividend: 0,
+        });
+      } else if (reason === '费率') {
+        await sim.setFeeProfile({ ...sim.engine.state.fee, stockMinFen: 400 });
+      } else if (reason === '风险限额') {
+        await sim.setRiskLimits({
+          maxWeight: 0.01,
+          maxTurnover: null,
+          noSt: false,
+        });
+      } else if (reason === '停牌') {
+        over = { ...over, suspended: true };
+      } else if (reason === '价格笼子') {
+        over = { last: 9500, asks: [[9500, 10000]] };
+      }
+      await sim.ingest([quote(snapshot(SEC.code, { t: clock.t, ...over }))]);
+      if (reason === '60 秒') {
+        clock.t += 61;
+      }
+      await expect(service.execute(r.id, 'together')).rejects.toThrow(reason);
+      expect(sim.engine.state.orders).toHaveLength(0);
+      expect((await loadRebalance(db, r.id, sim.accountId)).status).toBe('draft');
+      await db.close();
+    },
+  );
   test('版本保留、批量重复确认只下单一次、账户和事件一起持久化', async () => {
     const { db, service, sim, strategy, draft } = await setup();
     const r = await draft();

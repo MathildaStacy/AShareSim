@@ -3,6 +3,7 @@ import {
   activeService,
   currentConfig,
   loadThread,
+  openLatest,
   preview,
   selectConfig,
 } from '../../src/ai/chat';
@@ -166,6 +167,36 @@ async function setup() {
 const toolRows = (msgs: StoredMessage[]) => msgs.filter(m => m.role === 'tool');
 
 describe('提问和工具调用', () => {
+  test('预设流程新建对话后打开 AI 页，不恢复旧对话或把流程发进旧历史', async () => {
+    const core = await setup();
+    replies = [{ json: textReply('旧对话的回答') }];
+    await ask(core, { question: '旧对话的问题', page: null });
+    const previous = useChat.getState().threadId!;
+    // App 首次打开仍然可以恢复最近对话。
+    useChat.setState({ initialized: false, threadId: null });
+    await openLatest(core);
+    expect(useChat.getState().threadId).toBe(previous);
+    // 流程先清空对话，再导航至 AI 页；页面初始化与提问会并发。
+    newThread();
+    sent = [];
+    replies = [{ json: textReply('流程的回答') }];
+    await Promise.all([
+      openLatest(core),
+      ask(core, {
+        question: '运行预设流程「个股体检」：600036',
+        page: null,
+        attach: { label: '预设流程', text: '<flow>get_quote</flow>' },
+      }),
+    ]);
+    expect(useChat.getState().threadId).not.toBe(previous);
+    expect(JSON.stringify(sent[0].body.messages)).not.toContain('旧对话的问题');
+    expect(lastUserText(sent[0].body)).toContain('<flow>get_quote</flow>');
+    expect(await aiRepo.messages(core.db, previous)).toHaveLength(2);
+    // 从运行历史选择另一对话时，也不能被页面初始化恢复成当前对话。
+    await Promise.all([loadThread(core, previous), openLatest(core)]);
+    expect(useChat.getState().threadId).toBe(previous);
+    await core.db.close();
+  });
   test('调一次工具再回答；请求按顺序拼、带页面和最近操作；存下的消息能原样重发', async () => {
     const core = await setup();
     replies = [

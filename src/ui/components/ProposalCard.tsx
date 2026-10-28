@@ -23,7 +23,7 @@ import { isLive } from '../../engine/account';
 import { formatFen, formatPrice } from '../../engine/units';
 import type { Rebalance } from '../../portfolio/types';
 import { aiColor as c } from '../aiTheme';
-import { useCore } from '../hooks';
+import { useCore, useQuoteCodes } from '../hooks';
 import { color, num } from '../theme';
 import { CheckBar } from './form';
 import { Button } from './ui';
@@ -69,6 +69,10 @@ export function ProposalCard({
       await load().catch(() => undefined);
     }
   };
+  // 和调仓页一样：卡片在屏幕上时持续刷新这几只的报价，执行时的 60 秒新鲜度检查才过得去
+  useQuoteCodes(
+    p?.status === 'approved' ? (run?.plan.rows ?? []).map(r => r.code) : [],
+  );
   if (!p) {
     return null;
   }
@@ -217,7 +221,7 @@ export function ProposalCard({
                 : ' 执行：不补单，14:50 撤销剩余。') +
               '预检于 ' +
               run.plan.date +
-              '，执行时按当时的行情和持仓再校验一遍。'}
+              '。按上述限价和数量提交，执行时用最新行情校验；要改价或改量请重新预检。'}
           </Text>
           <CheckBar
             ok={!blocked.length}
@@ -245,13 +249,24 @@ export function ProposalCard({
                   tone="buy"
                   title={fundsOnly ? '先卖后买' : '执行'}
                   disabled={busy || (!!blocked.length && !fundsOnly)}
-                  onPress={act(() =>
-                    executeProposal(
-                      core,
-                      p.id,
-                      fundsOnly ? 'sellFirst' : 'together',
-                    ),
-                  )}
+                  onPress={act(async () => {
+                    try {
+                      await executeProposal(
+                        core,
+                        p.id,
+                        fundsOnly ? 'sellFirst' : 'together',
+                      );
+                    } catch (e) {
+                      // 持仓或费率变化后重新预检，仍由用户核对并再次执行。
+                      if (String(e).includes('已变化')) {
+                        await replanProposal(core, p.id);
+                        throw new Error(
+                          '持仓或费率变了，已重新预检。核对价格和数量后再点「执行」',
+                        );
+                      }
+                      throw e;
+                    }
+                  })}
                 />
               </View>
             </View>
